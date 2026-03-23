@@ -1,0 +1,16 @@
+{
+  "version": "0.2",
+  "language": "en,es",
+  "words": [
+    "ejecucion", "ejecuciones", "resizer", "relayout", "flake",
+    "pylint", "radon", "mermaid", "codewatch", "lightgbm",
+    "icecream", "polars", "spacy", "sklearn", "xgboost",
+    "torchvision", "tensorflow", "plotly", "seaborn", "scipy",
+    "tsconfig", "vite", "monaco", "jszip", "debounce",
+    "fmtbytes", "nowstr", "nowts", "setprogress",
+    "appendlog", "wireevents", "initapp", "initcharts",
+    "initeditor", "initmermaid", "renderdist", "renderrt",
+    "updatehist", "renderflow", "setstep", "updaterunmeta"
+  ],
+  "ignorePaths": ["node_modules", "dist", "*.json"]
+}

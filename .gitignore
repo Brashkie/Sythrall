@@ -1,0 +1,37 @@
+# ================================
+# CODEWATCH-PRO — .gitignore
+# ================================
+
+# Dependencies
+frontend/node_modules/
+
+# Build outputs
+frontend/dist/
+
+# Environment files — NUNCA subir al repo
+frontend/.env
+.env
+*.env.local
+*.env.production
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# VS Code (opcional: comenta si quieres compartir settings con el equipo)
+.vscode/settings.json
+
+# Python (backend)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+backend/__pycache__/
+
+# Docker volumes / datos locales
+docker/data/

@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CodeWatch PRO</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%233d9eff'/><text y='22' x='4' font-size='18'>🛰</text></svg>" />
+</head>
+<body>
+<div id="pbar"></div>
+<!-- Overlay for drawers -->
+<div class="drawer-overlay" id="drawer-overlay"></div>
+<div class="app">
+
+  <!-- ══ TOPBAR ══ -->
+  <div class="topbar">
+    <button class="btn btn-ghost btn-sm mobile-toggle" id="mobile-toggle" style="display:none">☰</button>
+    <div class="logo">
+      <div class="logo-ring">🛰</div>
+      <div>
+        <div class="logo-text">Code<b>Watch</b> <span style="font-size:.55rem;color:var(--purple);font-family:var(--mono)">PRO</span></div>
+        <div class="logo-sub">VITE · TS · FLASK · PYLINT · ML/DL</div>
+      </div>
+    </div>
+    <div id="be-badge" class="be-badge be-loading"><span>●</span><span id="be-txt">Conectando...</span></div>
+    <div id="caps-row"></div>
+    <div class="url-bar">
+      <span style="color:var(--muted);font-size:.65rem;font-family:var(--mono)">GET</span>
+      <input id="url-main" placeholder="https://api.com/health" />
+      <button class="btn btn-ghost btn-sm" id="btn-add-url">+</button>
+    </div>
+    <div style="display:flex;gap:4px">
+      <button class="btn btn-ghost btn-sm" data-quick-url="http://localhost:8000">:8000</button>
+      <button class="btn btn-ghost btn-sm" data-quick-url="http://localhost:3000">:3000</button>
+      <button class="btn btn-ghost btn-sm" data-quick-url="http://localhost:5000">:5000</button>
+    </div>
+    <div style="flex:1"></div>
+    <div id="global-pill" class="pill pill-idle"><span class="dot dot-idle"></span><span>SIN ANÁLISIS</span></div>
+    <button class="btn btn-ghost btn-sm" id="auto-btn">⏱ Auto</button>
+    <button class="btn btn-ghost btn-sm" id="btn-export">⬇ ZIP</button>
+    <button class="btn btn-run" id="run-btn">▶ Analizar</button>
+  </div>
+
+  <!-- ══ TABBAR ══ -->
+  <div class="tabbar">
+    <div class="tab active" id="t-dashboard"  data-tab="dashboard" >📊 Dashboard</div>
+    <div class="tab"        id="t-editor"     data-tab="editor"    >📝 Editor <span class="tbadge tbadge-ok" id="tb-files" style="display:none">0</span></div>
+    <div class="tab"        id="t-apis"       data-tab="apis"      >📡 APIs <span class="tbadge tbadge-err" id="tb-apis" style="display:none">!</span></div>
+    <div class="tab"        id="t-issues"     data-tab="issues"    >🐛 Issues <span class="tbadge tbadge-err" id="tb-issues" style="display:none">0</span></div>
+    <div class="tab"        id="t-diagram"    data-tab="diagram"   >🔀 Diagrama <span class="tbadge tbadge-ok" id="tb-diagram" style="display:none">✓</span></div>
+    <div class="tab"        id="t-ml"         data-tab="ml"        >🤖 ML/DL <span class="tbadge tbadge-ok" id="tb-ml" style="display:none">✓</span></div>
+    <div class="tab"        id="t-metrics"    data-tab="metrics"   >📈 Métricas</div>
+    <div class="tab"        id="t-diff"       data-tab="diff"      >🔁 Diff</div>
+    <div class="tab"        id="t-logs"       data-tab="logs"      >🖥 Logs</div>
+  </div>
+
+  <!-- ══ WORKSPACE ══ -->
+  <div class="workspace">
+
+    <!-- SIDEBAR (izquierdo, resizable) -->
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-body">
+        <div class="sb-head">📁 Archivos
+          <span style="display:flex;gap:4px">
+            <button class="btn btn-ghost btn-sm" id="btn-add-code">+ Código</button>
+            <button class="btn btn-ghost btn-sm" id="btn-add-log">+ Log</button>
+          </span>
+        </div>
+        <input type="file" id="fi-code" multiple accept=".py,.js,.ts,.json,.yaml,.yml,.env,.sh,.txt,.html,.css,.java,.go" />
+        <input type="file" id="fi-log"  multiple accept=".log,.txt" />
+        <div class="dropzone" id="dz">
+          <div class="dz-icon">📂</div>
+          <div class="dz-text">Arrastra archivos aquí</div>
+          <div class="dz-ext">.py .js .ts .json .yaml .go</div>
+        </div>
+        <div id="file-tree" style="overflow-y:auto;flex:1;min-height:0"></div>
+        <div style="border-top:1px solid var(--b0);flex-shrink:0">
+          <div class="sb-head">🌐 Endpoints</div>
+          <div id="url-list" style="overflow-y:auto;max-height:160px"></div>
+        </div>
+        <div style="padding:10px;border-top:1px solid var(--b0);display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+          <button class="btn btn-run" style="width:100%;justify-content:center" id="run-btn-sb">▶ Análisis completo</button>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center" id="btn-clear">🗑 Limpiar</button>
+            <button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center" id="btn-export-sb">⬇ ZIP</button>
+          </div>
+        </div>
+      </div>
+      <!-- Resize handle -->
+      <div class="resize-handle" id="sidebar-resize"></div>
+      <!-- Collapse button -->
+      <button class="collapse-btn" id="sidebar-collapse" title="Colapsar panel">‹</button>
+    </div>
+
+    <!-- CENTER PANELS -->
+    <div class="center">
+
+      <!-- DASHBOARD -->
+      <div class="tab-panel active" id="panel-dashboard">
+        <div class="dash-scroll">
+          <div class="stats-row">
+            <div class="stat-card"><div class="sc-lbl">📡 APIs activas</div><div class="sc-val" id="sv-api" style="color:var(--ok)">—</div><div class="sc-sub" id="ss-api">endpoints</div></div>
+            <div class="stat-card"><div class="sc-lbl">📁 Archivos</div><div class="sc-val" id="sv-files" style="color:var(--info)">—</div><div class="sc-sub">cargados</div></div>
+            <div class="stat-card"><div class="sc-lbl">🐛 Problemas</div><div class="sc-val" id="sv-issues" style="color:var(--err)">—</div><div class="sc-sub" id="ss-issues">errores</div></div>
+            <div class="stat-card"><div class="sc-lbl">⚗️ Pylint</div><div class="sc-val" id="sv-score" style="color:var(--warn)">—</div><div class="sc-sub">/10 promedio</div></div>
+          </div>
+          <div class="charts-row">
+            <div class="chart-card"><div class="cc-head"><span>RESPUESTA APIs (ms)</span><span id="rt-avg" style="color:var(--ok);font-family:var(--mono);font-size:.62rem"></span></div><div class="chart-wrap"><canvas id="chart-rt"></canvas></div></div>
+            <div class="chart-card"><div class="cc-head"><span>DISTRIBUCIÓN</span></div><div class="chart-wrap"><canvas id="chart-dist"></canvas></div></div>
+            <div class="chart-card wide"><div class="cc-head"><span>HISTORIAL</span><span id="hist-n" style="color:var(--muted);font-family:var(--mono);font-size:.62rem">0 ejecuciones</span></div><div class="chart-wrap" style="height:90px"><canvas id="chart-hist"></canvas></div></div>
+          </div>
+          <div class="chart-card wide" style="background:var(--s1);border:1px solid var(--b0);border-radius:var(--radius);padding:14px">
+            <div class="cc-head">COMPLEJIDAD POR FUNCIÓN <span style="color:var(--muted);font-size:.58rem;font-family:var(--mono)">radon cyclomatic</span></div>
+            <div id="complexity-bars" style="display:flex;align-items:flex-end;gap:8px;height:72px;overflow-x:auto;padding-bottom:4px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- EDITOR -->
+      <div class="tab-panel" id="panel-editor">
+        <div class="editor-bar">
+          <select id="file-sel" class="btn btn-ghost btn-sm" style="font-family:var(--mono);font-size:.67rem"><option value="">— Selecciona archivo —</option></select>
+          <div id="ed-fname" style="font-family:var(--mono);font-size:.67rem;color:var(--info);display:none"></div>
+          <div style="flex:1"></div>
+          <span id="ed-errs" style="font-family:var(--mono);font-size:.65rem;color:var(--err)"></span>
+          <button class="btn btn-ghost btn-sm" id="btn-analyze-file">🔍 Analizar</button>
+          <button class="btn btn-ghost btn-sm" id="btn-diagram-file">🔀 Diagrama</button>
+          <button class="btn btn-ghost btn-sm" id="btn-copy-editor">📋 Copiar</button>
+        </div>
+        <div id="editor-container" style="flex:1;min-height:0"></div>
+      </div>
+
+      <!-- APIs -->
+      <div class="tab-panel" id="panel-apis">
+        <div style="padding:9px 14px;border-bottom:1px solid var(--b0);display:flex;gap:8px;background:var(--s0);flex-shrink:0;flex-wrap:wrap">
+          <input class="search-input" id="api-search" placeholder="🔍 Filtrar...">
+          <button class="btn btn-ghost btn-sm" id="btn-recheck-all">▶ Re-verificar</button>
+        </div>
+        <div class="api-scroll" id="api-cards"></div>
+      </div>
+
+      <!-- ISSUES -->
+      <div class="tab-panel" id="panel-issues">
+        <div class="issues-toolbar">
+          <input class="search-input" id="issue-search" placeholder="🔍 Buscar...">
+          <button class="btn btn-ghost btn-sm" data-sev="all">Todos</button>
+          <button class="btn btn-ghost btn-sm" data-sev="error">🔴 Error</button>
+          <button class="btn btn-ghost btn-sm" data-sev="warning">🟡 Warn</button>
+          <button class="btn btn-ghost btn-sm" data-sev="info">🔵 Info</button>
+          <select class="search-input" id="tool-filter" style="max-width:130px">
+            <option value="">Todas las tools</option>
+            <option>flake8</option><option>pylint</option><option>radon</option><option>ast</option>
+          </select>
+        </div>
+        <div class="issues-scroll" id="issues-list"></div>
+      </div>
+
+      <!-- DIAGRAM -->
+      <div class="tab-panel" id="panel-diagram">
+        <div class="diag-toolbar">
+          <select id="diag-file-sel" class="diag-sel"><option value="">— Selecciona archivo —</option></select>
+          <select id="diag-type" class="diag-sel">
+            <option value="flowchart">Flujo de funciones</option>
+            <option value="callgraph">Grafo de llamadas</option>
+            <option value="classes">Clases</option>
+            <option value="sequence">Secuencia</option>
+          </select>
+          <button class="btn btn-run btn-sm" id="btn-gen-diagram">🔀 Generar</button>
+          <button class="btn btn-ghost btn-sm" id="btn-export-svg">⬇ SVG</button>
+          <button class="btn btn-ghost btn-sm" id="btn-copy-mermaid">📋 Código</button>
+          <div style="flex:1"></div>
+          <span id="diag-status" style="font-family:var(--mono);font-size:.65rem;color:var(--muted)"></span>
+        </div>
+        <div class="diag-scroll">
+          <div id="mermaid-output"><div class="empty"><span class="empty-icon">🔀</span>Selecciona archivo y genera el diagrama</div></div>
+          <div id="mermaid-code-container" style="display:none">
+            <div style="font-size:.6rem;color:var(--muted);font-family:var(--mono);margin:12px 0 5px">CÓDIGO MERMAID:</div>
+            <div class="mermaid-code" id="mermaid-raw-code"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ML/DL -->
+      <div class="tab-panel" id="panel-ml">
+        <div class="ml-toolbar">
+          <select id="ml-file-sel" class="diag-sel" style="min-width:180px"><option value="">— Selecciona archivo .py —</option></select>
+          <button class="btn btn-run btn-sm" id="btn-run-ml">🤖 Analizar ML/DL</button>
+          <div style="flex:1"></div>
+          <div id="ml-score-badge" style="display:none;font-family:var(--mono);font-size:.68rem"></div>
+        </div>
+        <div class="ml-scroll" id="ml-content">
+          <div class="empty">
+            <span class="empty-icon">🤖</span>
+            Sube un archivo .py con código ML/DL<br>
+            <span style="font-size:.65rem;color:var(--muted)">sklearn · PyTorch · TensorFlow · Polars · LightGBM · spaCy · OpenCV · Plotly · IceCream...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- METRICS -->
+      <div class="tab-panel" id="panel-metrics">
+        <div class="metrics-scroll" id="metrics-content">
+          <div class="empty"><span class="empty-icon">📈</span>Ejecuta el análisis para ver métricas</div>
+        </div>
+      </div>
+
+      <!-- DIFF -->
+      <div class="tab-panel" id="panel-diff">
+        <div style="padding:11px 14px;background:var(--s0);border-bottom:1px solid var(--b0);display:flex;gap:10px;flex-shrink:0;flex-wrap:wrap">
+          <div>
+            <div style="font-size:.6rem;color:var(--muted);margin-bottom:4px;font-family:var(--mono)">ARCHIVO A</div>
+            <select id="diff-a" class="btn btn-ghost btn-sm" style="font-family:var(--mono)"><option value="">—</option></select>
+          </div>
+          <div>
+            <div style="font-size:.6rem;color:var(--muted);margin-bottom:4px;font-family:var(--mono)">ARCHIVO B</div>
+            <select id="diff-b" class="btn btn-ghost btn-sm" style="font-family:var(--mono)"><option value="">—</option></select>
+          </div>
+          <div style="align-self:flex-end"><button class="btn btn-run" id="btn-diff">🔁 Comparar</button></div>
+        </div>
+        <div class="diff-scroll">
+          <div id="diff-out" style="font-family:var(--mono);font-size:.68rem;line-height:1.85;background:var(--s1);border-radius:8px;border:1px solid var(--b0);padding:12px;white-space:pre-wrap">
+            <span style="color:var(--muted)">Selecciona dos archivos y compara</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- LOGS -->
+      <div class="tab-panel" id="panel-logs">
+        <div class="log-toolbar">
+          <span style="font-size:.58rem;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted)">LOG UNIFICADO</span>
+          <div style="flex:1"></div>
+          <button class="btn btn-ghost btn-sm" id="btn-fetch-logs">↺ Backend</button>
+          <button class="btn btn-ghost btn-sm" id="btn-clear-log">🗑 Limpiar</button>
+          <label style="display:flex;align-items:center;gap:4px;font-size:.68rem;color:var(--muted);cursor:pointer">
+            <input type="checkbox" id="autoscroll" checked /> Scroll
+          </label>
+        </div>
+        <div id="log-stream" class="log-stream"></div>
+      </div>
+
+    </div><!-- end center -->
+
+    <!-- RIGHT PANEL toggle btn (visible only on small screens) -->
+    <button class="rp-fab" id="rp-fab" style="display:none" title="Análisis">⚡</button>
+
+    <!-- RIGHT PANEL (resizable) -->
+    <div class="rp" id="right-panel">
+      <!-- Resize handle (left side of right panel) -->
+      <div class="resize-handle" id="rp-resize"></div>
+      <!-- Collapse button -->
+      <button class="collapse-btn" id="rp-collapse" title="Colapsar panel">›</button>
+
+      <div class="rp-tabs">
+        <div class="rp-tab active" data-rptab="flow">⚡ Flujo</div>
+        <div class="rp-tab" data-rptab="analysis">🔬 Análisis</div>
+        <div class="rp-tab" data-rptab="server">🖥 Servidor</div>
+      </div>
+      <div class="rp-panel active" id="rpp-flow">
+        <div style="font-size:.58rem;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);margin-bottom:11px">DIAGRAMA DE EJECUCIÓN</div>
+        <div id="flow-diag"></div>
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b0)" id="run-meta"></div>
+      </div>
+      <div class="rp-panel" id="rpp-analysis">
+        <div id="analysis-content"><div class="empty"><span class="empty-icon">🔬</span>Selecciona un archivo</div></div>
+      </div>
+      <div class="rp-panel" id="rpp-server">
+        <div style="font-size:.58rem;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);margin-bottom:11px">INFO DEL SERVIDOR</div>
+        <div id="server-info"><div class="empty"><span class="empty-icon">🖥</span>Conecta al backend</div></div>
+      </div>
+    </div>
+
+  </div><!-- end workspace -->
+</div><!-- end app -->
+
+<!-- Bottom Navigation (visible only on mobile < 480px) -->
+<nav class="bottom-nav" id="bottom-nav" style="display:none">
+  <button class="bn-item active" data-bn-tab="dashboard">
+    <span class="bn-icon">📊</span>
+    <span>Dashboard</span>
+  </button>
+  <button class="bn-item" data-bn-tab="editor">
+    <span class="bn-icon">📝</span>
+    <span>Editor</span>
+    <span class="bn-badge" id="bn-badge-files" style="display:none">0</span>
+  </button>
+  <button class="bn-item" data-bn-tab="issues">
+    <span class="bn-icon">🐛</span>
+    <span>Issues</span>
+    <span class="bn-badge" id="bn-badge-issues" style="display:none">0</span>
+  </button>
+  <button class="bn-item" data-bn-tab="ml">
+    <span class="bn-icon">🤖</span>
+    <span>ML/DL</span>
+  </button>
+  <button class="bn-item" id="bn-more-btn">
+    <span class="bn-icon">⋯</span>
+    <span>Más</span>
+  </button>
+</nav>
+
+<!-- Mobile "más" menu -->
+<div id="bn-more-menu" style="
+  display:none; position:fixed; bottom:60px; right:0; left:0;
+  background:var(--s1); border-top:1px solid var(--b1);
+  z-index:500; padding:8px 0;
+">
+  <button class="bn-more-item" data-bn-tab="apis">📡 APIs</button>
+  <button class="bn-more-item" data-bn-tab="diagram">🔀 Diagrama</button>
+  <button class="bn-more-item" data-bn-tab="metrics">📈 Métricas</button>
+  <button class="bn-more-item" data-bn-tab="diff">🔁 Diff</button>
+  <button class="bn-more-item" data-bn-tab="logs">🖥 Logs</button>
+</div>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
