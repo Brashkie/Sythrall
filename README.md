@@ -260,4 +260,4 @@ docker compose up -d
 
 ## 📄 Licencia
 
-MIT — libre para uso personal y comercial.
+Apache License 2.0
