@@ -1,6 +1,6 @@
 {
   "name": "codewatch-pro",
-  "version": "3.1.0",
+  "version": "3.0.0",
   "description": "CodeWatch PRO — Monitor de API y código ML/DL",
   "type": "module",
   "scripts": {
