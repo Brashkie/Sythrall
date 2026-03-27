@@ -42,3 +42,4 @@ scipy==1.13.1
 
 # Utilidades
 python-dotenv==1.0.1
+Cython==3.2.4

@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════
 //  CodeWatch PRO — Event Wiring
-//  Conecta todos los botones del HTML con las funciones TS
 // ══════════════════════════════════════════
+// events.ts
 import type { TabId } from '../types'
 import {
   switchTab, rpTab, addURL, handleCodeFiles, handleLogFiles,
@@ -14,6 +14,7 @@ import { getEditorValue } from './editor'
 import { state } from '../store/state'
 import { appendLog } from '../utils/helpers'
 import { api } from '../api/client'
+import { zoomIn, zoomOut, resetZoom, fitDiagram, initDiagramZoom } from './mermaid'
 
 export function wireAllEvents(): void {
 
@@ -64,7 +65,7 @@ export function wireAllEvents(): void {
   document.getElementById('btn-analyze-file')?.addEventListener('click', analyzeCurrentFile)
   document.getElementById('btn-copy-editor')?.addEventListener('click', () => {
     const val = getEditorValue()
-    if (val) { navigator.clipboard.writeText(val); }
+    if (val) { navigator.clipboard.writeText(val) }
   })
   document.getElementById('btn-diagram-file')?.addEventListener('click', () => {
     if (state.currentFile) {
@@ -112,8 +113,10 @@ export function wireAllEvents(): void {
     setIssueFilter(null, (e.target as HTMLSelectElement).value)
   )
 
-  // ── Diagram
+  // ── Diagram generate
   document.getElementById('btn-gen-diagram')?.addEventListener('click', generateDiagram)
+
+  // ── Diagram export SVG
   document.getElementById('btn-export-svg')?.addEventListener('click', () => {
     const svgEl = document.querySelector<SVGElement>('#mermaid-output svg')
     if (!svgEl) return
@@ -122,9 +125,21 @@ export function wireAllEvents(): void {
     a.href     = URL.createObjectURL(blob)
     a.download = `diagram-${Date.now()}.svg`; a.click()
   })
+
+  // ── Diagram copy mermaid code
   document.getElementById('btn-copy-mermaid')?.addEventListener('click', () => {
     if (state.currentMermaid) navigator.clipboard.writeText(state.currentMermaid)
   })
+
+  // ── Zoom controls ──────────────────────────────
+  document.getElementById('btn-zoom-in')?.addEventListener('click',    () => zoomIn())
+  document.getElementById('btn-zoom-out')?.addEventListener('click',   () => zoomOut())
+  document.getElementById('btn-zoom-reset')?.addEventListener('click', () => resetZoom(true))
+  document.getElementById('btn-zoom-fit')?.addEventListener('click',   () => fitDiagram(true))
+
+  // Inicializar zoom engine (attach wheel + drag listeners al viewport)
+  initDiagramZoom()
+  // ──────────────────────────────────────────────
 
   // ── ML/DL
   document.getElementById('btn-run-ml')?.addEventListener('click', runMLAnalysis)
@@ -137,15 +152,16 @@ export function wireAllEvents(): void {
     if (!code) return
     state.currentMermaid = code
     switchTab('diagram')
-    const { renderDiagram } = await import('./mermaid')
+    const { renderDiagram, resetDiagramView } = await import('./mermaid')
     const outEl = document.getElementById('mermaid-output')!
     try {
       const svg = await renderDiagram(code)
       outEl.innerHTML = svg
       const svgEl = outEl.querySelector('svg')
-      if (svgEl) { svgEl.style.maxWidth = '100%'; svgEl.style.height = 'auto' }
+      if (svgEl) { svgEl.style.maxWidth = 'none'; svgEl.style.height = 'auto' }
       document.getElementById('mermaid-raw-code')!.textContent = code
       document.getElementById('mermaid-code-container')!.style.display = ''
+      resetDiagramView(true)
     } catch (err) {
       outEl.innerHTML = `<div class="empty">Error: ${(err as Error).message}</div>`
     }
@@ -168,7 +184,7 @@ export function wireAllEvents(): void {
     if (el) el.innerHTML = ''
   })
 
-  // ━━━ RESPONSIVE / MOBILE EVENTS ━━━
+  // ━━━ RESPONSIVE / MOBILE ━━━
 
   const overlay = document.getElementById('drawer-overlay')
 
@@ -180,10 +196,8 @@ export function wireAllEvents(): void {
     if (fab) fab.textContent = '⚡'
   }
 
-  // Overlay click → close drawers
   overlay?.addEventListener('click', () => closeAllDrawers())
 
-  // ☰ Hamburger → sidebar drawer
   document.getElementById('mobile-toggle')?.addEventListener('click', (e) => {
     e.stopPropagation()
     const sidebar = document.getElementById('sidebar')!
@@ -192,7 +206,6 @@ export function wireAllEvents(): void {
     if (isOpen) document.getElementById('right-panel')?.classList.remove('drawer-open')
   })
 
-  // ⚡ FAB → right panel drawer
   document.getElementById('rp-fab')?.addEventListener('click', (e) => {
     e.stopPropagation()
     const rp     = document.getElementById('right-panel')!
@@ -203,26 +216,23 @@ export function wireAllEvents(): void {
     if (isOpen) document.getElementById('sidebar')?.classList.remove('drawer-open')
   })
 
-  // Show/hide FAB and bottom nav based on screen size
   function updateResponsiveUI() {
     const w   = window.innerWidth
     const fab = document.getElementById('rp-fab')
     const nav = document.getElementById('bottom-nav')
     if (fab) fab.style.display = (w <= 900 && w > 480) ? 'flex' : 'none'
     if (nav) nav.style.display = w <= 480 ? 'flex' : 'none'
-    // Close drawers when resizing back to desktop
     if (w > 900) closeAllDrawers()
   }
   updateResponsiveUI()
   window.addEventListener('resize', updateResponsiveUI)
 
-  // ── Bottom Navigation (< 480px)
+  // ── Bottom Navigation
   document.querySelectorAll<HTMLElement>('[data-bn-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
       const tabId = btn.dataset['bnTab'] as import('../types').TabId
       if (!tabId) return
       switchTab(tabId)
-      // Update active state on bottom nav items
       document.querySelectorAll<HTMLElement>('.bn-item').forEach(b => {
         b.classList.toggle('active', b.dataset['bnTab'] === tabId)
       })
@@ -230,7 +240,6 @@ export function wireAllEvents(): void {
     })
   })
 
-  // "Más" menu toggle
   const bnMoreBtn  = document.getElementById('bn-more-btn')
   const bnMoreMenu = document.getElementById('bn-more-menu')
   function closeBnMore() {
@@ -246,7 +255,6 @@ export function wireAllEvents(): void {
     if (!t.closest('#bn-more-btn') && !t.closest('#bn-more-menu')) closeBnMore()
   })
 
-  // Sync tab clicks → bottom nav active state
   document.querySelectorAll<HTMLElement>('.tab[data-tab]').forEach(tab => {
     tab.addEventListener('click', () => {
       const tabId = tab.dataset['tab']

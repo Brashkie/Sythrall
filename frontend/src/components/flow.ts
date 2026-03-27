@@ -1,6 +1,7 @@
 // ══════════════════════════════════════════
 //  CodeWatch PRO — Flow Diagram
 // ══════════════════════════════════════════
+//flow.ts
 import { state } from '../store/state'
 import type { StepState } from '../types'
 import type { RunHistoryEntry } from '../types'

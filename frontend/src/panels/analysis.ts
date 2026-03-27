@@ -1,6 +1,7 @@
 // ══════════════════════════════════════════
 //  CodeWatch PRO — Analysis Panels
 // ══════════════════════════════════════════
+// panels/analysis.ts
 import { state } from '../store/state'
 import type { CodeFile } from '../types'
 

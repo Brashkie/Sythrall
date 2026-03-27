@@ -1,6 +1,7 @@
 // ══════════════════════════════════════════
 //  CodeWatch PRO — APIs Panel
 // ══════════════════════════════════════════
+// panels/apis.ts
 import { state } from '../store/state'
 import { api } from '../api/client'
 import { toast } from '../utils/helpers'

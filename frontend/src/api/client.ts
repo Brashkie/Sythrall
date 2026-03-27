@@ -1,6 +1,7 @@
 // ══════════════════════════════════════════
 //  CodeWatch PRO — API Client
 // ══════════════════════════════════════════
+// api/client.ts
 import { getApiBase } from '../store/state'
 import type {
   ApiResult, AnalysisResult, MLAnalysisResult, Capabilities

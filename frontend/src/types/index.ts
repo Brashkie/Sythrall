@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════
 //  CodeWatch PRO — Types
 // ══════════════════════════════════════════
-
+// types/index.ts
 export type Severity = 'error' | 'warning' | 'info'
 export type Status   = 'ok' | 'warning' | 'down' | 'unknown' | 'error'
 export type StepState = 'idle' | 'run' | 'ok' | 'err' | 'warn'
@@ -190,5 +190,21 @@ export interface Capabilities {
   plotly:           boolean
   spacy:            boolean
   icecream:         boolean
+  cython:           boolean
+  cython_version?:  string
   [key: string]:    unknown
+}
+
+// ── Notebook / interactive environments
+export type NotebookEnvId = 'thebe' | 'pyodide' | 'starboard'
+
+export interface NotebookEnv {
+  id:          NotebookEnvId
+  name:        string
+  description: string
+  npmPackage:  string
+  version:     string
+  color:       string
+  icon:        string
+  useCases:    string[]
 }

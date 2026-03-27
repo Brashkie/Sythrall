@@ -75,6 +75,10 @@ try:
     import icecream; HAS_ICECREAM = True
 except ImportError: HAS_ICECREAM = False
 
+try:
+    import Cython; HAS_CYTHON = True
+except ImportError: HAS_CYTHON = False
+
 # ════════════════════════════════════════════════
 app = Flask(__name__)
 CORS(app, origins="*")
@@ -116,6 +120,8 @@ def _get_lib_version(lib_name):
         if lib_name == "polars"     and HAS_POLARS:   return pl.__version__
         if lib_name == "lightgbm"   and HAS_LGB:      return lgb.__version__
         if lib_name == "spacy"      and HAS_SPACY:    return spacy.__version__
+        if lib_name == "cython"     and HAS_CYTHON:
+            import Cython; return Cython.__version__
         if lib_name == "sklearn"    and HAS_SKLEARN:
             import sklearn; return sklearn.__version__
     except: pass
@@ -133,6 +139,7 @@ def health():
             "flake8": HAS_FLAKE8, "pylint": HAS_PYLINT, "radon": HAS_RADON,
             "numpy": HAS_NUMPY, "pandas": HAS_PANDAS,
             "sklearn": HAS_SKLEARN, "torch": HAS_TORCH, "tensorflow": HAS_TF,
+            "cython": HAS_CYTHON,
         }
     })
 
@@ -144,6 +151,7 @@ def capabilities():
         "numpy": HAS_NUMPY, "pandas": HAS_PANDAS,
         "sklearn": HAS_SKLEARN, "torch": HAS_TORCH, "tensorflow": HAS_TF,
         "scipy": HAS_SCIPY, "opencv": HAS_CV2, "plotly": HAS_PLOTLY, "icecream": HAS_ICECREAM,
+        "cython": HAS_CYTHON,
     }
     for tool, flag, cmd in [
         ("flake8_version",  HAS_FLAKE8, [sys.executable,"-m","flake8","--version"]),
@@ -167,6 +175,8 @@ def capabilities():
     if HAS_POLARS:   caps["polars_version"]   = pl.__version__ if HAS_POLARS else None
     if HAS_LGB:      caps["lightgbm_version"] = lgb.__version__ if HAS_LGB else None
     if HAS_SPACY:    caps["spacy_version"]    = spacy.__version__ if HAS_SPACY else None
+    if HAS_CYTHON:
+        import Cython; caps["cython_version"] = Cython.__version__
     return jsonify(caps)
 
 # ════════════════════════════════════════════════
@@ -336,6 +346,9 @@ ML_LIB_MAP = {
     "nltk":{"name":"NLTK","category":"nlp","color":"#ffdd57"},
     "spacy":{"name":"spaCy","category":"nlp","color":"#ffdd57"},
     "scipy":{"name":"SciPy","category":"ciencia","color":"#4d9fff"},
+    "cython":{"name":"Cython","category":"rendimiento","color":"#ffd43b"},
+    "pyximport":{"name":"Cython","category":"rendimiento","color":"#ffd43b"},
+    "cython.parallel":{"name":"Cython Parallel","category":"rendimiento","color":"#ffd43b"},
 }
 
 PIPELINE_PATTERNS = [
@@ -384,6 +397,8 @@ PIPELINE_PATTERNS = [
         "lightgbm_train","Modelo LightGBM","🌿"),
     (r'\bspacy\.load\b|nlp\s*=\s*spacy',
         "nlp_spacy","Procesamiento NLP spaCy","🔤"),
+    (r'\bcdef\s|\bcpdef\s|\bctypedef\s|\bpyximport\b|cimport\b',
+        "cython_compile","Compilación Cython","⚡"),
 ]
 
 MODEL_PATTERNS = {
@@ -980,4 +995,5 @@ if __name__ == "__main__":
     add_log("info", f"   flake8={'✓' if HAS_FLAKE8 else '✗'} pylint={'✓' if HAS_PYLINT else '✗'} radon={'✓' if HAS_RADON else '✗'}")
     add_log("info", f"   numpy={'✓' if HAS_NUMPY else '✗'} pandas={'✓' if HAS_PANDAS else '✗'} sklearn={'✓' if HAS_SKLEARN else '✗'}")
     add_log("info", f"   pytorch={'✓' if HAS_TORCH else '✗'} tensorflow={'✓' if HAS_TF else '✗'}")
+    add_log("info", f"   cython={'✓' if HAS_CYTHON else '✗'}")
     app.run(host="0.0.0.0", port=port, debug=debug)

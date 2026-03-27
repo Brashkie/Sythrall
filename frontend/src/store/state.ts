@@ -1,6 +1,7 @@
 // ══════════════════════════════════════════
 //  CodeWatch PRO — Store (estado global)
 // ══════════════════════════════════════════
+// store/state.ts
 import type { AppState, CodeFile } from '../types'
 
 export const state: AppState = {

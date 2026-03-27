@@ -1,6 +1,7 @@
 // ══════════════════════════════════════════
 //  CodeWatch PRO — Charts (Chart.js)
 // ══════════════════════════════════════════
+//charts.ts
 import { Chart, registerables } from 'chart.js'
 import type { ChartConfiguration } from 'chart.js'
 import { state } from '../store/state'

@@ -2,6 +2,7 @@
 //  CodeWatch PRO — Monaco Editor
 //  Workers con ?worker de Vite (sin plugins)
 // ══════════════════════════════════════════
+//editor.ts
 import type { CodeFile } from '../types'
 import { debounce } from '../utils/helpers'
 

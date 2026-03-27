@@ -1,6 +1,7 @@
 // ══════════════════════════════════════════
 //  CodeWatch PRO — App Component
 // ══════════════════════════════════════════
+//app.ts
 import type { TabId } from '../types'
 import { state } from '../store/state'
 import { createResizer, createCollapseToggle } from '../utils/resizer'
