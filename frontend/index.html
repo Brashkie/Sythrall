@@ -19,7 +19,7 @@
       <div class="logo-ring">🛰</div>
       <div>
         <div class="logo-text">Code<b>Watch</b> <span style="font-size:.55rem;color:var(--purple);font-family:var(--mono)">PRO</span></div>
-        <div class="logo-sub">VITE · TS · FLASK · PYLINT · ML/DL</div>
+        <div class="logo-sub">VITE · TS · FASTAPI · PYLINT · ML/DL</div>
       </div>
     </div>
     <div id="be-badge" class="be-badge be-loading"><span>●</span><span id="be-txt">Conectando...</span></div>
@@ -32,7 +32,7 @@
     <div style="display:flex;gap:4px">
       <button class="btn btn-ghost btn-sm" data-quick-url="http://localhost:8000">:8000</button>
       <button class="btn btn-ghost btn-sm" data-quick-url="http://localhost:3000">:3000</button>
-      <button class="btn btn-ghost btn-sm" data-quick-url="http://localhost:5000">:5000</button>
+      <button class="btn btn-ghost btn-sm" data-quick-url="http://localhost:5173">:5173</button>
     </div>
     <div style="flex:1"></div>
     <div id="global-pill" class="pill pill-idle"><span class="dot dot-idle"></span><span>SIN ANÁLISIS</span></div>
@@ -52,6 +52,9 @@
     <div class="tab"        id="t-metrics"    data-tab="metrics"   >📈 Métricas</div>
     <div class="tab"        id="t-diff"       data-tab="diff"      >🔁 Diff</div>
     <div class="tab"        id="t-logs"       data-tab="logs"      >🖥 Logs</div>
+    <!-- ── NUEVO: Tab Proyectos ── -->
+    <div class="tab"        id="t-upload"     data-tab="upload"    >📂 Proyectos</div>
+    <div class="tab" id="t-static" data-tab="static">🔬 Static</div>
   </div>
 
   <!-- ══ WORKSPACE ══ -->
@@ -166,7 +169,6 @@
           <button class="btn btn-run btn-sm" id="btn-gen-diagram">🔀 Generar</button>
           <button class="btn btn-ghost btn-sm" id="btn-export-svg">⬇ SVG</button>
           <button class="btn btn-ghost btn-sm" id="btn-copy-mermaid">📋 Código</button>
-          <!-- ── Zoom controls ── -->
           <div class="zoom-controls" id="zoom-controls">
             <button class="zoom-btn" id="btn-zoom-out" title="Alejar (−)">−</button>
             <span class="zoom-level" id="zoom-level">100%</span>
@@ -177,7 +179,6 @@
           <div style="flex:1"></div>
           <span id="diag-status" style="font-family:var(--mono);font-size:.65rem;color:var(--muted)"></span>
         </div>
-        <!-- Viewport para pan/zoom -->
         <div class="diag-scroll">
           <div class="diag-viewport" id="diag-viewport">
             <div class="diag-canvas" id="diag-canvas">
@@ -249,6 +250,25 @@
         <div id="log-stream" class="log-stream"></div>
       </div>
 
+      <!-- ══ NUEVO: UPLOAD / PROYECTOS ══ -->
+      <div class="tab-panel" id="panel-upload">
+        <div style="overflow-y:auto;flex:1;padding:14px 12px">
+          <div id="upload-content">
+            <!-- Renderizado por renderUploadPanel() en panels/upload.ts -->
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="panel-static">
+        <div class="st-toolbar" id="static-toolbar-placeholder"></div>
+        <div class="st-body" id="static-content">
+          <div class="empty">
+            <span class="empty-icon">🔬</span>
+            Selecciona un archivo y haz clic en Analizar
+          </div>
+        </div>
+      </div>
+
     </div><!-- end center -->
 
     <button class="rp-fab" id="rp-fab" style="display:none" title="Análisis">⚡</button>
@@ -284,6 +304,7 @@
   <button class="bn-item active" data-bn-tab="dashboard"><span class="bn-icon">📊</span><span>Dashboard</span></button>
   <button class="bn-item" data-bn-tab="editor"><span class="bn-icon">📝</span><span>Editor</span><span class="bn-badge" id="bn-badge-files" style="display:none">0</span></button>
   <button class="bn-item" data-bn-tab="issues"><span class="bn-icon">🐛</span><span>Issues</span><span class="bn-badge" id="bn-badge-issues" style="display:none">0</span></button>
+  <button class="bn-item" data-bn-tab="upload"><span class="bn-icon">📂</span><span>Proyectos</span></button>
   <button class="bn-item" data-bn-tab="ml"><span class="bn-icon">🤖</span><span>ML/DL</span></button>
   <button class="bn-item" id="bn-more-btn"><span class="bn-icon">⋯</span><span>Más</span></button>
 </nav>
@@ -294,6 +315,7 @@
   <button class="bn-more-item" data-bn-tab="metrics">📈 Métricas</button>
   <button class="bn-more-item" data-bn-tab="diff">🔁 Diff</button>
   <button class="bn-more-item" data-bn-tab="logs">🖥 Logs</button>
+  <button class="bn-more-item" data-bn-tab="static">🔬 Static Analysis</button>
 </div>
 
 <script type="module" src="/src/main.ts"></script>

@@ -1,4 +1,4 @@
-# ── Stage 1: Build Vite + TypeScript
+# ── Stage 1: Build Vite + TypeScript ──────────────────────────────────────────
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
@@ -6,12 +6,12 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-# ── Stage 2: Serve con Nginx
+# ── Stage 2: Serve con Nginx ───────────────────────────────────────────────────
 FROM nginx:alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Escribir nginx.conf directamente (evita problemas de contexto)
+# nginx.conf inline — FastAPI backend en :8000
 RUN printf 'server {\n\
     listen 80;\n\
     server_name localhost;\n\
@@ -28,14 +28,56 @@ RUN printf 'server {\n\
         add_header Cache-Control "public, immutable";\n\
     }\n\
 \n\
-    location /api/ {\n\
-        proxy_pass         http://backend:5000/;\n\
+    location /api/upload/ {\n\
+        proxy_pass         http://backend:8000;\n\
         proxy_http_version 1.1;\n\
         proxy_set_header   Host $host;\n\
         proxy_set_header   X-Real-IP $remote_addr;\n\
+        proxy_read_timeout 300s;\n\
+        client_max_body_size 210m;\n\
+        add_header Access-Control-Allow-Origin  * always;\n\
+        add_header Access-Control-Allow-Methods "GET, POST, DELETE, OPTIONS" always;\n\
+        add_header Access-Control-Allow-Headers "Content-Type" always;\n\
+        if ($request_method = OPTIONS) { return 204; }\n\
+    }\n\
+\n\
+    location /api/history {\n\
+        proxy_pass         http://backend:8000;\n\
+        proxy_http_version 1.1;\n\
+        proxy_set_header   Host $host;\n\
+        add_header Access-Control-Allow-Origin  * always;\n\
+        add_header Access-Control-Allow-Methods "GET, OPTIONS" always;\n\
+        add_header Access-Control-Allow-Headers "Content-Type" always;\n\
+        if ($request_method = OPTIONS) { return 204; }\n\
+    }\n\
+\n\
+    location /analyze/ {\n\
+        proxy_pass         http://backend:8000;\n\
+        proxy_http_version 1.1;\n\
+        proxy_set_header   Host $host;\n\
         proxy_read_timeout 120s;\n\
         add_header Access-Control-Allow-Origin  * always;\n\
         add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;\n\
+        add_header Access-Control-Allow-Headers "Content-Type" always;\n\
+        if ($request_method = OPTIONS) { return 204; }\n\
+    }\n\
+\n\
+    location /logs {\n\
+        proxy_pass         http://backend:8000;\n\
+        proxy_http_version 1.1;\n\
+        proxy_set_header   Host $host;\n\
+        add_header Access-Control-Allow-Origin  * always;\n\
+        add_header Access-Control-Allow-Methods "GET, OPTIONS" always;\n\
+        add_header Access-Control-Allow-Headers "Content-Type" always;\n\
+        if ($request_method = OPTIONS) { return 204; }\n\
+    }\n\
+\n\
+    location ~ ^/(capabilities|health|docs|redoc|openapi\\.json) {\n\
+        proxy_pass         http://backend:8000;\n\
+        proxy_http_version 1.1;\n\
+        proxy_set_header   Host $host;\n\
+        add_header Access-Control-Allow-Origin  * always;\n\
+        add_header Access-Control-Allow-Methods "GET, OPTIONS" always;\n\
         add_header Access-Control-Allow-Headers "Content-Type" always;\n\
         if ($request_method = OPTIONS) { return 204; }\n\
     }\n\

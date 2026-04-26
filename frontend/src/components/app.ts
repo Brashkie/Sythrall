@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════
 //  CodeWatch PRO — App Component
 // ══════════════════════════════════════════
-//app.ts
+// src/components/app.ts
 import type { TabId } from '../types'
 import { state } from '../store/state'
 import { createResizer, createCollapseToggle } from '../utils/resizer'
@@ -14,18 +14,19 @@ import { renderMLResults, clientMLAnalysis } from '../panels/ml'
 import { renderAPICards, renderIssuesList } from '../panels/apis'
 import { renderFileAnalysis, renderMetrics } from '../panels/analysis'
 import { renderFlow, setStep, updateRunMeta } from './flow'
+import { initExplorer, explorerAddFile, explorerRemoveFile, explorerSelectFile, openSearch } from './explorer'
 
-// ── Tab system
-const TABS: TabId[] = ['dashboard','editor','apis','issues','diagram','ml','metrics','diff','logs']
+// ── Tab system — 'upload' agregado
+const TABS: TabId[] = ['dashboard','editor','apis','issues','diagram','ml','metrics','diff','logs','upload','static']
 
 export function switchTab(name: TabId): void {
   TABS.forEach(t => {
     document.getElementById('t-' + t)?.classList.toggle('active', t === name)
     document.getElementById('panel-' + t)?.classList.toggle('active', t === name)
   })
+
   // Monaco necesita relayout después de que el panel sea visible
   if (name === 'editor') {
-    // Múltiples intentos para asegurar el relayout
     setTimeout(() => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const fn = (window as any)['editorRelayout'] as (() => void) | undefined
@@ -36,6 +37,19 @@ export function switchTab(name: TabId): void {
       const fn = (window as any)['editorRelayout'] as (() => void) | undefined
       fn?.()
     }, 300)
+  }
+
+  // Renderizar panel Upload al activarlo
+  if (name === 'upload') {
+    import('../panels/upload').then(({ renderUploadPanel, loadRecentProjects }) => {
+      renderUploadPanel()
+      loadRecentProjects()
+    })
+  }
+  if (name === 'static') {
+    import('../panels/static').then(({ renderStaticPanel }) => {
+      renderStaticPanel()
+    })
   }
 }
 
@@ -94,14 +108,11 @@ export function updateStats(): void {
 
 export function updateBadges(): void {
   const n = state.results.issues.filter(i => i.severity === 'error').length
-  // Tab bar badge
   const ti = document.getElementById('tb-issues')!
   ti.textContent  = String(n)
   ti.style.display = n ? '' : 'none'
-  // Bottom nav badge
   const bni = document.getElementById('bn-badge-issues')
   if (bni) { bni.textContent = String(n); bni.style.display = n ? '' : 'none' }
-  // Files badge
   const tf = document.getElementById('tb-files')!
   const nf = state.files.length
   tf.textContent  = String(nf)
@@ -132,7 +143,6 @@ export async function checkBackend(): Promise<void> {
     capsRow.innerHTML = allCaps.map(k =>
       `<span class="cap-chip ${d[k] ? 'cap-on' : 'cap-off'}">${d[k] ? '✓' : '✗'} ${k}</span>`
     ).join('')
-    // Render server info
     const serverInfo = document.getElementById('server-info')!
     serverInfo.innerHTML = `
       <div class="metric-section">
@@ -171,12 +181,14 @@ export function handleCodeFiles(files: FileList | null): void {
     if (state.files.find(x => x.name === f.name)) return
     const reader = new FileReader()
     reader.onload = e => {
-      const ext = getExt(f.name)
-      state.files.push({
+      const ext  = getExt(f.name)
+      const file = {
         id: uniqueId(), name: f.name, ext, size: f.size,
         content: e.target!.result as string,
         issues: [], metrics: {}, analyzed: false,
-      })
+      }
+      state.files.push(file)
+      explorerAddFile(file)
       updateFileTree(); updateSelectors(); updateStats()
       appendLog('info', `📁 ${f.name} (${fmtBytes(f.size)})`, 'fe')
       toast('✅ ' + f.name, 'ok')
@@ -218,7 +230,6 @@ export function updateFileTree(): void {
       <button class="btn btn-danger btn-sm" style="padding:2px 4px" data-remove="${f.id}">✕</button>
     </div>`
   }).join('')
-  // Event delegation
   el.onclick = (e: MouseEvent) => {
     const target = e.target as HTMLElement
     const removeId = target.dataset['remove']
@@ -231,6 +242,7 @@ export function updateFileTree(): void {
 function removeFile(id: string): void {
   state.files = state.files.filter(f => f.id !== id)
   if (state.currentFile?.id === id) state.currentFile = null
+  explorerRemoveFile(id)
   updateFileTree(); updateSelectors(); updateStats()
 }
 
@@ -368,7 +380,6 @@ async function analyzeAllFiles(): Promise<void> {
       if (state.backendOk) {
         const res = await api.analyzeCode(f.name, f.content)
         f.issues   = res.issues
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         f.metrics  = {
             pylint_score: res.metrics?.pylint_score,
             complexity:   res.complexity   ?? [],
@@ -607,12 +618,10 @@ export async function exportZip(): Promise<void> {
 //  INIT APP
 // ══════════════════════════════════════════
 export function initApp(): void {
-  // En móvil: limpiar tamaños guardados para que el CSS controle el layout
   if (window.innerWidth < 900) {
     localStorage.removeItem('panel-size-sidebar')
     localStorage.removeItem('panel-size-right-panel')
   } else {
-    // En desktop: limpiar solo valores inválidos
     ;['sidebar', 'right-panel'].forEach(id => {
       const saved = localStorage.getItem(`panel-size-${id}`)
       if (saved && (Number(saved) < 100 || Number(saved) > 600)) {
@@ -621,19 +630,14 @@ export function initApp(): void {
     })
   }
 
-  // Inicializar Monaco Editor (sync con workers)
   try { initEditor() } catch(e) { console.error("Editor init failed:", e) }
-
-  // Inicializar Mermaid
+  initExplorer({ onFileOpen: (f) => selectFile(f.id) })
   initMermaid()
-
-  // Inicializar charts (después de que el DOM esté listo)
   setTimeout(() => {
     try { initCharts() } catch (e) { console.warn('Charts init error:', e) }
   }, 100)
 
-  // Resize panels
-  const sidebar   = document.getElementById('sidebar')    as HTMLElement
+  const sidebar    = document.getElementById('sidebar')     as HTMLElement
   const sideHandle = document.getElementById('sidebar-resize') as HTMLElement
   const rightPanel = document.getElementById('right-panel') as HTMLElement
   const rpHandle   = document.getElementById('rp-resize')   as HTMLElement
@@ -650,19 +654,16 @@ export function initApp(): void {
     if (rpCollapseBtn) createCollapseToggle(rightPanel, rpCollapseBtn, 'right', 280)
   }
 
-  // Renderizar estado inicial
   renderFlow()
   renderURLList()
 
-  // Pre-cargar localhost:8000
+  // Pre-cargar localhost:8000 (FastAPI)
   state.urls.push('http://localhost:8000')
   state.results.apis.push({ url:'http://localhost:8000', status:'unknown', code:null, ms:null, error:null, ts:null, history:[] })
   renderURLList()
 
-  // Wire up global events
   wireEvents()
 
-  // Drag & drop
   const dz = document.getElementById('dz')!
   document.body.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over') })
   document.body.addEventListener('dragleave', () => dz.classList.remove('over'))
@@ -674,21 +675,16 @@ export function initApp(): void {
 }
 
 function wireEvents(): void {
-  // Tabs
   document.querySelectorAll<HTMLElement>('.tab[data-tab]').forEach(el => {
     el.addEventListener('click', () => switchTab(el.dataset['tab'] as TabId))
   })
-  // URL input enter
   const urlInput = document.getElementById('url-main') as HTMLInputElement
   urlInput?.addEventListener('keydown', e => { if (e.key === 'Enter') addURL() })
-  // File inputs
   document.getElementById('fi-code')?.addEventListener('change', e => handleCodeFiles((e.target as HTMLInputElement).files))
   document.getElementById('fi-log')?.addEventListener('change', e => handleLogFiles((e.target as HTMLInputElement).files))
-  // Mobile sidebar toggle
   document.getElementById('mobile-toggle')?.addEventListener('click', () => {
     document.getElementById('sidebar')?.classList.toggle('mobile-open')
   })
-  // Right panel tabs
   document.querySelectorAll<HTMLElement>('.rp-tab[data-rptab]').forEach(el => {
     el.addEventListener('click', () => rpTab(el.dataset['rptab'] as 'flow' | 'analysis' | 'server'))
   })

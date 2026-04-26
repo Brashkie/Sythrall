@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════
 //  CodeWatch PRO — Event Wiring
 // ══════════════════════════════════════════
-// events.ts
+// src/components/events.ts
 import type { TabId } from '../types'
 import {
   switchTab, rpTab, addURL, handleCodeFiles, handleLogFiles,
@@ -15,8 +15,11 @@ import { state } from '../store/state'
 import { appendLog } from '../utils/helpers'
 import { api } from '../api/client'
 import { zoomIn, zoomOut, resetZoom, fitDiagram, initDiagramZoom } from './mermaid'
+import { openSearch } from './explorer'
 
 export function wireAllEvents(): void {
+
+  document.getElementById('exp-search-btn')?.addEventListener('click', openSearch)
 
   // ── Tabs
   document.querySelectorAll<HTMLElement>('.tab[data-tab]').forEach(el => {

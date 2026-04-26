@@ -10,7 +10,34 @@
     "fmtbytes", "nowstr", "nowts", "setprogress",
     "appendlog", "wireevents", "initapp", "initcharts",
     "initeditor", "initmermaid", "renderdist", "renderrt",
-    "updatehist", "renderflow", "setstep", "updaterunmeta"
+    "updatehist", "renderflow", "setstep", "updaterunmeta",
+
+    // ── v4.0: FastAPI + upload panel ──────────────────────
+    "fastapi", "uvicorn", "multipart", "httpx", "pydantic",
+    "openapi", "redoc", "lifespan",
+
+    // Upload panel
+    "dropzone", "webkitdirectory", "mozdirectory",
+    "loadrecentprojects", "renderuploadpanel",
+    "uploadfiles", "uploadfolder", "uploadzip",
+    "listprojects", "getprojecttree", "getfilecontent",
+    "deleteproject", "projecttree", "projectsummary",
+    "uploadresult", "uploadprogress", "filecontent",
+    "projecttreenode", "projectinfo",
+
+    // Backend migración
+    "analyzeml", "analyzecode", "checkurls", "analyzelogs",
+    "generatediagram", "getlogs", "getapibase",
+
+    // Python / análisis
+    "radon", "cyclomatic", "maintainability", "iloc",
+    "dtype", "dtypes", "fillna", "dropna", "groupby",
+    "sklearn", "joblib", "pickle", "lightgbm", "lgbm",
+    "xgboost", "catboost", "optuna", "mlflow",
+    "pyximport", "cimport", "cpdef", "cdef",
+
+    // Proyecto
+    "hepein", "apexvision", "brashkie"
   ],
-  "ignorePaths": ["node_modules", "dist", "*.json"]
+  "ignorePaths": ["node_modules", "dist", "*.json", "uploads"]
 }

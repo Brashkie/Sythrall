@@ -4,8 +4,8 @@ color 0A
 
 echo.
 echo  ===========================================
-echo   CodeWatch PRO  -  Docker
-echo   Flask + flake8 + pylint + radon
+echo   CodeWatch PRO  v4.0  -  Hepein Oficial
+echo   FastAPI + flake8 + pylint + radon + ML/DL
 echo  ===========================================
 echo.
 
@@ -24,10 +24,10 @@ echo  [OK] Docker detectado
 cd /d "%~dp0"
 
 echo.
-echo  [1/3] Construyendo imagen del backend...
+echo  [1/3] Construyendo imagenes...
 docker compose build --no-cache
 IF %ERRORLEVEL% NEQ 0 (
-    echo  [ERROR] Fallo al construir la imagen.
+    echo  [ERROR] Fallo al construir las imagenes.
     pause
     exit /b 1
 )
@@ -42,16 +42,17 @@ IF %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
-echo  [3/3] Esperando que el backend inicie (15 seg)...
-timeout /t 15 /nobreak >nul
+echo  [3/3] Esperando que el backend inicie (25 seg)...
+timeout /t 25 /nobreak >nul
 
 echo.
 echo  ===========================================
 echo   Sistema listo!
 echo.
-echo   Dashboard:   http://localhost:8080
-echo   Backend API: http://localhost:5000
-echo   Health:      http://localhost:5000/health
+echo   Dashboard:    http://localhost:8080
+echo   Backend API:  http://localhost:8000
+echo   Swagger UI:   http://localhost:8000/docs
+echo   Health:       http://localhost:8000/health
 echo.
 echo   Para detener: ejecuta STOP.bat
 echo  ===========================================

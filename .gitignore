@@ -1,37 +1,92 @@
 # ================================
-# CODEWATCH-PRO — .gitignore
+# CODEWATCH-PRO — .gitignore v4.2
 # ================================
 
-# Dependencies
+# ── Dependencies ────────────────────────────────────────
 frontend/node_modules/
 
-# Build outputs
+# ── Build outputs ────────────────────────────────────────
 frontend/dist/
+frontend/.vite/
 
-# Environment files — NUNCA subir al repo
+# ── Environment files — NEVER commit ─────────────────────
 frontend/.env
+backend/.env
 .env
 *.env.local
 *.env.production
+*.env.development
 
-# Logs
+# ── Logs ─────────────────────────────────────────────────
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# OS
+# ── OS ───────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
 Thumbs.db
+desktop.ini
 
-# VS Code (opcional: comenta si quieres compartir settings con el equipo)
+# ── VS Code ──────────────────────────────────────────────
 .vscode/settings.json
+.vscode/launch.json
+# .vscode/extensions.json  ← déjalo si quieres compartir extensiones recomendadas
 
-# Python (backend)
+# ── Python / Backend ─────────────────────────────────────
 __pycache__/
+**/__pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.pyw
 .Python
-backend/__pycache__/
+*.egg-info/
+dist/
+build/
+.eggs/
 
-# Docker volumes / datos locales
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Cython compiled files
+*.so
+*.pyd
+*.c
+*.cpp
+# Except tracked source files — override below if needed
+!backend/services/*.c
+!backend/services/*.cpp
+
+# mypy / pyright
+.mypy_cache/
+.pyright/
+
+# ── Uploads / Project data ───────────────────────────────
+# Proyectos subidos por usuarios — no subir al repo
+backend/uploads/
 docker/data/
+
+# ── Docker ───────────────────────────────────────────────
+# Los volúmenes locales de Docker no se suben
+.docker/
+
+# ── TypeScript / Vite ────────────────────────────────────
+*.tsbuildinfo
+frontend/src/**/*.js.map
+
+# ── Misc ─────────────────────────────────────────────────
+*.zip
+*.tar.gz
+*.bak
+*.swp
+*.tmp

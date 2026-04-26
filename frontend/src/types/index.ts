@@ -1,11 +1,15 @@
 // ══════════════════════════════════════════
 //  CodeWatch PRO — Types
 // ══════════════════════════════════════════
-// types/index.ts
-export type Severity = 'error' | 'warning' | 'info'
-export type Status   = 'ok' | 'warning' | 'down' | 'unknown' | 'error'
+export type Severity  = 'error' | 'warning' | 'info'
+export type Status    = 'ok' | 'warning' | 'down' | 'unknown' | 'error'
 export type StepState = 'idle' | 'run' | 'ok' | 'err' | 'warn'
-export type TabId = 'dashboard' | 'editor' | 'apis' | 'issues' | 'diagram' | 'ml' | 'metrics' | 'diff' | 'logs'
+
+// 'upload' agregado para el nuevo panel de proyectos
+export type TabId =
+  | 'dashboard' | 'editor' | 'apis'    | 'issues'
+  | 'diagram'   | 'ml'     | 'metrics' | 'diff'
+  | 'logs'      | 'upload' | 'static'
 
 export interface CodeFile {
   id:       string
@@ -25,28 +29,28 @@ export interface LogFile {
 }
 
 export interface Issue {
-  tool:     string
-  line?:    number
-  col?:     number
-  severity: Severity
-  code?:    string
-  message:  string
-  preview?: string
-  file?:    string
-  symbol?:  string
+  tool:        string
+  line?:       number
+  col?:        number
+  severity:    Severity
+  code?:       string
+  message:     string
+  preview?:    string
+  file?:       string
+  symbol?:     string
   suggestion?: string
   category?:   string
 }
 
 export interface ApiResult {
-  url:          string
-  status:       Status
-  code:         string | number | null
-  ms:           number | null
-  error:        string | null
-  ts:           string | null
-  history:      HistoryEntry[]
-  headers?:     Record<string, string>
+  url:           string
+  status:        Status
+  code:          string | number | null
+  ms:            number | null
+  error:         string | null
+  ts:            string | null
+  history:       HistoryEntry[]
+  headers?:      Record<string, string>
   content_type?: string
   json_preview?: string
 }
@@ -128,14 +132,14 @@ export interface MLAnalysisResult {
 }
 
 export interface AnalysisResult {
-  filename:         string
-  ts:               string
-  issues:           Issue[]
-  metrics:          { pylint_score?: number }
-  complexity:       ComplexityEntry[]
-  maintainability:  number | null
-  raw_stats:        RawStats
-  tools_used:       string[]
+  filename:        string
+  ts:              string
+  issues:          Issue[]
+  metrics:         { pylint_score?: number }
+  complexity:      ComplexityEntry[]
+  maintainability: number | null
+  raw_stats:       RawStats
+  tools_used:      string[]
 }
 
 export interface RunHistoryEntry {
@@ -154,21 +158,21 @@ export interface AppState {
     issues:    Issue[]
     logErrors: LogError[]
   }
-  running:     boolean
-  autoOn:      boolean
-  autoTimer:   ReturnType<typeof setInterval> | null
-  history:     RunHistoryEntry[]
-  steps:       Record<string, StepState>
-  currentFile: CodeFile | null
-  backendOk:   boolean
+  running:        boolean
+  autoOn:         boolean
+  autoTimer:      ReturnType<typeof setInterval> | null
+  history:        RunHistoryEntry[]
+  steps:          Record<string, StepState>
+  currentFile:    CodeFile | null
+  backendOk:      boolean
   currentMermaid: string
 }
 
 export interface LogError {
-  file:     string
-  lineNo:   number
-  level:    string
-  line:     string
+  file:   string
+  lineNo: number
+  level:  string
+  line:   string
 }
 
 export interface Capabilities {
@@ -195,7 +199,6 @@ export interface Capabilities {
   [key: string]:    unknown
 }
 
-// ── Notebook / interactive environments
 export type NotebookEnvId = 'thebe' | 'pyodide' | 'starboard'
 
 export interface NotebookEnv {

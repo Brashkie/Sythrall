@@ -2,23 +2,21 @@
 //  CodeWatch PRO — Monaco Editor
 //  Workers con ?worker de Vite (sin plugins)
 // ══════════════════════════════════════════
-//editor.ts
+// src/components/editor.ts
 import type { CodeFile } from '../types'
 import { debounce } from '../utils/helpers'
+import { initEditorIntelligence, notifyFileChanged, teardownIntelligence } from './editor-intelligence'
 
 // Importar workers con la sintaxis ?worker de Vite
-// Vite los convierte en chunks separados y les da URLs correctas en prod
 import EditorWorker  from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import JsonWorker    from 'monaco-editor/esm/vs/language/json/json.worker?worker'
 import CssWorker     from 'monaco-editor/esm/vs/language/css/css.worker?worker'
 import HtmlWorker    from 'monaco-editor/esm/vs/language/html/html.worker?worker'
 import TsWorker      from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 
-// Configurar MonacoEnvironment ANTES de importar monaco
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 ;(self as any).MonacoEnvironment = {
   getWorker(_: unknown, label: string) {
-    if (label === 'json')                          return new JsonWorker()
+    if (label === 'json')                           return new JsonWorker()
     if (label === 'css' || label === 'scss' || label === 'less') return new CssWorker()
     if (label === 'html' || label === 'handlebars') return new HtmlWorker()
     if (label === 'typescript' || label === 'javascript') return new TsWorker()
@@ -26,7 +24,6 @@ import TsWorker      from 'monaco-editor/esm/vs/language/typescript/ts.worker?wo
   },
 }
 
-// Importar monaco DESPUÉS de configurar el environment
 import * as monaco from 'monaco-editor'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -81,8 +78,16 @@ export function initEditor(): void {
     automaticLayout: true,
   })
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // Exponer helpers globales para el Explorer y otros módulos
   ;(window as any)['editorRelayout'] = () => editorInstance?.layout()
+  ;(window as any)['editorGoToLine'] = (line: number) => {
+    editorInstance?.revealLineInCenter(line)
+    editorInstance?.setPosition({ lineNumber: line, column: 1 })
+    editorInstance?.focus()
+  }
+
+  // Editor Intelligence (linting en tiempo real + hover + autocomplete)
+  initEditorIntelligence(editorInstance)
 
   editorInstance.onDidChangeModelContent(
     debounce(() => {
@@ -103,6 +108,9 @@ export function loadFileInEditor(file: CodeFile): void {
   const fnEl = document.getElementById('ed-fname')
   if (fnEl) { fnEl.textContent = file.name; fnEl.style.display = '' }
   applyMarkers(file)
+
+  // Notificar al sistema de inteligencia que cambió el archivo
+  notifyFileChanged(file.name)
 }
 
 export function applyMarkers(file: CodeFile): void {

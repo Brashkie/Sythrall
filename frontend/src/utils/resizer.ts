@@ -2,7 +2,7 @@
 //  CodeWatch PRO — Panel Resizer
 //  Drag-to-resize + collapse con botones flecha
 // ══════════════════════════════════════════
-
+// utils/resizer.ts
 export interface ResizerOptions {
   minSize?:   number
   maxSize?:   number

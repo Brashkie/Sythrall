@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════
 //  CodeWatch PRO — Mermaid Diagrams + Zoom/Pan
 // ══════════════════════════════════════════
-// components/mermaid.ts
+// src/components/mermaid.ts
 import mermaid from 'mermaid'
 
 let initialized = false

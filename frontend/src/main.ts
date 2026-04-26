@@ -1,9 +1,7 @@
 // ══════════════════════════════════════════
-//  CodeWatch PRO — Main Entry Point
+//  CodeWatch PRO — Main Entry Point v4.0
 // ══════════════════════════════════════════
 
-// CSS side-effect import — handled by Vite bundler
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import './styles/main.css'
 
@@ -13,4 +11,6 @@ import { wireAllEvents } from './components/events'
 document.addEventListener('DOMContentLoaded', () => {
   initApp()
   wireAllEvents()
+  // El panel Upload se inicializa lazy en switchTab('upload')
+  // cuando el usuario hace click en el tab Proyectos por primera vez
 })
