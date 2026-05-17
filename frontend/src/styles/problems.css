@@ -1,0 +1,201 @@
+/* ══════════════════════════════════════════
+   CodeWatch PRO — Problems Panel + Live Metrics Bar
+   v4.3
+   Agregar en main.css: @import './problems.css';
+   ══════════════════════════════════════════ */
+
+/* ── Live Metrics Bar ─────────────────────────────────────────────────────── */
+.lm-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  background: var(--s0);
+  border-bottom: 1px solid var(--b0);
+  font-family: var(--mono);
+  font-size: .65rem;
+  color: var(--muted);
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  height: 26px;
+}
+.lm-bar::-webkit-scrollbar { display: none; }
+
+.lm-item {
+  white-space: nowrap;
+  transition: color .2s;
+  flex-shrink: 0;
+}
+
+.lm-sep {
+  color: var(--b1);
+  flex-shrink: 0;
+}
+
+.lm-parse { color: var(--b2); }
+.lm-lang  {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--s2);
+  font-size: .58rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.lm-safe {
+  background: rgba(255,182,39,.12);
+  color: var(--warn);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: .58rem;
+  flex-shrink: 0;
+  cursor: help;
+}
+
+/* ── Problems Panel ───────────────────────────────────────────────────────── */
+.pb-header {
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--b0);
+  margin-bottom: 8px;
+}
+.pb-filename {
+  display: block;
+  font-family: var(--mono);
+  font-size: .76rem;
+  font-weight: 600;
+  margin-bottom: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pb-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pb-count {
+  font-family: var(--mono);
+  font-size: .6rem;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+.pb-err  { background: rgba(255,51,102,.15);  color: var(--err);  }
+.pb-warn { background: rgba(255,182,39,.12);  color: var(--warn); }
+.pb-info { background: rgba(61,158,255,.1);   color: var(--info); }
+.pb-ok   { background: rgba(0,245,160,.1);    color: var(--ok);   }
+
+/* ── Metrics summary ──────────────────────────────────────────────────────── */
+.pb-metrics-summary {
+  background: var(--s2);
+  border: 1px solid var(--b0);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+.pb-metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--b0);
+  font-size: .72rem;
+}
+.pb-metric-row:last-child { border-bottom: none; }
+.pb-metric-k { color: var(--muted); font-family: var(--mono); font-size: .68rem; }
+.pb-metric-v { font-family: var(--mono); font-weight: 600; }
+.pb-safe-mode {
+  margin-top: 6px;
+  font-size: .62rem;
+  color: var(--warn);
+  padding: 4px 6px;
+  background: rgba(255,182,39,.06);
+  border-radius: 4px;
+  border-left: 2px solid var(--warn);
+}
+
+/* ── Problem section ──────────────────────────────────────────────────────── */
+.pb-section {
+  margin-bottom: 8px;
+}
+.pb-section-head {
+  font-size: .6rem;
+  font-weight: 700;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 5px 0 4px;
+  border-bottom: 1px solid var(--b0);
+  margin-bottom: 3px;
+  user-select: none;
+}
+.pb-issue {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 0;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: .7rem;
+  border-radius: 4px;
+  transition: background .1s;
+  overflow: hidden;
+}
+.pb-issue:hover { background: var(--s2); padding-left: 4px; }
+
+.pb-issue-loc  { color: var(--muted); min-width: 28px; flex-shrink: 0; font-size: .6rem; }
+.pb-issue-msg  { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-issue-code { color: var(--b2); font-size: .58rem; flex-shrink: 0; }
+.pb-more       { font-size: .62rem; color: var(--muted); padding: 3px 0; }
+
+/* Tool badges */
+.pb-issue-tool {
+  font-size: .58rem;
+  padding: 1px 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  font-weight: 700;
+}
+.pb-tool-flake8 { background: rgba(184,125,255,.15); color: var(--purple); }
+.pb-tool-pylint { background: rgba(61,158,255,.12);  color: var(--info);   }
+.pb-tool-radon  { background: rgba(0,245,160,.1);    color: var(--ok);     }
+.pb-tool-ast    { background: rgba(255,182,39,.1);   color: var(--warn);   }
+
+/* Security section */
+.pb-security .pb-section-head { color: var(--err); }
+
+/* ── Big-O distribution ───────────────────────────────────────────────────── */
+.pb-bigo-dist { padding: 4px 0; }
+.pb-bigo-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+  font-size: .68rem;
+  font-family: var(--mono);
+}
+.pb-bigo-label   { min-width: 72px; flex-shrink: 0; font-weight: 700; }
+.pb-bigo-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: var(--b0);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.pb-bigo-bar {
+  height: 100%;
+  border-radius: 3px;
+  opacity: .7;
+  transition: width .3s ease;
+}
+.pb-bigo-count { color: var(--muted); min-width: 32px; text-align: right; flex-shrink: 0; }
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 680px) {
+  .lm-bar { font-size: .58rem; padding: 3px 10px; }
+  .lm-parse { display: none; }
+}
+@media (max-width: 480px) {
+  .lm-bar { display: none; }
+}

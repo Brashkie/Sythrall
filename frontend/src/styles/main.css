@@ -5,6 +5,7 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Outfit:wght@300;500;700;800&display=swap');
 @import './upload.css';
 @import './static-addon.css';
+@import './problems.css'
 
 /* ── Variables ── */
 :root {

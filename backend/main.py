@@ -112,6 +112,7 @@ from routers.logs            import router as logs_router
 from routers.static_analysis import router as static_router
 from routers.intelligence    import router as intel_router
 from routers.graph           import router as graph_router
+from routers.metrics_live    import router as metrics_router
 
 app.include_router(upload_router,   prefix="/api/upload", tags=["📂 Upload"])
 app.include_router(analysis_router, prefix="/analyze",    tags=["🔍 Analysis"])
@@ -121,6 +122,7 @@ app.include_router(logs_router,                           tags=["📋 Logs"])
 app.include_router(static_router,   prefix="/static",     tags=["🔬 Static"])
 app.include_router(intel_router,    prefix="/intel",      tags=["🧠 Intelligence"])
 app.include_router(graph_router,    prefix="/analyze",    tags=["🕸 Graph"])
+app.include_router(metrics_router,  prefix="/metrics",    tags=["📊 Live Metrics"])
 
 
 # ── System endpoints ─────────────────────────────────────────────────────────
