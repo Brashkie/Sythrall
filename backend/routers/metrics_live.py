@@ -148,9 +148,18 @@ def _metrics_js_ts(content: str, result: dict) -> None:
     cc_tokens = len(re.findall(r"\b(if|else|for|while|switch|catch|&&|\|\||\?)\b", content))
     avg_cc = round(cc_tokens / max(fn_count, 1), 1)
 
-    # Big-O heurístico: buscar loops anidados
-    nested = len(re.findall(r"for.*\{[^}]*for", content, re.DOTALL))
-    bigo = "O(n²)" if nested >= 2 else ("O(n)" if nested == 1 else "O(1)")
+    # Big-O heurístico: contar loops totales y detectar si alguno está anidado
+    # dentro de otro. Ojo: "nested" es un booleano (¿hay anidamiento?), no un
+    # contador — encontrar el patrón "for...{...for" UNA vez ya implica 2
+    # loops anidados, así que no se puede usar como conteo de profundidad.
+    loop_count = len(re.findall(r"\b(?:for|while)\s*\(", content))
+    has_nested = bool(re.search(r"(?:for|while)\s*\([^)]*\)\s*\{[^{}]*(?:for|while)\s*\(", content, re.DOTALL))
+    if loop_count == 0:
+        bigo = "O(1)"
+    elif has_nested:
+        bigo = "O(n²)"
+    else:
+        bigo = "O(n)"
 
     result["functions"] = fn_count
     result["classes"] = cls_count

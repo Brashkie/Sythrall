@@ -23,6 +23,7 @@ Todos los cambios notables de CodeWatch PRO se documentan acá. Formato basado e
 - Roadmap del README reorganizado: las secciones ahora agrupan por qué tan fundamentada está cada idea (lista para construir vs. "integrar, no reconstruir" vs. largo plazo/otra categoría de herramienta), en vez de una lista plana por versión.
 
 ### Fixed
+- **Big-O incorrecto para loops anidados en TS/JS** (`/metrics/live`) — la heurística por regex confundía "cantidad de coincidencias del patrón de anidamiento" con "cantidad de loops", dando `O(n)` para código con loops anidados en vez de `O(n²)`. Detectado por el propio CI (`ci.yml`) en su primera corrida.
 - **Explorer panel sin estilos** — `main.css` nunca importaba `explorer.css`.
 - **Archivos duplicados al subir** — soltar/seleccionar un archivo agregaba dos entradas idénticas; causado por `app.ts` y `events.ts` cableando ambos los mismos listeners de `drop`/`change` (resto de un refactor incompleto).
 - **Topbar desbordado en anchos de laptop comunes (~1100–1650px)** — demasiados elementos `flex-shrink:0` para el espacio disponible; se agregó un breakpoint dedicado que oculta chips/atajos secundarios antes de que el botón principal "Analizar" quede fuera de pantalla.
