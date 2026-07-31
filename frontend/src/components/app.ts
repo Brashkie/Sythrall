@@ -2,25 +2,38 @@
 //  CodeWatch PRO — App Component
 // ══════════════════════════════════════════
 // src/components/app.ts
-import type { TabId } from '../types'
-import { state } from '../store/state'
-import { createResizer, createCollapseToggle } from '../utils/resizer'
-import { appendLog, toast, setProgress, delay, nowStr, fmtBytes, getExt, uniqueId } from '../utils/helpers'
+
 import { api } from '../api/client'
-import { initCharts, renderDistChart, renderRTChart, updateHistChart, renderComplexityBars } from './charts'
-import { initEditor, loadFileInEditor, applyMarkers, getEditorValue } from './editor'
-import { initMermaid, renderDiagram } from './mermaid'
-import { renderMLResults, clientMLAnalysis } from '../panels/ml'
-import { renderAPICards, renderIssuesList } from '../panels/apis'
 import { renderFileAnalysis, renderMetrics } from '../panels/analysis'
+import { renderAPICards, renderIssuesList } from '../panels/apis'
+import { clientMLAnalysis, renderMLResults } from '../panels/ml'
+import { state } from '../store/state'
+import type { TabId } from '../types'
+import { appendLog, delay, fmtBytes, getExt, nowStr, setProgress, toast, uniqueId } from '../utils/helpers'
+import { createCollapseToggle, createResizer } from '../utils/resizer'
+import { initCharts, renderComplexityBars, renderDistChart, renderRTChart, updateHistChart } from './charts'
+import { applyMarkers, getEditorValue, initEditor, loadFileInEditor } from './editor'
+import { explorerAddFile, explorerRemoveFile, initExplorer } from './explorer'
 import { renderFlow, setStep, updateRunMeta } from './flow'
-import { initExplorer, explorerAddFile, explorerRemoveFile, explorerSelectFile, openSearch } from './explorer'
+import { initMermaid, renderDiagram } from './mermaid'
 
 // ── Tab system — 'upload' agregado
-const TABS: TabId[] = ['dashboard','editor','apis','issues','diagram','ml','metrics','diff','logs','upload','static']
+const TABS: TabId[] = [
+  'dashboard',
+  'editor',
+  'apis',
+  'issues',
+  'diagram',
+  'ml',
+  'metrics',
+  'diff',
+  'logs',
+  'upload',
+  'static',
+]
 
 export function switchTab(name: TabId): void {
-  TABS.forEach(t => {
+  TABS.forEach((t) => {
     document.getElementById('t-' + t)?.classList.toggle('active', t === name)
     document.getElementById('panel-' + t)?.classList.toggle('active', t === name)
   })
@@ -55,12 +68,12 @@ export function switchTab(name: TabId): void {
 
 // ── Right panel tabs
 export function rpTab(name: 'flow' | 'analysis' | 'server'): void {
-  document.querySelectorAll<HTMLElement>('.rp-tab').forEach((el, i) =>
-    el.classList.toggle('active', ['flow','analysis','server'][i] === name)
-  )
-  document.querySelectorAll<HTMLElement>('.rp-panel').forEach(el =>
+  document.querySelectorAll<HTMLElement>('.rp-tab').forEach((el, i) => {
+    el.classList.toggle('active', ['flow', 'analysis', 'server'][i] === name)
+  })
+  document.querySelectorAll<HTMLElement>('.rp-panel').forEach((el) => {
     el.classList.remove('active')
-  )
+  })
   document.getElementById('rpp-' + name)?.classList.add('active')
 }
 
@@ -69,9 +82,9 @@ function updateGlobalPill(): void {
   const pill = document.getElementById('global-pill')!
   const st = overallStatus()
   const map = {
-    ok:      { cls: 'pill-ok',   dot: 'dot-ok',   lbl: 'TODO OK'       },
-    warning: { cls: 'pill-warn', dot: 'dot-warn',  lbl: 'ADVERTENCIAS'  },
-    down:    { cls: 'pill-err',  dot: 'dot-err',   lbl: 'ERRORES'       },
+    ok: { cls: 'pill-ok', dot: 'dot-ok', lbl: 'TODO OK' },
+    warning: { cls: 'pill-warn', dot: 'dot-warn', lbl: 'ADVERTENCIAS' },
+    down: { cls: 'pill-err', dot: 'dot-err', lbl: 'ERRORES' },
   }
   const m = map[st]
   pill.className = `pill ${m.cls}`
@@ -79,46 +92,51 @@ function updateGlobalPill(): void {
 }
 
 function overallStatus(): 'ok' | 'warning' | 'down' {
-  if (state.results.apis.some(a => a.status === 'down') ||
-      state.results.issues.some(i => i.severity === 'error')) return 'down'
-  if (state.results.issues.some(i => i.severity === 'warning') ||
-      state.results.logErrors.length) return 'warning'
+  if (state.results.apis.some((a) => a.status === 'down') || state.results.issues.some((i) => i.severity === 'error'))
+    return 'down'
+  if (state.results.issues.some((i) => i.severity === 'warning') || state.results.logErrors.length) return 'warning'
   return 'ok'
 }
 
 // ── Stats
 export function updateStats(): void {
-  const ok = state.results.apis.filter(a => a.status === 'ok').length
-  const n  = state.results.issues.length
+  const ok = state.results.apis.filter((a) => a.status === 'ok').length
+  const n = state.results.issues.length
 
-  setEl('sv-api',   state.urls.length ? `${ok}/${state.urls.length}` : '—')
-  setEl('ss-api',   `${ok} activo(s)`)
+  setEl('sv-api', state.urls.length ? `${ok}/${state.urls.length}` : '—')
+  setEl('ss-api', `${ok} activo(s)`)
   setEl('sv-files', state.files.length || '—')
   setEl('sv-issues', String(n || '0'))
   const issEl = document.getElementById('sv-issues')
   if (issEl) issEl.style.color = n ? 'var(--err)' : 'var(--ok)'
-  setEl('ss-issues', `${state.results.issues.filter(i=>i.severity==='error').length} errores`)
+  setEl('ss-issues', `${state.results.issues.filter((i) => i.severity === 'error').length} errores`)
 
-  const scores = state.files.filter(f=>f.metrics?.pylint_score!=null).map(f=>f.metrics.pylint_score!)
-  const avg    = scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : null
+  const scores = state.files.filter((f) => f.metrics?.pylint_score != null).map((f) => f.metrics.pylint_score!)
+  const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null
   const scoreEl = document.getElementById('sv-score')!
   scoreEl.textContent = avg != null ? avg.toFixed(1) : '—'
   scoreEl.style.color = avg == null ? 'var(--muted)' : avg >= 8 ? 'var(--ok)' : avg >= 5 ? 'var(--warn)' : 'var(--err)'
 }
 
 export function updateBadges(): void {
-  const n = state.results.issues.filter(i => i.severity === 'error').length
+  const n = state.results.issues.filter((i) => i.severity === 'error').length
   const ti = document.getElementById('tb-issues')!
-  ti.textContent  = String(n)
+  ti.textContent = String(n)
   ti.style.display = n ? '' : 'none'
   const bni = document.getElementById('bn-badge-issues')
-  if (bni) { bni.textContent = String(n); bni.style.display = n ? '' : 'none' }
+  if (bni) {
+    bni.textContent = String(n)
+    bni.style.display = n ? '' : 'none'
+  }
   const tf = document.getElementById('tb-files')!
   const nf = state.files.length
-  tf.textContent  = String(nf)
+  tf.textContent = String(nf)
   tf.style.display = nf ? '' : 'none'
   const bnf = document.getElementById('bn-badge-files')
-  if (bnf) { bnf.textContent = String(nf); bnf.style.display = nf ? '' : 'none' }
+  if (bnf) {
+    bnf.textContent = String(nf)
+    bnf.style.display = nf ? '' : 'none'
+  }
 }
 
 function setEl(id: string, val: unknown): void {
@@ -129,7 +147,7 @@ function setEl(id: string, val: unknown): void {
 // ── Backend check
 export async function checkBackend(): Promise<void> {
   const badge = document.getElementById('be-badge')!
-  const txt   = document.getElementById('be-txt')!
+  const txt = document.getElementById('be-txt')!
   badge.className = 'be-badge be-loading'
   txt.textContent = 'Conectando...'
   try {
@@ -137,12 +155,27 @@ export async function checkBackend(): Promise<void> {
     state.backendOk = true
     badge.className = 'be-badge be-ok'
     txt.textContent = 'Backend OK'
-    const allCaps = ['flake8','pylint','radon','numpy','pandas','polars','sklearn','lightgbm',
-                     'torch','tensorflow','scipy','opencv','plotly','spacy','icecream']
+    const allCaps = [
+      'flake8',
+      'pylint',
+      'radon',
+      'numpy',
+      'pandas',
+      'polars',
+      'sklearn',
+      'lightgbm',
+      'torch',
+      'tensorflow',
+      'scipy',
+      'opencv',
+      'plotly',
+      'spacy',
+      'icecream',
+    ]
     const capsRow = document.getElementById('caps-row')!
-    capsRow.innerHTML = allCaps.map(k =>
-      `<span class="cap-chip ${d[k] ? 'cap-on' : 'cap-off'}">${d[k] ? '✓' : '✗'} ${k}</span>`
-    ).join('')
+    capsRow.innerHTML = allCaps
+      .map((k) => `<span class="cap-chip ${d[k] ? 'cap-on' : 'cap-off'}">${d[k] ? '✓' : '✗'} ${k}</span>`)
+      .join('')
     const serverInfo = document.getElementById('server-info')!
     serverInfo.innerHTML = `
       <div class="metric-section">
@@ -150,7 +183,7 @@ export async function checkBackend(): Promise<void> {
         ${mr('Python', d.python?.toString().split(' ')[0])}
         ${mr('flake8', d.flake8 ? '✓' : '✗')}
         ${mr('pylint', d.pylint ? '✓' : '✗')}
-        ${mr('radon',  d.radon  ? '✓' : '✗')}
+        ${mr('radon', d.radon ? '✓' : '✗')}
         ${mr('PyTorch', d.torch ? '✓' : '✗')}
         ${mr('TensorFlow', d.tensorflow ? '✓' : '✗')}
         ${mr('Polars', d.polars ? '✓' : '✗')}
@@ -177,19 +210,26 @@ function mr(k: string, v: unknown, color?: string): string {
 // ══════════════════════════════════════════
 export function handleCodeFiles(files: FileList | null): void {
   if (!files) return
-  Array.from(files).forEach(f => {
-    if (state.files.find(x => x.name === f.name)) return
+  Array.from(files).forEach((f) => {
+    if (state.files.find((x) => x.name === f.name)) return
     const reader = new FileReader()
-    reader.onload = e => {
-      const ext  = getExt(f.name)
+    reader.onload = (e) => {
+      const ext = getExt(f.name)
       const file = {
-        id: uniqueId(), name: f.name, ext, size: f.size,
+        id: uniqueId(),
+        name: f.name,
+        ext,
+        size: f.size,
         content: e.target!.result as string,
-        issues: [], metrics: {}, analyzed: false,
+        issues: [],
+        metrics: {},
+        analyzed: false,
       }
       state.files.push(file)
       explorerAddFile(file)
-      updateFileTree(); updateSelectors(); updateStats()
+      updateFileTree()
+      updateSelectors()
+      updateStats()
       appendLog('info', `📁 ${f.name} (${fmtBytes(f.size)})`, 'fe')
       toast('✅ ' + f.name, 'ok')
     }
@@ -199,9 +239,9 @@ export function handleCodeFiles(files: FileList | null): void {
 
 export function handleLogFiles(files: FileList | null): void {
   if (!files) return
-  Array.from(files).forEach(f => {
+  Array.from(files).forEach((f) => {
     const reader = new FileReader()
-    reader.onload = e => {
+    reader.onload = (e) => {
       state.logFiles.push({ name: f.name, size: f.size, content: e.target!.result as string })
       appendLog('info', '📋 Log: ' + f.name, 'fe')
     }
@@ -212,51 +252,76 @@ export function handleLogFiles(files: FileList | null): void {
 export function updateFileTree(): void {
   const el = document.getElementById('file-tree')!
   const tb = document.getElementById('tb-files')!
-  if (!state.files.length) { el.innerHTML = ''; tb.style.display = 'none'; return }
-  tb.textContent = String(state.files.length); tb.style.display = ''
-  el.innerHTML = state.files.map(f => {
-    const n   = f.issues.length
-    const cls = n ? 'has-err' : f.analyzed ? 'analyzed' : ''
-    const badge = n
-      ? `<span class="fn-badge fn-err">${n}</span>`
-      : f.analyzed
-        ? `<span class="fn-badge fn-ok">✓</span>`
-        : `<span class="fn-badge fn-pending">—</span>`
-    const icons: Record<string,string> = {'.py':'🐍','.js':'🟨','.ts':'🔷','.json':'📋','.yaml':'⚙️','.html':'🌐','.css':'🎨','.go':'🐹','.sh':'💻','.java':'☕','.txt':'📄','.log':'📜'}
-    return `<div class="file-node ${cls}${f === state.currentFile ? ' active' : ''}" data-id="${f.id}">
+  if (!state.files.length) {
+    el.innerHTML = ''
+    tb.style.display = 'none'
+    return
+  }
+  tb.textContent = String(state.files.length)
+  tb.style.display = ''
+  el.innerHTML = state.files
+    .map((f) => {
+      const n = f.issues.length
+      const cls = n ? 'has-err' : f.analyzed ? 'analyzed' : ''
+      const badge = n
+        ? `<span class="fn-badge fn-err">${n}</span>`
+        : f.analyzed
+          ? `<span class="fn-badge fn-ok">✓</span>`
+          : `<span class="fn-badge fn-pending">—</span>`
+      const icons: Record<string, string> = {
+        '.py': '🐍',
+        '.js': '🟨',
+        '.ts': '🔷',
+        '.json': '📋',
+        '.yaml': '⚙️',
+        '.html': '🌐',
+        '.css': '🎨',
+        '.go': '🐹',
+        '.sh': '💻',
+        '.java': '☕',
+        '.txt': '📄',
+        '.log': '📜',
+      }
+      return `<div class="file-node ${cls}${f === state.currentFile ? ' active' : ''}" data-id="${f.id}">
       <span style="font-size:13px">${icons[f.ext] ?? '📄'}</span>
       <span class="fn-name" title="${f.name}">${f.name}</span>
       ${badge}
       <button class="btn btn-danger btn-sm" style="padding:2px 4px" data-remove="${f.id}">✕</button>
     </div>`
-  }).join('')
+    })
+    .join('')
   el.onclick = (e: MouseEvent) => {
     const target = e.target as HTMLElement
     const removeId = target.dataset['remove']
-    const nodeEl   = target.closest<HTMLElement>('.file-node')
-    if (removeId) { e.stopPropagation(); removeFile(removeId) }
-    else if (nodeEl?.dataset['id']) selectFile(nodeEl.dataset['id'])
+    const nodeEl = target.closest<HTMLElement>('.file-node')
+    if (removeId) {
+      e.stopPropagation()
+      removeFile(removeId)
+    } else if (nodeEl?.dataset['id']) selectFile(nodeEl.dataset['id'])
   }
 }
 
 function removeFile(id: string): void {
-  state.files = state.files.filter(f => f.id !== id)
+  state.files = state.files.filter((f) => f.id !== id)
   if (state.currentFile?.id === id) state.currentFile = null
   explorerRemoveFile(id)
-  updateFileTree(); updateSelectors(); updateStats()
+  updateFileTree()
+  updateSelectors()
+  updateStats()
 }
 
 export function updateSelectors(): void {
-  const opts = '<option value="">— Selecciona —</option>' +
-    state.files.map(f => `<option value="${f.id}">${f.name}</option>`).join('')
-  ;['file-sel','diff-a','diff-b','diag-file-sel','ml-file-sel'].forEach(id => {
+  const opts =
+    '<option value="">— Selecciona —</option>' +
+    state.files.map((f) => `<option value="${f.id}">${f.name}</option>`).join('')
+  ;['file-sel', 'diff-a', 'diff-b', 'diag-file-sel', 'ml-file-sel'].forEach((id) => {
     const el = document.getElementById(id) as HTMLSelectElement | null
     if (el) el.innerHTML = opts
   })
 }
 
 export function selectFile(id: string): void {
-  const f = state.files.find(x => x.id === id)
+  const f = state.files.find((x) => x.id === id)
   if (!f) return
   state.currentFile = f
   loadFileInEditor(f)
@@ -274,12 +339,18 @@ export function selectFile(id: string): void {
 // ══════════════════════════════════════════
 export function addURL(url?: string): void {
   const inp = document.getElementById('url-main') as HTMLInputElement
-  const v   = (url ?? inp.value).trim()
+  const v = (url ?? inp.value).trim()
   if (!v) return
-  if (!v.startsWith('http')) { toast('❌ URL debe comenzar con http://', 'err'); return }
-  if (state.urls.includes(v)) { toast('Ya existe', 'warn'); return }
+  if (!v.startsWith('http')) {
+    toast('❌ URL debe comenzar con http://', 'err')
+    return
+  }
+  if (state.urls.includes(v)) {
+    toast('Ya existe', 'warn')
+    return
+  }
   state.urls.push(v)
-  state.results.apis.push({ url:v, status:'unknown', code:null, ms:null, error:null, ts:null, history:[] })
+  state.results.apis.push({ url: v, status: 'unknown', code: null, ms: null, error: null, ts: null, history: [] })
   inp.value = ''
   renderURLList()
   appendLog('info', '🌐 ' + v, 'fe')
@@ -291,20 +362,28 @@ export function renderURLList(): void {
     el.innerHTML = '<div class="empty" style="padding:10px;font-size:.68rem">Sin URLs</div>'
     return
   }
-  el.innerHTML = state.urls.map(url => {
-    const r = state.results.apis.find(a => a.url === url)
-    const c = ({ ok:'var(--ok)', warning:'var(--warn)', down:'var(--err)' } as Record<string,string>)[r?.status ?? ''] ?? 'var(--muted)'
-    return `<div class="url-item">
+  el.innerHTML = state.urls
+    .map((url) => {
+      const r = state.results.apis.find((a) => a.url === url)
+      const c =
+        ({ ok: 'var(--ok)', warning: 'var(--warn)', down: 'var(--err)' } as Record<string, string>)[r?.status ?? ''] ??
+        'var(--muted)'
+      return `<div class="url-item">
       <div class="ui-dot" style="background:${c}"></div>
       <span class="ui-url" title="${url}">${url}</span>
       ${r?.ms ? `<span class="ui-ms">${r.ms}ms</span>` : ''}
       ${r?.code ? `<span class="ui-code">HTTP ${r.code}</span>` : ''}
       <button class="btn btn-danger btn-sm" style="padding:2px 4px" data-remove-url="${url}">✕</button>
     </div>`
-  }).join('')
+    })
+    .join('')
   el.onclick = (e: MouseEvent) => {
     const url = (e.target as HTMLElement).dataset['removeUrl']
-    if (url) { state.urls = state.urls.filter(u => u !== url); state.results.apis = state.results.apis.filter(a => a.url !== url); renderURLList() }
+    if (url) {
+      state.urls = state.urls.filter((u) => u !== url)
+      state.results.apis = state.results.apis.filter((a) => a.url !== url)
+      renderURLList()
+    }
   }
 }
 
@@ -316,36 +395,52 @@ export async function runAll(): Promise<void> {
   state.running = true
   document.getElementById('run-btn')!.setAttribute('disabled', '')
   state.results.issues = []
-  ;['api','upload','analyze','logs','report'].forEach(id => { state.steps[id] = 'idle' })
-  renderFlow(); setProgress(5)
+  ;['api', 'upload', 'analyze', 'logs', 'report'].forEach((id) => {
+    state.steps[id] = 'idle'
+  })
+  renderFlow()
+  setProgress(5)
   const t0 = Date.now()
   appendLog('info', '━━━━━━━━━━━━━━━━━', 'fe')
   appendLog('info', '▶ Análisis iniciado', 'fe')
 
-  setStep('api', 'run'); await runAPIChecks()
-  setStep('api', state.results.apis.some(a => a.status === 'down') ? 'err' : 'ok')
+  setStep('api', 'run')
+  await runAPIChecks()
+  setStep('api', state.results.apis.some((a) => a.status === 'down') ? 'err' : 'ok')
   setProgress(20)
 
-  setStep('upload', 'run'); setStep('analyze', 'run')
+  setStep('upload', 'run')
+  setStep('analyze', 'run')
   await analyzeAllFiles()
   setStep('upload', 'ok')
-  setStep('analyze', state.results.issues.filter(i => i.severity === 'error').length ? 'err' : 'ok')
+  setStep('analyze', state.results.issues.filter((i) => i.severity === 'error').length ? 'err' : 'ok')
   setProgress(65)
 
-  setStep('logs', 'run'); await analyzeAllLogs()
+  setStep('logs', 'run')
+  await analyzeAllLogs()
   setStep('logs', state.results.logErrors.length ? 'warn' : 'ok')
   setProgress(85)
 
-  setStep('report', 'run'); await delay(100)
+  setStep('report', 'run')
+  await delay(100)
   renderAllResults()
   setStep('report', 'ok')
-  setProgress(100); setTimeout(() => setProgress(0), 700)
+  setProgress(100)
+  setTimeout(() => setProgress(0), 700)
 
   const ms = Date.now() - t0
-  const entry = { ts: nowStr(), issues: state.results.issues.length, apiOk: state.results.apis.filter(a=>a.status==='ok').length, ms }
+  const entry = {
+    ts: nowStr(),
+    issues: state.results.issues.length,
+    apiOk: state.results.apis.filter((a) => a.status === 'ok').length,
+    ms,
+  }
   state.history.push(entry)
-  updateHistChart(); updateRunMeta(entry)
-  updateGlobalPill(); updateStats(); updateBadges()
+  updateHistChart()
+  updateRunMeta(entry)
+  updateGlobalPill()
+  updateStats()
+  updateBadges()
   appendLog('info', `✔ Completo en ${ms}ms — ${overallStatus().toUpperCase()}`, 'fe')
   state.running = false
   document.getElementById('run-btn')!.removeAttribute('disabled')
@@ -353,11 +448,14 @@ export async function runAll(): Promise<void> {
 }
 
 async function runAPIChecks(): Promise<void> {
-  if (!state.urls.length) { appendLog('warn', 'Sin URLs', 'fe'); return }
+  if (!state.urls.length) {
+    appendLog('warn', 'Sin URLs', 'fe')
+    return
+  }
   try {
     const r = await api.checkUrls(state.urls)
-    r.results.forEach(res => {
-      const idx = state.results.apis.findIndex(a => a.url === res.url)
+    r.results.forEach((res) => {
+      const idx = state.results.apis.findIndex((a) => a.url === res.url)
       if (idx >= 0) state.results.apis[idx] = res
     })
     appendLog('info', `📡 ${state.results.apis.length} endpoints verificados`, 'be')
@@ -365,11 +463,13 @@ async function runAPIChecks(): Promise<void> {
     appendLog('warn', 'Backend no disponible — fetch del browser', 'fe')
     for (const url of state.urls) {
       const r = await api.browserPing(url)
-      const idx = state.results.apis.findIndex(a => a.url === url)
+      const idx = state.results.apis.findIndex((a) => a.url === url)
       if (idx >= 0) state.results.apis[idx] = { ...state.results.apis[idx], ...r }
     }
   }
-  renderURLList(); renderAPICards(); renderRTChart()
+  renderURLList()
+  renderAPICards()
+  renderRTChart()
 }
 
 async function analyzeAllFiles(): Promise<void> {
@@ -379,23 +479,26 @@ async function analyzeAllFiles(): Promise<void> {
     try {
       if (state.backendOk) {
         const res = await api.analyzeCode(f.name, f.content)
-        f.issues   = res.issues
-        f.metrics  = {
-            pylint_score: res.metrics?.pylint_score,
-            complexity:   res.complexity   ?? [],
-            mi:           res.maintainability ?? undefined,
-            raw:          res.raw_stats,
-            tools_used:   res.tools_used   ?? [],
-          }
+        f.issues = res.issues
+        f.metrics = {
+          pylint_score: res.metrics?.pylint_score,
+          complexity: res.complexity ?? [],
+          mi: res.maintainability ?? undefined,
+          raw: res.raw_stats,
+          tools_used: res.tools_used ?? [],
+        }
         f.analyzed = true
-        state.results.issues.push(...f.issues.map(i => ({ ...i, file: f.name })))
+        state.results.issues.push(...f.issues.map((i) => ({ ...i, file: f.name })))
         appendLog('ok', `🔍 ${f.name}: ${f.issues.length} issue(s)`, 'be')
       } else {
-        f.issues = clientAnalyze(f); f.analyzed = true
-        state.results.issues.push(...f.issues.map(i => ({ ...i, file: f.name })))
+        f.issues = clientAnalyze(f)
+        f.analyzed = true
+        state.results.issues.push(...f.issues.map((i) => ({ ...i, file: f.name })))
         appendLog('warn', `🔍 ${f.name}: análisis básico`, 'fe')
       }
-    } catch (e) { appendLog('err', `Error ${f.name}: ${(e as Error).message}`, 'fe') }
+    } catch (e) {
+      appendLog('err', `Error ${f.name}: ${(e as Error).message}`, 'fe')
+    }
   }
   updateFileTree()
 }
@@ -403,9 +506,19 @@ async function analyzeAllFiles(): Promise<void> {
 function clientAnalyze(f: { content: string; ext: string }): import('../types').Issue[] {
   const issues: import('../types').Issue[] = []
   f.content.split('\n').forEach((raw, i) => {
-    if (raw.length > 120) issues.push({ tool:'ast', line:i+1, col:121, severity:'warning', code:'E501', message:`Línea larga (${raw.length})` })
-    if (/debugger/.test(raw)) issues.push({ tool:'ast', line:i+1, col:0, severity:'error', code:'E001', message:'debugger encontrado' })
-    if (/(TODO|FIXME|HACK):/i.test(raw)) issues.push({ tool:'ast', line:i+1, col:0, severity:'info', code:'W001', message:'Comentario pendiente' })
+    if (raw.length > 120)
+      issues.push({
+        tool: 'ast',
+        line: i + 1,
+        col: 121,
+        severity: 'warning',
+        code: 'E501',
+        message: `Línea larga (${raw.length})`,
+      })
+    if (/debugger/.test(raw))
+      issues.push({ tool: 'ast', line: i + 1, col: 0, severity: 'error', code: 'E001', message: 'debugger encontrado' })
+    if (/(TODO|FIXME|HACK):/i.test(raw))
+      issues.push({ tool: 'ast', line: i + 1, col: 0, severity: 'info', code: 'W001', message: 'Comentario pendiente' })
   })
   return issues
 }
@@ -415,15 +528,23 @@ async function analyzeAllLogs(): Promise<void> {
   if (!state.logFiles.length) return
   try {
     if (state.backendOk) {
-      const res = await api.analyzeLogs(state.logFiles.map(f => ({ name: f.name, content: f.content })))
-      state.results.logErrors = [...(res.errors as import('../types').LogError[]), ...(res.warnings as import('../types').LogError[])]
+      const res = await api.analyzeLogs(state.logFiles.map((f) => ({ name: f.name, content: f.content })))
+      state.results.logErrors = [
+        ...(res.errors as import('../types').LogError[]),
+        ...(res.warnings as import('../types').LogError[]),
+      ]
       appendLog('ok', `📋 Logs: ${res.errors.length} errores`, 'be')
     }
-  } catch (e) { appendLog('err', 'Error logs: ' + (e as Error).message, 'fe') }
+  } catch (e) {
+    appendLog('err', 'Error logs: ' + (e as Error).message, 'fe')
+  }
 }
 
 export async function analyzeCurrentFile(): Promise<void> {
-  if (!state.currentFile) { toast('Selecciona un archivo', 'warn'); return }
+  if (!state.currentFile) {
+    toast('Selecciona un archivo', 'warn')
+    return
+  }
   const f = state.currentFile
   const edVal = getEditorValue()
   if (edVal) f.content = edVal
@@ -431,28 +552,37 @@ export async function analyzeCurrentFile(): Promise<void> {
   try {
     if (state.backendOk) {
       const res = await api.analyzeCode(f.name, f.content)
-      f.issues   = res.issues
-      f.metrics  = {
-            pylint_score: res.metrics?.pylint_score,
-            complexity:   res.complexity   ?? [],
-            mi:           res.maintainability ?? undefined,
-            raw:          res.raw_stats,
-            tools_used:   res.tools_used   ?? [],
-          }
+      f.issues = res.issues
+      f.metrics = {
+        pylint_score: res.metrics?.pylint_score,
+        complexity: res.complexity ?? [],
+        mi: res.maintainability ?? undefined,
+        raw: res.raw_stats,
+        tools_used: res.tools_used ?? [],
+      }
       f.analyzed = true
-    } else { f.issues = clientAnalyze(f) }
+    } else {
+      f.issues = clientAnalyze(f)
+    }
     applyMarkers(f)
     renderFileAnalysis(f)
     updateFileTree()
-    setProgress(100); setTimeout(() => setProgress(0), 500)
+    setProgress(100)
+    setTimeout(() => setProgress(0), 500)
     toast(`🔍 ${f.name}: ${f.issues.length} issue(s)`, f.issues.length ? 'warn' : 'ok')
-  } catch (e) { toast('Error: ' + (e as Error).message, 'err'); setProgress(0) }
+  } catch (e) {
+    toast('Error: ' + (e as Error).message, 'err')
+    setProgress(0)
+  }
 }
 
 function renderAllResults(): void {
-  renderAPICards(); renderIssuesList()
-  renderMetrics(); renderComplexityBars()
-  renderDistChart(); renderRTChart()
+  renderAPICards()
+  renderIssuesList()
+  renderMetrics()
+  renderComplexityBars()
+  renderDistChart()
+  renderRTChart()
 }
 
 // ══════════════════════════════════════════
@@ -462,11 +592,15 @@ export function toggleAuto(): void {
   state.autoOn = !state.autoOn
   const btn = document.getElementById('auto-btn')!
   if (state.autoOn) {
-    btn.style.color = 'var(--ok)'; btn.textContent = '⏹ Auto ON'
-    state.autoTimer = setInterval(() => { if (!state.running) runAll() }, 30000)
+    btn.style.color = 'var(--ok)'
+    btn.textContent = '⏹ Auto ON'
+    state.autoTimer = setInterval(() => {
+      if (!state.running) runAll()
+    }, 30000)
     toast('⏱ Auto cada 30s', 'ok')
   } else {
-    btn.style.color = ''; btn.textContent = '⏱ Auto'
+    btn.style.color = ''
+    btn.textContent = '⏱ Auto'
     if (state.autoTimer) clearInterval(state.autoTimer)
     toast('⏹ Auto OFF', 'warn')
   }
@@ -474,9 +608,14 @@ export function toggleAuto(): void {
 
 export function clearAll(): void {
   if (!confirm('¿Limpiar todo?')) return
-  state.files = []; state.logFiles = []; state.urls = []
+  state.files = []
+  state.logFiles = []
+  state.urls = []
   state.results = { apis: [], issues: [], logErrors: [] }
-  updateFileTree(); updateSelectors(); renderURLList(); updateStats()
+  updateFileTree()
+  updateSelectors()
+  renderURLList()
+  updateStats()
   const apiCards = document.getElementById('api-cards')
   if (apiCards) apiCards.innerHTML = ''
   const issuesList = document.getElementById('issues-list')
@@ -489,9 +628,15 @@ export function clearAll(): void {
 // ══════════════════════════════════════════
 export async function runMLAnalysis(): Promise<void> {
   const selId = (document.getElementById('ml-file-sel') as HTMLSelectElement).value
-  const f = state.files.find(x => x.id === selId)
-  if (!f) { toast('Selecciona un archivo .py', 'warn'); return }
-  if (f.ext !== '.py') { toast('Solo archivos .py', 'warn'); return }
+  const f = state.files.find((x) => x.id === selId)
+  if (!f) {
+    toast('Selecciona un archivo .py', 'warn')
+    return
+  }
+  if (f.ext !== '.py') {
+    toast('Solo archivos .py', 'warn')
+    return
+  }
   const el = document.getElementById('ml-content')!
   el.innerHTML = '<div class="empty"><span class="empty-icon">⚙️</span>Analizando ML/DL...</div>'
   try {
@@ -501,7 +646,7 @@ export async function runMLAnalysis(): Promise<void> {
     const badge = document.getElementById('ml-score-badge')!
     badge.style.display = ''
     const sc = data.score ?? 0
-    const c  = sc >= 80 ? 'var(--ok)' : sc >= 50 ? 'var(--warn)' : 'var(--err)'
+    const c = sc >= 80 ? 'var(--ok)' : sc >= 50 ? 'var(--warn)' : 'var(--err)'
     badge.innerHTML = `<span style="color:${c};font-weight:700">Score: ${sc}/100</span>`
     toast(`🤖 ML — score ${sc}/100`, sc >= 60 ? 'ok' : 'warn')
     appendLog('ok', `🤖 ML: ${f.name} — score ${sc}`, 'be')
@@ -515,11 +660,14 @@ export async function runMLAnalysis(): Promise<void> {
 //  DIAGRAM
 // ══════════════════════════════════════════
 export async function generateDiagram(): Promise<void> {
-  const selId   = (document.getElementById('diag-file-sel') as HTMLSelectElement).value
+  const selId = (document.getElementById('diag-file-sel') as HTMLSelectElement).value
   const diagType = (document.getElementById('diag-type') as HTMLSelectElement).value
-  const f = state.files.find(x => x.id === selId)
-  if (!f) { toast('Selecciona un archivo', 'warn'); return }
-  const outEl    = document.getElementById('mermaid-output')!
+  const f = state.files.find((x) => x.id === selId)
+  if (!f) {
+    toast('Selecciona un archivo', 'warn')
+    return
+  }
+  const outEl = document.getElementById('mermaid-output')!
   const statusEl = document.getElementById('diag-status')!
   statusEl.textContent = 'Generando...'
   outEl.innerHTML = '<div class="empty"><span class="empty-icon">⚙️</span>Analizando...</div>'
@@ -537,7 +685,10 @@ export async function generateDiagram(): Promise<void> {
     const svg = await renderDiagram(code)
     outEl.innerHTML = svg
     const svgEl = outEl.querySelector('svg')
-    if (svgEl) { svgEl.style.maxWidth = '100%'; svgEl.style.height = 'auto' }
+    if (svgEl) {
+      svgEl.style.maxWidth = '100%'
+      svgEl.style.height = 'auto'
+    }
     statusEl.textContent = `✅ ${f.name}`
     statusEl.style.color = 'var(--ok)'
     document.getElementById('tb-diagram')!.style.display = ''
@@ -551,16 +702,18 @@ export async function generateDiagram(): Promise<void> {
 
 function generateMermaidFallback(name: string, content: string, _type: string): string {
   const funcs: string[] = []
-  content.split('\n').forEach(l => {
+  content.split('\n').forEach((l) => {
     const m = l.match(/^def\s+(\w+)/) ?? l.match(/function\s+(\w+)/)
     if (m) funcs.push(m[1])
   })
   if (!funcs.length) return `flowchart TD\n    A[📄 ${name}]\n    B[Sin funciones]\n    A --> B`
   let code = `flowchart TD\n    START([🚀 ${name}])\n`
-  funcs.slice(0,10).forEach((fn, i) => { code += `    F${i}["⚙️ ${fn}()"]\n` })
+  funcs.slice(0, 10).forEach((fn, i) => {
+    code += `    F${i}["⚙️ ${fn}()"]\n`
+  })
   code += `    END([🏁])\n    START --> F0\n`
-  for (let i = 0; i < Math.min(funcs.length,10)-1; i++) code += `    F${i} --> F${i+1}\n`
-  code += `    F${Math.min(funcs.length-1,9)} --> END\n`
+  for (let i = 0; i < Math.min(funcs.length, 10) - 1; i++) code += `    F${i} --> F${i + 1}\n`
+  code += `    F${Math.min(funcs.length - 1, 9)} --> END\n`
   return code
 }
 
@@ -569,19 +722,27 @@ function generateMermaidFallback(name: string, content: string, _type: string): 
 // ══════════════════════════════════════════
 export async function runDiff(): Promise<void> {
   const { createPatch } = await import('diff')
-  const a = state.files.find(f => f.id === (document.getElementById('diff-a') as HTMLSelectElement).value)
-  const b = state.files.find(f => f.id === (document.getElementById('diff-b') as HTMLSelectElement).value)
-  if (!a || !b) { toast('Selecciona dos archivos', 'warn'); return }
+  const a = state.files.find((f) => f.id === (document.getElementById('diff-a') as HTMLSelectElement).value)
+  const b = state.files.find((f) => f.id === (document.getElementById('diff-b') as HTMLSelectElement).value)
+  if (!a || !b) {
+    toast('Selecciona dos archivos', 'warn')
+    return
+  }
   const patch = createPatch(a.name, a.content, b.content)
-  const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-  const html = patch.split('\n').map(l => {
-    if (l.startsWith('+++')) return `<span style="color:var(--ok);font-weight:bold">${esc(l)}</span>`
-    if (l.startsWith('---')) return `<span style="color:var(--err);font-weight:bold">${esc(l)}</span>`
-    if (l.startsWith('+'))  return `<span style="background:rgba(0,245,160,.08);border-left:2px solid var(--ok);padding-left:6px">${esc(l)}</span>`
-    if (l.startsWith('-'))  return `<span style="background:rgba(255,51,102,.08);border-left:2px solid var(--err);padding-left:6px">${esc(l)}</span>`
-    if (l.startsWith('@@')) return `<span style="color:var(--purple)">${esc(l)}</span>`
-    return `<span style="color:var(--muted)">${esc(l)}</span>`
-  }).join('\n')
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const html = patch
+    .split('\n')
+    .map((l) => {
+      if (l.startsWith('+++')) return `<span style="color:var(--ok);font-weight:bold">${esc(l)}</span>`
+      if (l.startsWith('---')) return `<span style="color:var(--err);font-weight:bold">${esc(l)}</span>`
+      if (l.startsWith('+'))
+        return `<span style="background:rgba(0,245,160,.08);border-left:2px solid var(--ok);padding-left:6px">${esc(l)}</span>`
+      if (l.startsWith('-'))
+        return `<span style="background:rgba(255,51,102,.08);border-left:2px solid var(--err);padding-left:6px">${esc(l)}</span>`
+      if (l.startsWith('@@')) return `<span style="color:var(--purple)">${esc(l)}</span>`
+      return `<span style="color:var(--muted)">${esc(l)}</span>`
+    })
+    .join('\n')
   document.getElementById('diff-out')!.innerHTML = html || '<span style="color:var(--ok)">✅ Archivos idénticos</span>'
 }
 
@@ -591,25 +752,36 @@ export async function runDiff(): Promise<void> {
 export async function exportZip(): Promise<void> {
   const { default: JSZip } = await import('jszip')
   const report = {
-    generated: new Date().toISOString(), status: overallStatus(), backend: state.backendOk,
-    summary: { apis: state.results.apis.length, apisOk: state.results.apis.filter(a=>a.status==='ok').length, files: state.files.length, issues: state.results.issues.length },
-    apis: state.results.apis, issues: state.results.issues, logErrors: state.results.logErrors,
-    fileMetrics: state.files.map(f => ({ name: f.name, issues: f.issues.length, metrics: f.metrics })),
+    generated: new Date().toISOString(),
+    status: overallStatus(),
+    backend: state.backendOk,
+    summary: {
+      apis: state.results.apis.length,
+      apisOk: state.results.apis.filter((a) => a.status === 'ok').length,
+      files: state.files.length,
+      issues: state.results.issues.length,
+    },
+    apis: state.results.apis,
+    issues: state.results.issues,
+    logErrors: state.results.logErrors,
+    fileMetrics: state.files.map((f) => ({ name: f.name, issues: f.issues.length, metrics: f.metrics })),
   }
   try {
-    const zip  = new JSZip()
+    const zip = new JSZip()
     zip.file('report.json', JSON.stringify(report, null, 2))
     if (state.currentMermaid) zip.file('diagram.mmd', state.currentMermaid)
     const blob = await zip.generateAsync({ type: 'blob' })
-    const a    = document.createElement('a')
-    a.href     = URL.createObjectURL(blob)
-    a.download = `codewatch-${Date.now()}.zip`; a.click()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `codewatch-${Date.now()}.zip`
+    a.click()
     toast('⬇ ZIP exportado', 'ok')
   } catch {
     const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
-    const a    = document.createElement('a')
-    a.href     = URL.createObjectURL(blob)
-    a.download = `codewatch-${Date.now()}.json`; a.click()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `codewatch-${Date.now()}.json`
+    a.click()
     toast('⬇ JSON exportado', 'ok')
   }
 }
@@ -622,7 +794,7 @@ export function initApp(): void {
     localStorage.removeItem('panel-size-sidebar')
     localStorage.removeItem('panel-size-right-panel')
   } else {
-    ;['sidebar', 'right-panel'].forEach(id => {
+    ;['sidebar', 'right-panel'].forEach((id) => {
       const saved = localStorage.getItem(`panel-size-${id}`)
       if (saved && (Number(saved) < 100 || Number(saved) > 600)) {
         localStorage.removeItem(`panel-size-${id}`)
@@ -630,17 +802,25 @@ export function initApp(): void {
     })
   }
 
-  try { initEditor() } catch(e) { console.error("Editor init failed:", e) }
+  try {
+    initEditor()
+  } catch (e) {
+    console.error('Editor init failed:', e)
+  }
   initExplorer({ onFileOpen: (f) => selectFile(f.id) })
   initMermaid()
   setTimeout(() => {
-    try { initCharts() } catch (e) { console.warn('Charts init error:', e) }
+    try {
+      initCharts()
+    } catch (e) {
+      console.warn('Charts init error:', e)
+    }
   }, 100)
 
-  const sidebar    = document.getElementById('sidebar')     as HTMLElement
+  const sidebar = document.getElementById('sidebar') as HTMLElement
   const sideHandle = document.getElementById('sidebar-resize') as HTMLElement
   const rightPanel = document.getElementById('right-panel') as HTMLElement
-  const rpHandle   = document.getElementById('rp-resize')   as HTMLElement
+  const rpHandle = document.getElementById('rp-resize') as HTMLElement
 
   if (sidebar && sideHandle) {
     createResizer(sidebar, sideHandle, { minSize: 200, maxSize: 480, direction: 'horizontal', side: 'left' })
@@ -659,33 +839,23 @@ export function initApp(): void {
 
   // Pre-cargar localhost:8000 (FastAPI)
   state.urls.push('http://localhost:8000')
-  state.results.apis.push({ url:'http://localhost:8000', status:'unknown', code:null, ms:null, error:null, ts:null, history:[] })
+  state.results.apis.push({
+    url: 'http://localhost:8000',
+    status: 'unknown',
+    code: null,
+    ms: null,
+    error: null,
+    ts: null,
+    history: [],
+  })
   renderURLList()
 
-  wireEvents()
-
-  const dz = document.getElementById('dz')!
-  document.body.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over') })
-  document.body.addEventListener('dragleave', () => dz.classList.remove('over'))
-  document.body.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('over'); handleCodeFiles(e.dataTransfer?.files ?? null) })
+  // Wiring de eventos (tabs, drag&drop, inputs de archivo, etc.) vive en
+  // events.ts (wireAllEvents, llamado desde main.ts) — no duplicar aquí.
 
   appendLog('info', '🛰 CodeWatch PRO listo', 'fe')
   checkBackend()
-  setInterval(() => { if (state.backendOk && !state.running) checkBackend() }, 60000)
-}
-
-function wireEvents(): void {
-  document.querySelectorAll<HTMLElement>('.tab[data-tab]').forEach(el => {
-    el.addEventListener('click', () => switchTab(el.dataset['tab'] as TabId))
-  })
-  const urlInput = document.getElementById('url-main') as HTMLInputElement
-  urlInput?.addEventListener('keydown', e => { if (e.key === 'Enter') addURL() })
-  document.getElementById('fi-code')?.addEventListener('change', e => handleCodeFiles((e.target as HTMLInputElement).files))
-  document.getElementById('fi-log')?.addEventListener('change', e => handleLogFiles((e.target as HTMLInputElement).files))
-  document.getElementById('mobile-toggle')?.addEventListener('click', () => {
-    document.getElementById('sidebar')?.classList.toggle('mobile-open')
-  })
-  document.querySelectorAll<HTMLElement>('.rp-tab[data-rptab]').forEach(el => {
-    el.addEventListener('click', () => rpTab(el.dataset['rptab'] as 'flow' | 'analysis' | 'server'))
-  })
+  setInterval(() => {
+    if (state.backendOk && !state.running) checkBackend()
+  }, 60000)
 }

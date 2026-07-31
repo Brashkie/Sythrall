@@ -2,10 +2,11 @@
 //  CodeWatch PRO — APIs Panel
 // ══════════════════════════════════════════
 // panels/apis.ts
-import { state } from '../store/state'
+
 import { api } from '../api/client'
-import { toast } from '../utils/helpers'
 import { renderRTChart } from '../components/charts'
+import { state } from '../store/state'
+import { toast } from '../utils/helpers'
 
 export function renderAPICards(): void {
   const el = document.getElementById('api-cards')
@@ -14,19 +15,22 @@ export function renderAPICards(): void {
     el.innerHTML = '<div class="empty"><span class="empty-icon">📡</span>Agrega URLs</div>'
     return
   }
-  el.innerHTML = state.results.apis.map(a => {
-    const colorMap: Record<string, string> = { ok: 'var(--ok)', warning: 'var(--warn)', down: 'var(--err)' }
-    const iconMap:  Record<string, string> = { ok: '✅', warning: '⚠️', down: '❌' }
-    const c    = colorMap[a.status] ?? 'var(--muted)'
-    const icon = iconMap[a.status]  ?? '❓'
-    const hist = (a.history ?? []).slice(-10)
-    const bars = hist.map(h => {
-      const hc = h.status === 'ok' ? 'var(--ok)' : h.status === 'warning' ? 'var(--warn)' : 'var(--err)'
-      const hh = Math.min(22, Math.max(3, h.ms ? Math.round(h.ms / 25) : 3))
-      return `<div style="width:5px;height:${hh}px;background:${hc};border-radius:2px;align-self:flex-end"></div>`
-    }).join('')
+  el.innerHTML = state.results.apis
+    .map((a) => {
+      const colorMap: Record<string, string> = { ok: 'var(--ok)', warning: 'var(--warn)', down: 'var(--err)' }
+      const iconMap: Record<string, string> = { ok: '✅', warning: '⚠️', down: '❌' }
+      const c = colorMap[a.status] ?? 'var(--muted)'
+      const icon = iconMap[a.status] ?? '❓'
+      const hist = (a.history ?? []).slice(-10)
+      const bars = hist
+        .map((h) => {
+          const hc = h.status === 'ok' ? 'var(--ok)' : h.status === 'warning' ? 'var(--warn)' : 'var(--err)'
+          const hh = Math.min(22, Math.max(3, h.ms ? Math.round(h.ms / 25) : 3))
+          return `<div style="width:5px;height:${hh}px;background:${hc};border-radius:2px;align-self:flex-end"></div>`
+        })
+        .join('')
 
-    return `<div class="api-card">
+      return `<div class="api-card">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <span style="font-size:15px">${icon}</span>
         <span class="ac-url" style="color:${c}" title="${a.url}">${a.url}</span>
@@ -40,19 +44,23 @@ export function renderAPICards(): void {
       ${a.error ? `<div style="margin-top:7px;font-family:var(--mono);font-size:.65rem;color:var(--err);background:rgba(255,51,102,.07);padding:6px;border-radius:5px">⚠ ${a.error}</div>` : ''}
       ${hist.length ? `<div style="display:flex;align-items:flex-end;gap:2px;margin-top:8px;height:24px">${bars}</div>` : ''}
     </div>`
-  }).join('')
+    })
+    .join('')
 
   // Event delegation for re-check buttons
   el.onclick = async (e: MouseEvent) => {
     const url = (e.target as HTMLElement).dataset['recheck']
-    if (url) { e.stopPropagation(); await recheckAPI(url) }
+    if (url) {
+      e.stopPropagation()
+      await recheckAPI(url)
+    }
   }
 }
 
 export async function recheckAPI(url: string): Promise<void> {
   try {
     const res = await api.checkUrls([url])
-    const idx = state.results.apis.findIndex(a => a.url === url)
+    const idx = state.results.apis.findIndex((a) => a.url === url)
     if (idx >= 0 && res.results[0]) state.results.apis[idx] = res.results[0]
     renderAPICards()
     renderRTChart()
@@ -63,7 +71,7 @@ export async function recheckAPI(url: string): Promise<void> {
 }
 
 export function filterAPIs(q: string): void {
-  document.querySelectorAll<HTMLElement>('.api-card').forEach(el => {
+  document.querySelectorAll<HTMLElement>('.api-card').forEach((el) => {
     el.style.display = el.textContent?.toLowerCase().includes(q.toLowerCase()) ? '' : 'none'
   })
 }
@@ -73,21 +81,26 @@ export function filterAPIs(q: string): void {
 // ══════════════════════════════════════════
 import type { Issue } from '../types'
 
-interface IssueFilter { sev: string; tool: string }
+interface IssueFilter {
+  sev: string
+  tool: string
+}
 const issueFilter: IssueFilter = { sev: 'all', tool: '' }
 
 export function renderIssuesList(list?: Issue[]): void {
   const el = document.getElementById('issues-list')
   if (!el) return
   let items = list ?? state.results.issues
-  if (issueFilter.sev !== 'all') items = items.filter(i => i.severity === issueFilter.sev)
-  if (issueFilter.tool)          items = items.filter(i => i.tool === issueFilter.tool)
+  if (issueFilter.sev !== 'all') items = items.filter((i) => i.severity === issueFilter.sev)
+  if (issueFilter.tool) items = items.filter((i) => i.tool === issueFilter.tool)
   if (!items.length) {
     el.innerHTML = '<div class="empty"><span class="empty-icon">✅</span>Sin problemas</div>'
     return
   }
-  el.innerHTML = items.map((iss, idx) => `
-    <div class="issue-item ii-${iss.severity}" data-file="${iss.file ?? ''}" style="animation-delay:${idx * .02}s">
+  el.innerHTML = items
+    .map(
+      (iss, idx) => `
+    <div class="issue-item ii-${iss.severity}" data-file="${iss.file ?? ''}" style="animation-delay:${idx * 0.02}s">
       <div class="ii-head">
         <span class="ii-sev sev-${iss.severity}">${iss.severity.toUpperCase()}</span>
         <span class="ii-tool t-${iss.tool}">${iss.tool}</span>
@@ -97,8 +110,9 @@ export function renderIssuesList(list?: Issue[]): void {
       </div>
       <div class="ii-msg">${iss.message ?? ''}</div>
       ${iss.preview ? `<div class="ii-preview">→ ${iss.preview.substring(0, 70)}</div>` : ''}
-    </div>`
-  ).join('')
+    </div>`,
+    )
+    .join('')
 }
 
 export function setIssueFilter(sev: string | null, tool?: string): void {
@@ -108,9 +122,14 @@ export function setIssueFilter(sev: string | null, tool?: string): void {
 }
 
 export function filterIssues(q: string): void {
-  if (!q) { renderIssuesList(); return }
+  if (!q) {
+    renderIssuesList()
+    return
+  }
   const low = q.toLowerCase()
-  renderIssuesList(state.results.issues.filter(i =>
-    ((i.file ?? '') + (i.message ?? '') + (i.code ?? '')).toLowerCase().includes(low)
-  ))
+  renderIssuesList(
+    state.results.issues.filter((i) =>
+      ((i.file ?? '') + (i.message ?? '') + (i.code ?? '')).toLowerCase().includes(low),
+    ),
+  )
 }

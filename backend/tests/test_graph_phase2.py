@@ -2,8 +2,12 @@
 Tests — Code Graph Fase 2: proyectos subidos + dir tree + cross-module deps
 pytest tests/test_graph_phase2.py -v
 """
-import sys, io, zipfile
+
+import sys
+import io
+import zipfile
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from fastapi.testclient import TestClient
@@ -13,6 +17,7 @@ client = TestClient(app)
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
+
 
 def _make_zip(files: dict[str, str]) -> bytes:
     buf = io.BytesIO()
@@ -37,14 +42,14 @@ def _upload_project(files: dict[str, str], name: str = "test") -> str:
 # ─── Fixtures ────────────────────────────────────────────────────────────────
 
 FULLSTACK = {
-    "frontend/app.ts":    "import { api } from './api'\nimport { router } from './router'\nexport function main() { return api(router()) }\n",
-    "frontend/api.ts":    "import { fetch } from './utils'\nexport function api(d: unknown) { return fetch(d) }\n",
+    "frontend/app.ts": "import { api } from './api'\nimport { router } from './router'\nexport function main() { return api(router()) }\n",
+    "frontend/api.ts": "import { fetch } from './utils'\nexport function api(d: unknown) { return fetch(d) }\n",
     "frontend/router.ts": "export function router() { return {} }\n",
-    "frontend/utils.ts":  "export function fetch(u: unknown) { return u }\n",
-    "backend/main.py":    "from parser import parse\nfrom analyzer import analyze\ndef run(): return analyze(parse('x'))\n",
-    "backend/parser.py":  "from lexer import tokenize\ndef parse(s): return tokenize(s)\n",
-    "backend/analyzer.py":"from metrics import compute\ndef analyze(d):\n    for i in range(len(d)):\n        for j in range(len(d)): pass\n    return compute(d)\n",
-    "backend/lexer.py":   "def tokenize(s): return s.split()\n",
+    "frontend/utils.ts": "export function fetch(u: unknown) { return u }\n",
+    "backend/main.py": "from parser import parse\nfrom analyzer import analyze\ndef run(): return analyze(parse('x'))\n",
+    "backend/parser.py": "from lexer import tokenize\ndef parse(s): return tokenize(s)\n",
+    "backend/analyzer.py": "from metrics import compute\ndef analyze(d):\n    for i in range(len(d)):\n        for j in range(len(d)): pass\n    return compute(d)\n",
+    "backend/lexer.py": "def tokenize(s): return s.split()\n",
     "backend/metrics.py": "def compute(d): return len(d)\n",
 }
 
@@ -55,18 +60,19 @@ CIRCULAR_PROJECT = {
 }
 
 SINGLE_FOLDER = {
-    "main.py":    "from utils import helper\ndef main(): return helper()\n",
-    "utils.py":   "def helper(): return 42\n",
-    "database.py":"def query(sql): return sql\n",
+    "main.py": "from utils import helper\ndef main(): return helper()\n",
+    "utils.py": "def helper(): return 42\n",
+    "database.py": "def query(sql): return sql\n",
 }
 
 
 # ─── /analyze/graph/project — básico ─────────────────────────────────────────
 
+
 class TestProjectGraphBasic:
     def test_endpoint_ok(self):
         pid = _upload_project(SINGLE_FOLDER, "basic")
-        r   = client.post("/analyze/graph/project", json={"project_id": pid, "graph_type": "import"})
+        r = client.post("/analyze/graph/project", json={"project_id": pid, "graph_type": "import"})
         assert r.status_code == 200
 
     def test_unknown_project(self):
@@ -75,23 +81,23 @@ class TestProjectGraphBasic:
         assert "error" in r.json()
 
     def test_returns_graph_type(self):
-        pid  = _upload_project(SINGLE_FOLDER, "t1")
+        pid = _upload_project(SINGLE_FOLDER, "t1")
         data = client.post("/analyze/graph/project", json={"project_id": pid, "graph_type": "import"}).json()
         assert data["graph_type"] == "import"
 
     def test_returns_total_files(self):
-        pid  = _upload_project(SINGLE_FOLDER, "t2")
+        pid = _upload_project(SINGLE_FOLDER, "t2")
         data = client.post("/analyze/graph/project", json={"project_id": pid, "graph_type": "import"}).json()
         assert data["total_files"] == 3
 
     def test_returns_file_list(self):
-        pid  = _upload_project(SINGLE_FOLDER, "t3")
+        pid = _upload_project(SINGLE_FOLDER, "t3")
         data = client.post("/analyze/graph/project", json={"project_id": pid, "graph_type": "import"}).json()
         assert "file_list" in data
         assert len(data["file_list"]) == 3
 
     def test_returns_mermaid(self):
-        pid  = _upload_project(SINGLE_FOLDER, "t4")
+        pid = _upload_project(SINGLE_FOLDER, "t4")
         data = client.post("/analyze/graph/project", json={"project_id": pid, "graph_type": "import"}).json()
         assert "flowchart" in data.get("mermaid", "")
 
@@ -104,6 +110,7 @@ class TestProjectGraphBasic:
 
 
 # ─── Cross-folder deps y dir tree ────────────────────────────────────────────
+
 
 class TestProjectGraphFullstack:
     def setup_method(self):
@@ -119,19 +126,19 @@ class TestProjectGraphFullstack:
 
     def test_cross_folder_frontend_edges(self):
         """frontend/app.ts → frontend/api.ts, frontend/router.ts"""
-        data  = client.post("/analyze/graph/project", json={"project_id": self.pid, "graph_type": "import"}).json()
+        data = client.post("/analyze/graph/project", json={"project_id": self.pid, "graph_type": "import"}).json()
         froms = [e["from"] for e in data["edges"]]
         assert "frontend/app.ts" in froms
 
     def test_cross_folder_backend_edges(self):
         """backend/main.py → backend/parser.py, backend/analyzer.py"""
-        data  = client.post("/analyze/graph/project", json={"project_id": self.pid, "graph_type": "import"}).json()
+        data = client.post("/analyze/graph/project", json={"project_id": self.pid, "graph_type": "import"}).json()
         froms = [e["from"] for e in data["edges"]]
         assert "backend/main.py" in froms
 
     def test_entry_points_detected(self):
         data = client.post("/analyze/graph/project", json={"project_id": self.pid, "graph_type": "import"}).json()
-        eps  = data.get("entry_points", [])
+        eps = data.get("entry_points", [])
         assert len(eps) >= 1
         # Los entry points son los que nadie importa
         assert "frontend/app.ts" in eps or "backend/main.py" in eps
@@ -141,15 +148,16 @@ class TestProjectGraphFullstack:
         assert "dir_tree" in data
 
     def test_dir_tree_has_folders(self):
-        data    = client.post("/analyze/graph/project", json={"project_id": self.pid, "graph_type": "import"}).json()
-        tree    = data["dir_tree"]
+        data = client.post("/analyze/graph/project", json={"project_id": self.pid, "graph_type": "import"}).json()
+        tree = data["dir_tree"]
         folders = [c["name"] for c in tree.get("children", []) if c["type"] == "directory"]
         assert "frontend" in folders
-        assert "backend"  in folders
+        assert "backend" in folders
 
     def test_dir_tree_file_stats(self):
-        data  = client.post("/analyze/graph/project", json={"project_id": self.pid, "graph_type": "import"}).json()
-        tree  = data["dir_tree"]
+        data = client.post("/analyze/graph/project", json={"project_id": self.pid, "graph_type": "import"}).json()
+        tree = data["dir_tree"]
+
         # Buscar un archivo de código en el árbol
         def find_files(node):
             if node["type"] == "file" and node.get("stats"):
@@ -158,12 +166,13 @@ class TestProjectGraphFullstack:
             for child in node.get("children", []):
                 result.extend(find_files(child))
             return result
+
         files = find_files(tree)
         assert len(files) >= 1
         for f in files:
             s = f["stats"]
             assert "functions" in s
-            assert "language"  in s
+            assert "language" in s
 
     def test_dir_tree_sorted(self):
         """Directorios antes que archivos."""
@@ -171,20 +180,21 @@ class TestProjectGraphFullstack:
         tree = data["dir_tree"]
         if len(tree.get("children", [])) >= 2:
             types = [c["type"] for c in tree["children"]]
-            dirs  = [i for i,t in enumerate(types) if t == "directory"]
-            files = [i for i,t in enumerate(types) if t == "file"]
+            dirs = [i for i, t in enumerate(types) if t == "directory"]
+            files = [i for i, t in enumerate(types) if t == "file"]
             if dirs and files:
                 assert max(dirs) < min(files)
 
     def test_heatmap_uses_full_paths(self):
         data = client.post("/analyze/graph/project", json={"project_id": self.pid, "graph_type": "heatmap"}).json()
-        fns  = data.get("functions", [])
+        fns = data.get("functions", [])
         # Los paths deben incluir la carpeta
         paths = [f["file"] for f in fns]
         assert any("/" in p or "\\" in p for p in paths)
 
 
 # ─── Circular deps en proyecto ────────────────────────────────────────────────
+
 
 class TestProjectCircular:
     def setup_method(self):
@@ -195,19 +205,19 @@ class TestProjectCircular:
         assert data.get("has_cycles") is True
 
     def test_circular_cycle_contains_project_files(self):
-        data  = client.post("/analyze/graph/project", json={"project_id": self.pid, "graph_type": "circular"}).json()
+        data = client.post("/analyze/graph/project", json={"project_id": self.pid, "graph_type": "circular"}).json()
         cycle_files = set()
         for c in data.get("cycles", []):
             cycle_files.update(c)
         assert len(cycle_files) >= 2
 
     def test_circular_affected_nodes_marked(self):
-        data     = client.post("/analyze/graph/project", json={"project_id": self.pid, "graph_type": "circular"}).json()
+        data = client.post("/analyze/graph/project", json={"project_id": self.pid, "graph_type": "circular"}).json()
         in_cycle = [n for n in data["nodes"] if n.get("in_cycle")]
         assert len(in_cycle) >= 2
 
     def test_no_circular_project(self):
-        pid  = _upload_project(FULLSTACK, "no-circ")
+        pid = _upload_project(FULLSTACK, "no-circ")
         data = client.post("/analyze/graph/project", json={"project_id": pid, "graph_type": "circular"}).json()
         assert data.get("has_cycles") is False
 
@@ -220,26 +230,29 @@ class TestProjectCircular:
 
 # ─── Resolución de módulos mejorada ──────────────────────────────────────────
 
+
 class TestModuleResolution:
     def test_same_folder_resolution(self):
         """frontend/app.ts → import './api' → debe resolver a frontend/api.ts"""
-        pid  = _upload_project(FULLSTACK, "res-test")
+        pid = _upload_project(FULLSTACK, "res-test")
         data = client.post("/analyze/graph/project", json={"project_id": pid, "graph_type": "import"}).json()
         edges = [(e["from"], e["to"]) for e in data["edges"]]
         assert ("frontend/app.ts", "frontend/api.ts") in edges
 
     def test_backend_same_folder(self):
         """backend/main.py → from parser import → debe resolver a backend/parser.py"""
-        pid  = _upload_project(FULLSTACK, "res-test2")
+        pid = _upload_project(FULLSTACK, "res-test2")
         data = client.post("/analyze/graph/project", json={"project_id": pid, "graph_type": "import"}).json()
         edges = [(e["from"], e["to"]) for e in data["edges"]]
         assert ("backend/main.py", "backend/parser.py") in edges
 
     def test_no_false_cross_folder_edges(self):
         """frontend/app.ts NO debe conectar con backend/ si no hay import explícito."""
-        pid  = _upload_project(FULLSTACK, "res-test3")
+        pid = _upload_project(FULLSTACK, "res-test3")
         data = client.post("/analyze/graph/project", json={"project_id": pid, "graph_type": "import"}).json()
-        cross = [(e["from"], e["to"]) for e in data["edges"]
-                 if "frontend" in e["from"] and "backend" in e["to"]
-                 or "backend" in e["from"] and "frontend" in e["to"]]
+        cross = [
+            (e["from"], e["to"])
+            for e in data["edges"]
+            if "frontend" in e["from"] and "backend" in e["to"] or "backend" in e["from"] and "frontend" in e["to"]
+        ]
         assert len(cross) == 0  # sin cross-folder deps en este proyecto

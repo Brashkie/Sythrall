@@ -19,6 +19,7 @@ router = APIRouter()
 
 try:
     import networkx as nx
+
     HAS_NX = True
 except ImportError:
     HAS_NX = False
@@ -26,71 +27,85 @@ except ImportError:
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class GraphRequest(BaseModel):
-    files: list[dict]   # [{"filename": "...", "content": "..."}]
-    graph_type: str = "import"   # import | call | circular | heatmap
+    files: list[dict]  # [{"filename": "...", "content": "..."}]
+    graph_type: str = "import"  # import | call | circular | heatmap
 
 
 # ── Colores heatmap ───────────────────────────────────────────────────────────
 
+
 def _cc_color(cc: int) -> str:
-    if cc <= 5:   return "#00f5a0"   # verde
-    if cc <= 10:  return "#ffb627"   # amarillo
-    if cc <= 20:  return "#ff8a00"   # naranja
-    return "#ff3366"                  # rojo
+    if cc <= 5:
+        return "#00f5a0"  # verde
+    if cc <= 10:
+        return "#ffb627"  # amarillo
+    if cc <= 20:
+        return "#ff8a00"  # naranja
+    return "#ff3366"  # rojo
+
 
 def _cc_level(cc: int) -> str:
-    if cc <= 5:   return "low"
-    if cc <= 10:  return "medium"
-    if cc <= 20:  return "high"
+    if cc <= 5:
+        return "low"
+    if cc <= 10:
+        return "medium"
+    if cc <= 20:
+        return "high"
     return "critical"
+
 
 def _bigo_color(bigo: str) -> str:
     table = {
-        "O(1)":       "#00f5a0",
-        "O(log n)":   "#8ef5c0",
-        "O(n)":       "#ffb627",
+        "O(1)": "#00f5a0",
+        "O(log n)": "#8ef5c0",
+        "O(n)": "#ffb627",
         "O(n log n)": "#ff8a00",
-        "O(n²)":      "#ff3366",
-        "O(n³)":      "#ff3366",
-        "O(2^n)":     "#ff3366",
+        "O(n²)": "#ff3366",
+        "O(n³)": "#ff3366",
+        "O(2^n)": "#ff3366",
     }
     return table.get(bigo, "#4a5880")
 
+
 def _bigo_level(bigo: str) -> str:
-    if bigo in ("O(1)", "O(log n)"):       return "efficient"
-    if bigo in ("O(n)", "O(n log n)"):     return "moderate"
+    if bigo in ("O(1)", "O(log n)"):
+        return "efficient"
+    if bigo in ("O(n)", "O(n log n)"):
+        return "moderate"
     return "expensive"
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
 
 @router.get("/graph/types")
 async def graph_types():
     return {
         "types": [
             {
-                "id":          "import",
-                "label":       "Import Graph",
-                "icon":        "📦",
+                "id": "import",
+                "label": "Import Graph",
+                "icon": "📦",
                 "description": "Dependencias entre archivos vía imports/requires",
             },
             {
-                "id":          "call",
-                "label":       "Call Graph",
-                "icon":        "🔗",
+                "id": "call",
+                "label": "Call Graph",
+                "icon": "🔗",
                 "description": "Qué función llama a cuál dentro de cada archivo",
             },
             {
-                "id":          "circular",
-                "label":       "Circular Dependencies",
-                "icon":        "🔄",
+                "id": "circular",
+                "label": "Circular Dependencies",
+                "icon": "🔄",
                 "description": "Ciclos en el grafo de dependencias entre módulos",
             },
             {
-                "id":          "heatmap",
-                "label":       "Complexity Heatmap",
-                "icon":        "🌡️",
+                "id": "heatmap",
+                "label": "Complexity Heatmap",
+                "icon": "🌡️",
                 "description": "Mapa de calor por complejidad ciclomática y Big-O",
             },
         ]
@@ -127,18 +142,20 @@ async def generate_graph(req: GraphRequest) -> dict[str, Any]:
 
 # ── Parser helper ─────────────────────────────────────────────────────────────
 
+
 def _parse_all(files: list[dict]) -> list[dict]:
     """Parsea todos los archivos con el static parser."""
     from services.static_parser import parse_file
+
     results = []
     for f in files:
-        fname   = f.get("filename", "unknown")
+        fname = f.get("filename", "unknown")
         content = f.get("content", "")
         if not content.strip():
             continue
         parsed = parse_file(fname, content)
         parsed["_filename"] = fname
-        parsed["_content"]  = content
+        parsed["_content"] = content
         results.append(parsed)
     return results
 
@@ -146,6 +163,7 @@ def _parse_all(files: list[dict]) -> list[dict]:
 # ══════════════════════════════════════════════════════════════════════════════
 #  IMPORT GRAPH
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def _build_import_graph(parsed_files: list[dict]) -> dict[str, Any]:
     """
@@ -159,82 +177,89 @@ def _build_import_graph(parsed_files: list[dict]) -> dict[str, Any]:
 
     # Nodos
     for p in parsed_files:
-        fname     = p["_filename"]
-        n_funcs   = len(p.get("functions", []))
+        fname = p["_filename"]
+        n_funcs = len(p.get("functions", []))
         n_imports = len(p.get("imports", []))
-        nodes.append({
-            "id":       fname,
-            "label":    _short_name(fname),
-            "full":     fname,
-            "language": p.get("language", "?"),
-            "functions": n_funcs,
-            "imports":   n_imports,
-            "dead_code": len(p.get("dead_code", [])),
-        })
+        nodes.append(
+            {
+                "id": fname,
+                "label": _short_name(fname),
+                "full": fname,
+                "language": p.get("language", "?"),
+                "functions": n_funcs,
+                "imports": n_imports,
+                "dead_code": len(p.get("dead_code", [])),
+            }
+        )
 
     # Edges — solo entre archivos del proyecto
     for p in parsed_files:
         src = p["_filename"]
         for imp in p.get("imports", []):
-            mod  = imp.get("module", "")
+            mod = imp.get("module", "")
             # Intentar resolver el módulo a un archivo del proyecto
             for candidate in _module_to_candidates(mod, src):
                 if candidate in file_names and candidate != src:
                     key = f"{src}→{candidate}"
                     if key not in seen_edges:
                         seen_edges.add(key)
-                        edges.append({
-                            "from": src,
-                            "to":   candidate,
-                            "via":  mod,
-                            "line": imp.get("line", 0),
-                        })
+                        edges.append(
+                            {
+                                "from": src,
+                                "to": candidate,
+                                "via": mod,
+                                "line": imp.get("line", 0),
+                            }
+                        )
                     break
 
     # Generar Mermaid (Tree View)
     mermaid = _import_graph_to_mermaid(nodes, edges, parsed_files)
 
     # Detectar entrypoints (sin incoming edges)
-    targets  = {e["to"] for e in edges}
-    entry    = [n["id"] for n in nodes if n["id"] not in targets]
+    targets = {e["to"] for e in edges}
+    entry = [n["id"] for n in nodes if n["id"] not in targets]
 
     return {
         "graph_type": "import",
-        "nodes":      nodes,
-        "edges":      edges,
-        "mermaid":    mermaid,
+        "nodes": nodes,
+        "edges": edges,
+        "mermaid": mermaid,
         "entry_points": entry,
         "summary": {
-            "total_files":  len(nodes),
+            "total_files": len(nodes),
             "total_imports": len(edges),
-            "isolated":     sum(1 for n in nodes if n["id"] not in {e["from"] for e in edges} and n["id"] not in targets),
+            "isolated": sum(1 for n in nodes if n["id"] not in {e["from"] for e in edges} and n["id"] not in targets),
         },
     }
 
 
 def _import_graph_to_mermaid(
-    nodes: list[dict], edges: list[dict], parsed_files: list[dict],
+    nodes: list[dict],
+    edges: list[dict],
+    parsed_files: list[dict],
 ) -> str:
     if not nodes:
         return "flowchart TD\n    A[Sin archivos]"
 
     lang_icon = {"python": "🐍", "typescript": "🟦", "javascript": "🟨", "c": "⚙️", "cpp": "⚙️"}
-    mermaid   = "flowchart TD\n"
+    mermaid = "flowchart TD\n"
 
     # Nodos con icono de lenguaje
     for n in nodes:
-        nid  = _safe_id(n["id"])
+        nid = _safe_id(n["id"])
         icon = lang_icon.get(n["language"], "📄")
         mermaid += f'    {nid}["{icon} {n["label"]}\\n{n["functions"]} fn · {n["imports"]} imp"]\n'
 
     # Edges
     for e in edges:
-        f = _safe_id(e["from"]); t = _safe_id(e["to"])
+        f = _safe_id(e["from"])
+        t = _safe_id(e["to"])
         mermaid += f"    {f} --> {t}\n"
 
     # Estilos: entrypoints en azul, hojas en verde
-    targets  = {e["to"] for e in edges}
-    sources  = {e["from"] for e in edges}
+    targets = {e["to"] for e in edges}
+    sources = {e["from"] for e in edges}
     for n in nodes:
         nid = _safe_id(n["id"])
         if n["id"] not in targets and n["id"] in sources:
@@ -249,33 +274,36 @@ def _import_graph_to_mermaid(
 #  CALL GRAPH
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _build_call_graph(parsed_files: list[dict]) -> dict[str, Any]:
     """
     Call graph: qué función llama a cuál.
     Agrupa por archivo, muestra las conexiones intra e inter archivo.
     """
-    all_funcs: dict[str, dict] = {}   # name → {file, big_o, cc}
-    all_edges: list[dict]      = []
+    all_funcs: dict[str, dict] = {}  # name → {file, big_o, cc}
+    all_edges: list[dict] = []
 
     for p in parsed_files:
         fname = p["_filename"]
         for fn in p.get("functions", []):
             all_funcs[fn["name"]] = {
-                "file":  fname,
+                "file": fname,
                 "big_o": fn.get("big_o", "?"),
-                "cc":    fn.get("complexity", 1),
-                "line":  fn.get("line", 0),
+                "cc": fn.get("complexity", 1),
+                "line": fn.get("line", 0),
             }
 
     for p in parsed_files:
         fname = p["_filename"]
         for edge in p.get("call_graph", []):
-            all_edges.append({
-                "from":      edge["from"],
-                "to":        edge["to"],
-                "from_file": fname,
-                "to_file":   all_funcs.get(edge["to"], {}).get("file", fname),
-            })
+            all_edges.append(
+                {
+                    "from": edge["from"],
+                    "to": edge["to"],
+                    "from_file": fname,
+                    "to_file": all_funcs.get(edge["to"], {}).get("file", fname),
+                }
+            )
 
     # Construir nodos desde funciones que participan en el grafo
     active_names = {e["from"] for e in all_edges} | {e["to"] for e in all_edges}
@@ -286,28 +314,30 @@ def _build_call_graph(parsed_files: list[dict]) -> dict[str, Any]:
     nodes = []
     for name, info in all_funcs.items():
         if name in active_names:
-            nodes.append({
-                "id":    name,
-                "label": name,
-                "file":  info["file"],
-                "big_o": info["big_o"],
-                "cc":    info["cc"],
-                "line":  info["line"],
-                "color": _bigo_color(info["big_o"]),
-                "level": _bigo_level(info["big_o"]),
-            })
+            nodes.append(
+                {
+                    "id": name,
+                    "label": name,
+                    "file": info["file"],
+                    "big_o": info["big_o"],
+                    "cc": info["cc"],
+                    "line": info["line"],
+                    "color": _bigo_color(info["big_o"]),
+                    "level": _bigo_level(info["big_o"]),
+                }
+            )
 
     mermaid = _call_graph_to_mermaid(nodes, all_edges)
 
     return {
         "graph_type": "call",
-        "nodes":      nodes,
-        "edges":      all_edges,
-        "mermaid":    mermaid,
+        "nodes": nodes,
+        "edges": all_edges,
+        "mermaid": mermaid,
         "summary": {
             "total_functions": len(nodes),
-            "total_calls":     len(all_edges),
-            "hot_paths":       [n for n in nodes if n["level"] == "expensive"],
+            "total_calls": len(all_edges),
+            "hot_paths": [n for n in nodes if n["level"] == "expensive"],
         },
     }
 
@@ -320,14 +350,15 @@ def _call_graph_to_mermaid(nodes: list[dict], edges: list[dict]) -> str:
 
     # Nodos con Big-O
     for n in nodes:
-        nid  = _safe_id(n["id"])
+        nid = _safe_id(n["id"])
         bigo = n.get("big_o", "")
         icon = "⚙️" if not bigo or bigo == "O(1)" else "🟡" if bigo in ("O(n)", "O(n log n)") else "🔴"
         mermaid += f'    {nid}["{icon} {n["label"]}\\n{bigo}"]\n'
 
     # Edges
     for e in edges:
-        f = _safe_id(e["from"]); t = _safe_id(e["to"])
+        f = _safe_id(e["from"])
+        t = _safe_id(e["to"])
         mermaid += f"    {f} --> {t}\n"
 
     # Colorear hot paths
@@ -345,6 +376,7 @@ def _call_graph_to_mermaid(nodes: list[dict], edges: list[dict]) -> str:
 # ══════════════════════════════════════════════════════════════════════════════
 #  CIRCULAR DEPENDENCIES
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def _build_circular_graph(parsed_files: list[dict]) -> dict[str, Any]:
     """
@@ -391,29 +423,28 @@ def _build_circular_graph(parsed_files: list[dict]) -> dict[str, Any]:
     nodes = []
     for p in parsed_files:
         fname = p["_filename"]
-        nodes.append({
-            "id":       fname,
-            "label":    _short_name(fname),
-            "in_cycle": fname in cycle_nodes,
-            "cycles":   [c for c in cycles if fname in c],
-        })
+        nodes.append(
+            {
+                "id": fname,
+                "label": _short_name(fname),
+                "in_cycle": fname in cycle_nodes,
+                "cycles": [c for c in cycles if fname in c],
+            }
+        )
 
-    edges_annotated = [
-        {**e, "is_cycle": f"{e['from']}→{e['to']}" in cycle_edge_keys}
-        for e in all_edges
-    ]
+    edges_annotated = [{**e, "is_cycle": f"{e['from']}→{e['to']}" in cycle_edge_keys} for e in all_edges]
 
     mermaid = _circular_to_mermaid(nodes, edges_annotated, cycles)
 
     return {
-        "graph_type":     "circular",
-        "nodes":          nodes,
-        "edges":          edges_annotated,
-        "cycles":         cycles,
-        "mermaid":        mermaid,
-        "has_cycles":     len(cycles) > 0,
+        "graph_type": "circular",
+        "nodes": nodes,
+        "edges": edges_annotated,
+        "cycles": cycles,
+        "mermaid": mermaid,
+        "has_cycles": len(cycles) > 0,
         "summary": {
-            "total_files":  len(nodes),
+            "total_files": len(nodes),
             "total_cycles": len(cycles),
             "affected_files": len(cycle_nodes),
             "cycle_descriptions": [" → ".join(c) + f" → {c[0]}" for c in cycles],
@@ -422,17 +453,20 @@ def _build_circular_graph(parsed_files: list[dict]) -> dict[str, Any]:
 
 
 def _circular_to_mermaid(
-    nodes: list[dict], edges: list[dict], cycles: list[list[str]],
+    nodes: list[dict],
+    edges: list[dict],
+    cycles: list[list[str]],
 ) -> str:
     mermaid = "flowchart TD\n"
 
     for n in nodes:
-        nid   = _safe_id(n["id"])
-        icon  = "🔴" if n["in_cycle"] else "📄"
+        nid = _safe_id(n["id"])
+        icon = "🔴" if n["in_cycle"] else "📄"
         mermaid += f'    {nid}["{icon} {n["label"]}"]\n'
 
     for e in edges:
-        f   = _safe_id(e["from"]); t = _safe_id(e["to"])
+        f = _safe_id(e["from"])
+        t = _safe_id(e["to"])
         arr = " -.->|🔄| " if e.get("is_cycle") else " --> "
         mermaid += f"    {f}{arr}{t}\n"
 
@@ -443,7 +477,7 @@ def _circular_to_mermaid(
             mermaid += f"    style {nid} fill:#ff336630,stroke:#ff3366,stroke-width:2px\n"
 
     if not cycles:
-        mermaid += "    OK[\"✅ Sin dependencias circulares\"]\n"
+        mermaid += '    OK["✅ Sin dependencias circulares"]\n'
         mermaid += "    style OK fill:#00f5a020,stroke:#00f5a0\n"
 
     return mermaid
@@ -452,6 +486,7 @@ def _circular_to_mermaid(
 # ══════════════════════════════════════════════════════════════════════════════
 #  COMPLEXITY HEATMAP
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def _build_heatmap(parsed_files: list[dict]) -> dict[str, Any]:
     """
@@ -463,49 +498,48 @@ def _build_heatmap(parsed_files: list[dict]) -> dict[str, Any]:
     for p in parsed_files:
         fname = p["_filename"]
         for fn in p.get("functions", []):
-            cc    = fn.get("complexity", 1)
-            bigo  = fn.get("big_o", "?")
-            functions.append({
-                "file":       fname,
-                "file_short": _short_name(fname),
-                "name":       fn["name"],
-                "line":       fn.get("line", 0),
-                "cc":         cc,
-                "cc_color":   _cc_color(cc),
-                "cc_level":   _cc_level(cc),
-                "big_o":      bigo,
-                "bigo_color": _bigo_color(bigo),
-                "bigo_level": _bigo_level(bigo),
-                "loc":        fn.get("loc", 0),
-            })
+            cc = fn.get("complexity", 1)
+            bigo = fn.get("big_o", "?")
+            functions.append(
+                {
+                    "file": fname,
+                    "file_short": _short_name(fname),
+                    "name": fn["name"],
+                    "line": fn.get("line", 0),
+                    "cc": cc,
+                    "cc_color": _cc_color(cc),
+                    "cc_level": _cc_level(cc),
+                    "big_o": bigo,
+                    "bigo_color": _bigo_color(bigo),
+                    "bigo_level": _bigo_level(bigo),
+                    "loc": fn.get("loc", 0),
+                }
+            )
 
     # Ordenar: más problemáticas primero
     level_order = {"critical": 0, "expensive": 0, "high": 1, "medium": 1, "moderate": 2, "low": 3, "efficient": 3}
-    functions.sort(key=lambda f: (
-        level_order.get(f["cc_level"], 5) + level_order.get(f["bigo_level"], 5),
-        -f["cc"]
-    ))
+    functions.sort(key=lambda f: (level_order.get(f["cc_level"], 5) + level_order.get(f["bigo_level"], 5), -f["cc"]))
 
     mermaid = _heatmap_to_mermaid(functions)
 
     # Stats
     critical = [f for f in functions if f["cc_level"] in ("critical", "high")]
-    hot      = [f for f in functions if f["bigo_level"] == "expensive"]
-    avg_cc   = round(sum(f["cc"] for f in functions) / len(functions), 2) if functions else 0
+    hot = [f for f in functions if f["bigo_level"] == "expensive"]
+    avg_cc = round(sum(f["cc"] for f in functions) / len(functions), 2) if functions else 0
 
     return {
         "graph_type": "heatmap",
-        "functions":  functions,
-        "mermaid":    mermaid,
+        "functions": functions,
+        "mermaid": mermaid,
         "summary": {
             "total_functions": len(functions),
-            "avg_cc":          avg_cc,
-            "critical_count":  len(critical),
-            "hot_paths":       len(hot),
+            "avg_cc": avg_cc,
+            "critical_count": len(critical),
+            "hot_paths": len(hot),
             "by_level": {
-                "low":      sum(1 for f in functions if f["cc_level"] == "low"),
-                "medium":   sum(1 for f in functions if f["cc_level"] == "medium"),
-                "high":     sum(1 for f in functions if f["cc_level"] == "high"),
+                "low": sum(1 for f in functions if f["cc_level"] == "low"),
+                "medium": sum(1 for f in functions if f["cc_level"] == "medium"),
+                "high": sum(1 for f in functions if f["cc_level"] == "high"),
                 "critical": sum(1 for f in functions if f["cc_level"] == "critical"),
             },
         },
@@ -528,10 +562,18 @@ def _heatmap_to_mermaid(functions: list[dict]) -> str:
         fid = _safe_id(file_short)
         mermaid += f'    subgraph {fid}["{file_short}"]\n'
         for fn in fns:
-            fnid  = _safe_id(f"{file_short}_{fn['name']}")
-            cc    = fn["cc"]
-            bigo  = fn["big_o"]
-            icon  = "🟢" if fn["cc_level"] == "low" else "🟡" if fn["cc_level"] == "medium" else "🟠" if fn["cc_level"] == "high" else "🔴"
+            fnid = _safe_id(f"{file_short}_{fn['name']}")
+            cc = fn["cc"]
+            bigo = fn["big_o"]
+            icon = (
+                "🟢"
+                if fn["cc_level"] == "low"
+                else "🟡"
+                if fn["cc_level"] == "medium"
+                else "🟠"
+                if fn["cc_level"] == "high"
+                else "🔴"
+            )
             mermaid += f'    {fnid}["{icon} {fn["name"]}\\nCC={cc} · {bigo}"]\n'
         mermaid += "    end\n"
 
@@ -547,9 +589,10 @@ def _heatmap_to_mermaid(functions: list[dict]) -> str:
 
 # ── Utilidades ────────────────────────────────────────────────────────────────
 
+
 def _safe_id(s: str) -> str:
     """Convierte un string a ID válido para Mermaid."""
-    return re.sub(r'[^a-zA-Z0-9_]', '_', s)
+    return re.sub(r"[^a-zA-Z0-9_]", "_", s)
 
 
 def _short_name(path: str) -> str:
@@ -564,6 +607,7 @@ def _module_to_candidates(module: str, source_file: str = "") -> list[str]:
     Esto permite resolver cross-folder deps correctamente.
     """
     import os
+
     source_dir = os.path.dirname(source_file)  # e.g. "backend" o "frontend"
 
     # Nombre base del módulo
@@ -607,16 +651,16 @@ def _module_to_candidates(module: str, source_file: str = "") -> list[str]:
 def _empty_response(graph_type: str) -> dict:
     base = {
         "graph_type": graph_type,
-        "nodes":      [],
-        "edges":      [],
-        "mermaid":    "flowchart TD\n    A[Sin archivos cargados]",
-        "summary":    {},
+        "nodes": [],
+        "edges": [],
+        "mermaid": "flowchart TD\n    A[Sin archivos cargados]",
+        "summary": {},
     }
     if graph_type == "circular":
-        base["cycles"]     = []
+        base["cycles"] = []
         base["has_cycles"] = False
     if graph_type == "heatmap":
-        base["functions"]  = []
+        base["functions"] = []
     return base
 
 
@@ -624,6 +668,7 @@ def _empty_response(graph_type: str) -> dict:
 #  FASE 2: Graph desde proyectos subidos (ZIP/upload)
 #  Endpoint que lee archivos de un project_id ya subido
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 class ProjectGraphRequest(BaseModel):
     project_id: str
@@ -637,12 +682,12 @@ async def generate_project_graph(req: ProjectGraphRequest) -> dict[str, Any]:
     Lee todos los archivos de código del proyecto, los parsea y genera el grafo.
     Soporta proyectos con estructura de carpetas (frontend/, backend/, etc.)
     """
-    from services.project_service import get_project_info
 
     try:
         # Obtener árbol del proyecto
         project_dir = f"uploads/projects/{req.project_id}"
         import os
+
         if not os.path.exists(project_dir):
             return {"error": f"Proyecto {req.project_id} no encontrado", "mermaid": "", "nodes": [], "edges": []}
 
@@ -652,7 +697,9 @@ async def generate_project_graph(req: ProjectGraphRequest) -> dict[str, Any]:
 
         for root, dirs, files in os.walk(project_dir):
             # Ignorar carpetas de dependencias
-            dirs[:] = [d for d in dirs if d not in ("node_modules", "__pycache__", ".git", "dist", "build", ".venv", "venv")]
+            dirs[:] = [
+                d for d in dirs if d not in ("node_modules", "__pycache__", ".git", "dist", "build", ".venv", "venv")
+            ]
             for fname in files:
                 full_path = os.path.join(root, fname)
                 ext = os.path.splitext(fname)[1].lower()
@@ -686,9 +733,9 @@ async def generate_project_graph(req: ProjectGraphRequest) -> dict[str, Any]:
             return {"error": f"Tipo desconocido: {req.graph_type}"}
 
         # Agregar metadata del proyecto
-        result["project_id"]    = req.project_id
-        result["total_files"]   = len(files_for_graph)
-        result["file_list"]     = [f["filename"] for f in files_for_graph]
+        result["project_id"] = req.project_id
+        result["total_files"] = len(files_for_graph)
+        result["file_list"] = [f["filename"] for f in files_for_graph]
 
         # Agregar árbol de directorios para Tree View
         result["dir_tree"] = _build_dir_tree(files_for_graph, parsed_files)
@@ -716,11 +763,11 @@ def _build_dir_tree(
         funcs = p.get("functions", [])
         stats_by_file[fname] = {
             "functions": len(funcs),
-            "avg_cc":    round(sum(f.get("complexity",1) for f in funcs) / len(funcs), 1) if funcs else 0,
-            "hot_paths": sum(1 for f in funcs if f.get("big_o","") in ("O(n²)","O(n³)","O(2^n)")),
-            "language":  p.get("language","?"),
-            "imports":   len(p.get("imports",[])),
-            "dead_code": len(p.get("dead_code",[])),
+            "avg_cc": round(sum(f.get("complexity", 1) for f in funcs) / len(funcs), 1) if funcs else 0,
+            "hot_paths": sum(1 for f in funcs if f.get("big_o", "") in ("O(n²)", "O(n³)", "O(2^n)")),
+            "language": p.get("language", "?"),
+            "imports": len(p.get("imports", [])),
+            "dead_code": len(p.get("dead_code", [])),
         }
 
     # Construir árbol
@@ -728,31 +775,31 @@ def _build_dir_tree(
 
     for f in files:
         parts = f["filename"].split("/")
-        node  = root
+        node = root
         for i, part in enumerate(parts):
-            path = "/".join(parts[:i+1])
+            path = "/".join(parts[: i + 1])
             if part not in node["children"]:
-                is_file = (i == len(parts) - 1)
+                is_file = i == len(parts) - 1
                 node["children"][part] = {
-                    "name":     part,
-                    "type":     "file" if is_file else "directory",
-                    "path":     path,
+                    "name": part,
+                    "type": "file" if is_file else "directory",
+                    "path": path,
                     "children": {},
-                    "stats":    stats_by_file.get(path, {}) if is_file else {},
+                    "stats": stats_by_file.get(path, {}) if is_file else {},
                 }
             node = node["children"][part]
 
     def _to_list(node: dict) -> dict:
         result = {
-            "name":  node["name"],
-            "type":  node["type"],
-            "path":  node["path"],
+            "name": node["name"],
+            "type": node["type"],
+            "path": node["path"],
             "stats": node["stats"],
         }
         if node["children"]:
             result["children"] = sorted(
                 [_to_list(child) for child in node["children"].values()],
-                key=lambda x: (0 if x["type"] == "directory" else 1, x["name"])
+                key=lambda x: (0 if x["type"] == "directory" else 1, x["name"]),
             )
         return result
 

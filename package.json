@@ -1,0 +1,35 @@
+{
+  "name": "codewatch-pro",
+  "version": "4.4.0",
+  "description": "CodeWatch PRO — Monitor de API y código ML/DL · FastAPI backend",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n web,api -c blue,green \"npm:dev:web\" \"npm:dev:api\"",
+    "dev:web": "vite",
+    "dev:api": "node scripts/run-backend.mjs",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write ."
+  },
+  "dependencies": {
+    "chart.js": "^4.4.3",
+    "diff": "^5.2.0",
+    "jszip": "^3.10.1",
+    "mermaid": "^11.4.0",
+    "monaco-editor": "^0.45.0",
+    "pyodide": "^0.29.3",
+    "starboard-notebook": "^0.15.7",
+    "thebe": "^0.9.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.6",
+    "@types/diff": "^5.2.1",
+    "@types/node": "^20.14.0",
+    "concurrently": "10.0.4",
+    "typescript": "^5.4.5",
+    "vite": "^5.3.1"
+  }
+}

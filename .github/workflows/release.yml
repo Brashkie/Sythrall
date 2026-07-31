@@ -1,0 +1,79 @@
+name: Release
+
+# Se dispara con un tag "vX.Y.Z" (ej. `git tag v4.3.0 && git push origin v4.3.0`).
+# Antes de taguear: renombrar la sección "## [Unreleased]" de CHANGELOG.md a
+# "## [X.Y.Z] — ..." — este workflow busca ese encabezado exacto para armar
+# las notas de la release. Si no lo encuentra, usa notas genéricas.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  verify:
+    name: Verify before releasing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: ruff check backend
+      - run: cd backend && pytest
+
+      - name: Zip frontend build
+        run: cd dist && zip -r ../codewatch-pro-frontend-dist.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: codewatch-pro-frontend-dist.zip
+
+  release:
+    name: Create GitHub Release
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+
+      - name: Extract CHANGELOG.md section for this tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="$VERSION" '
+            /^## \[/ { if (found) exit; if (index($0, "["ver"]")) { found=1; next } }
+            found { print }
+          ' CHANGELOG.md > release_notes.md
+          if [ ! -s release_notes.md ]; then
+            echo "No se encontró la sección [$VERSION] en CHANGELOG.md — ver el historial de commits." > release_notes.md
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body_path: release_notes.md
+          files: codewatch-pro-frontend-dist.zip
+          generate_release_notes: true

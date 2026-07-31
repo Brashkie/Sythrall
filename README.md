@@ -4,13 +4,14 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-4.2.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-4.4.0-blue?style=flat-square)
+[![CI](https://github.com/Brashkie/codewatch-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/Brashkie/codewatch-pro/actions/workflows/ci.yml)
 ![Frontend](https://img.shields.io/badge/Frontend-Vite%20%2B%20TypeScript-646cff?style=flat-square)
 ![Backend](https://img.shields.io/badge/Backend-FastAPI%20%2B%20Python-009688?style=flat-square)
 ![Deploy](https://img.shields.io/badge/Deploy-Docker%20%2B%20Nginx-2496ed?style=flat-square)
 ![Tests](https://img.shields.io/badge/Tests-316%20passing-00f5a0?style=flat-square)
 ![Author](https://img.shields.io/badge/Author-Hepein%20Oficial-b87dff?style=flat-square)
-![License](https://img.shields.io/badge/License-Apache%202.0-orange?style=flat-square)
+![License](https://img.shields.io/badge/License-GPL%203.0-orange?style=flat-square)
 
 [English](./README.md) · [Español](./README.es.md)
 
@@ -43,14 +44,27 @@ CodeWatch PRO is a professional code intelligence platform built as both an educ
 
 ## 📁 Project structure
 
+All manifests/configs live at the repo root; `backend/` and `frontend/` hold source code only. `scripts/` is the single entry point for everything (see [scripts/README.md](scripts/README.md)).
+
 ```
 codewatch-pro/
+├── package.json                   ← npm manifest (frontend deps + lint/format/build scripts)
+├── package-lock.json
+├── vite.config.ts                 ← root: 'frontend', build.outDir: '../dist'
+├── tsconfig.json                  ← include: frontend/src
+├── biome.json                     ← Biome (lint/format) config
+├── requirements.txt                ← backend runtime deps
+├── requirements-dev.txt            ← Ruff (lint/format), dev-only
+├── pyproject.toml                  ← Ruff config
+├── pytest.ini                      ← testpaths: backend/tests
+├── docker-compose.yml
+├── .dockerignore
+├── START.bat / STOP.bat
+├── scripts/                       ← Dev workflow without Docker (setup/dev/build/test/lint/format, .ps1 + .sh)
 ├── backend/
 │   ├── main.py                    ← FastAPI v4.2 (32+ routes)
 │   ├── shared.py
-│   ├── requirements.txt
 │   ├── Dockerfile
-│   ├── pytest.ini
 │   ├── routers/
 │   │   ├── upload.py              ← POST /api/upload/{files,folder,zip} + CRUD
 │   │   ├── analysis.py            ← POST /analyze/{code,api,logs-analyze}
@@ -71,39 +85,34 @@ codewatch-pro/
 │       ├── test_graph.py          ← 46 tests (Phase 1)
 │       └── test_graph_phase2.py   ← 25 tests (Phase 2 — projects)
 ├── frontend/
-│   ├── src/
-│   │   ├── api/client.ts          ← Full API client v4.2
-│   │   ├── components/
-│   │   │   ├── app.ts             ← App shell + file management
-│   │   │   ├── editor.ts          ← Monaco Editor integration
-│   │   │   ├── editor-intelligence.ts ← Linting + hover + autocomplete (Phases 1–3)
-│   │   │   ├── explorer.ts        ← Project Explorer (tree + tabs + search + outline)
-│   │   │   ├── events.ts          ← Global event wiring
-│   │   │   ├── charts.ts          ← Chart.js integration
-│   │   │   ├── mermaid.ts         ← Mermaid + zoom/pan engine
-│   │   │   └── flow.ts            ← Execution flow diagram
-│   │   ├── panels/
-│   │   │   ├── analysis.ts
-│   │   │   ├── apis.ts
-│   │   │   ├── ml.ts
-│   │   │   ├── upload.ts
-│   │   │   ├── static.ts          ← Static Analysis panel
-│   │   │   └── graph.ts           ← Code Graph Visual (Force Graph + Dir Tree)
-│   │   ├── store/state.ts
-│   │   ├── styles/
-│   │   │   ├── main.css
-│   │   │   ├── upload.css
-│   │   │   ├── static-addon.css
-│   │   │   └── explorer.css
-│   │   ├── types/index.ts
-│   │   └── utils/
 │   ├── index.html
-│   ├── package.json
-│   ├── vite.config.ts
-│   └── Dockerfile.frontend
-├── docker-compose.yml
-├── START.bat
-├── STOP.bat
+│   ├── Dockerfile.frontend
+│   └── src/
+│       ├── api/client.ts          ← Full API client v4.2
+│       ├── components/
+│       │   ├── app.ts             ← App shell + file management
+│       │   ├── editor.ts          ← Monaco Editor integration
+│       │   ├── editor-intelligence.ts ← Linting + hover + autocomplete (Phases 1–3)
+│       │   ├── explorer.ts        ← Project Explorer (tree + tabs + search + outline)
+│       │   ├── events.ts          ← Global event wiring
+│       │   ├── charts.ts          ← Chart.js integration
+│       │   ├── mermaid.ts         ← Mermaid + zoom/pan engine
+│       │   └── flow.ts            ← Execution flow diagram
+│       ├── panels/
+│       │   ├── analysis.ts
+│       │   ├── apis.ts
+│       │   ├── ml.ts
+│       │   ├── upload.ts
+│       │   ├── static.ts          ← Static Analysis panel
+│       │   └── graph.ts           ← Code Graph Visual (Force Graph + Dir Tree)
+│       ├── store/state.ts
+│       ├── styles/
+│       │   ├── main.css
+│       │   ├── upload.css
+│       │   ├── static-addon.css
+│       │   └── explorer.css
+│       ├── types/index.ts
+│       └── utils/
 └── README.md
 ```
 
@@ -143,20 +152,40 @@ docker compose up --build
 
 ### 3 — Development mode (without Docker)
 
-**Backend:**
+The `scripts/` folder wraps the whole no-Docker workflow in one command each — no need to juggle `cd`/`pip`/`npm` manually:
+
+```powershell
+# Windows (PowerShell)
+.\scripts\setup.ps1   # installs backend venv + frontend node_modules
+.\scripts\dev.ps1     # runs backend (uvicorn --reload) + frontend (vite) together
+```
+
 ```bash
-cd backend
+# macOS / Linux / Git Bash / WSL
+./scripts/setup.sh
+./scripts/dev.sh
+```
+
+See [scripts/README.md](scripts/README.md) for the full list (`build`, `test`, `lint`, `format`). Under the hood, `dev` is just `npm run dev` — `concurrently` runs Vite and uvicorn as one process (`[web]`/`[api]` prefixed logs), so `npm run dev` works the same directly if you'd rather skip the wrapper scripts.
+
+<details>
+<summary>Manual commands (equivalent, no script)</summary>
+
+**Backend** (from repo root — `requirements.txt` lives there, app code is in `backend/`):
+```bash
 pip install -r requirements.txt
+cd backend
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**Frontend:**
+**Frontend** (from repo root — `package.json`/`vite.config.ts` live there, source is in `frontend/src`):
 ```bash
-cd frontend
 npm install
 npm run dev
 # http://localhost:5173
 ```
+
+</details>
 
 ---
 
@@ -252,7 +281,8 @@ DELETE /api/upload/projects/{id}
 ## 🧪 Tests
 
 ```bash
-cd backend && pytest tests/ -v
+cd backend && pytest
+# pytest.ini lives at the repo root and is auto-discovered; testpaths = backend/tests
 ```
 
 ```
@@ -265,6 +295,19 @@ test_graph_phase2.py      25 ✅
 ─────────────────────────────
 Total: 316 passed
 ```
+
+---
+
+## 🧹 Tooling (lint & format)
+
+[Biome](https://biomejs.dev) formats/lints the TypeScript frontend; [Ruff](https://docs.astral.sh/ruff/) does the same for the Python backend. Both run through `scripts/`:
+
+```bash
+./scripts/lint.sh      # or .\scripts\lint.ps1   — check only, no writes
+./scripts/format.sh    # or .\scripts\format.ps1 — writes fixes
+```
+
+Equivalent direct commands (from repo root): `npm run lint` / `npm run format`, `ruff check backend` / `ruff format backend`.
 
 ---
 
@@ -315,13 +358,33 @@ docker compose down -v                         # Stop + delete volumes
 - [x] Project Explorer: file tree + multi-file tabs + global search + outline
 - [x] 316 automated tests
 
-### 🔜 v4.3 — Problems Panel + Live Metrics
-- [ ] **Problems panel** (VSCode-style): errors · warnings · Big-O · complexity · security findings
-- [ ] **Live metrics bar** in editor: LOC · functions · imports · complexity score · Big-O worst · parse time (ms)
-- [ ] Auto-recovery if parser fails (safe mode + regex fallback)
-- [ ] Corrupt file detection, session restore
+### ✅ v4.3 — Problems Panel + Live Metrics
+- [x] **Problems panel** (VSCode-style): errors · warnings · Big-O · complexity · security findings
+- [x] **Live metrics bar** in editor: LOC · functions · imports · complexity score · Big-O worst · parse time (ms)
+- [x] Auto-recovery if parser fails (safe mode + regex fallback)
+- [x] Corrupt file detection, session restore
 
-### 🔜 v4.4 — Multi-language Expansion
+---
+
+The items below are grouped by how well-founded they are, not by version number — the goal is to be honest about scope before committing to it.
+
+### 🔜 v4.4 — Computer Science Engine ⭐ *(top priority — direct extension of the existing analysis engine, no new architecture)*
+
+Not just "what" the code does — *why* it behaves that way. Built entirely on data `static_parser.py` and the Big-O engine already compute:
+
+- [x] Full complexity picture per function: Θ (tight bound), Ω (best case), O (worst case) — not just worst-case O *(Python only for now; C/C++/JS/TS still show O only)*
+- [x] "Why" explanation attached to every Big-O result (e.g. *"2 nested loops — inner loop runs n times per outer iteration"*)
+- [ ] Regex detected → classify as Finite Automaton / Chomsky Type-3 (Regular)
+- [ ] Grammar/parser-shaped code detected → Context-Free Grammar / Pushdown Automaton / Chomsky Type-2
+- [ ] Recursion detected → tail-call detection, recursion-depth estimate, "Lambda Calculus" framing
+- [ ] Graph traversal detected → label as DFS/BFS/topological sort, O(V+E)
+
+### 🔜 v4.5 — Data Structure Detector *(same heuristic-pattern style as the existing WASM-hint/dead-code detectors)*
+
+- [ ] Detect AVL / Red-Black Tree / Trie / Heap / Segment Tree / Fenwick Tree / Bloom Filter / B-Tree / HashMap / Skip List from AST shape
+- [ ] For each match: complexity, typical use case, tradeoffs
+
+### 🔜 v4.6 — Multi-language Expansion
 - [ ] **C/C++** full support (tree-sitter already integrated — complete pipeline)
 - [ ] **Java** — AST + complexity analysis
 - [ ] **Go** — imports, goroutine detection
@@ -330,7 +393,7 @@ docker compose down -v                         # Stop + delete volumes
 - [ ] **SQL** — query complexity estimation
 - [ ] Language-specific lint rules per extension
 
-### 🔜 v4.5 — Cython & WASM Integration
+### 🔜 v4.7 — Cython & WASM Integration
 - [ ] Auto-detect Cython candidates from Big-O analysis (O(n²)+ functions)
 - [ ] Generate `.pyx` stubs from Python function signatures
 - [ ] Compile Cython in Docker (MSVC on Windows / GCC on Linux)
@@ -338,24 +401,50 @@ docker compose down -v                         # Stop + delete volumes
 - [ ] Estimated speedup shown in hover provider
 - [ ] WASM compilation path via Emscripten
 
-### 🔜 v4.6 — Execution Path Simulator
+### 🔜 v4.8 — Execution Path Simulator
 - [ ] Animated circuit-board execution flow:
   `Input → Parser → AST → Dependency Resolver → Metrics → Report`
 - [ ] Step-by-step trace with timing per stage
 - [ ] Export as animated SVG
+
+### 🔬 Research spikes — integrate existing tools, don't rebuild them
+
+Real ideas, but each is its own serious project already solved well by dedicated open-source tools — the honest move is to link/embed those, not reinvent them:
+
+- [ ] Compiler pipeline visualization (Lexer → AST → IR → Assembly) — embed [Compiler Explorer](https://godbolt.org) (open source) instead of building a teaching compiler from scratch
+- [ ] Executable analyzer (PE / ELF / Mach-O, sections, imports/exports, symbols) — wrap [Capstone](https://www.capstone-engine.org)/[LIEF](https://lief-project.github.io)/`objdump`, don't hand-write a disassembler
+- [ ] Graph centrality / hub detection (NetworkX is already a dependency) — surface the most-connected files/functions in the existing Code Graph, the same idea social networks use to find "influencers"
+- [ ] Standalone desktop build (PyInstaller/Nuitka + Tauri, or Zig for tiny static binaries) — a portable binary with no Docker/Node/Python required, as an alternative to `scripts/` and Docker
+- [ ] Rust extension (PyO3) for the static parser's hottest path — only if profiling `static_parser.py` on large real files actually shows it's needed; not a rewrite, same pattern as adopting Ruff (Rust) over a pure-Python linter
+
+### 🧭 Long-term / different tool category — not committed
+
+These need runtime instrumentation (ptrace/eBPF), a running process, or live packet capture — architecturally a different kind of tool than static analysis, so they stay here as ideas rather than roadmap commitments:
+
+- [ ] Memory visualizer (stack/heap/data/bss) — requires a running process to inspect, not source text
+- [ ] Concurrency analyzer (races, deadlocks, mutex/atomic misuse) — needs real execution or tools like ThreadSanitizer, not AST inspection
+- [ ] OS engine (threads, paging, scheduling, IPC) — needs kernel-level tracing
+- [ ] Network analyzer (TCP/TLS/QUIC/WebSocket) — needs packet capture; this is a Wireshark-shaped tool, not a static analyzer
+- [ ] Security analyzer beyond pattern detection (ROP, heap spray, use-after-free exploitation) — competes directly with mature SAST tools (Semgrep, CodeQL, Bandit); the realistic version folds into the CS Engine above as "detect the pattern + explain the CWE," not a full exploit-analysis engine
 
 ### 🔜 v5.0 — Enterprise Persistence
 - [ ] PostgreSQL + Delta Lake
 - [ ] Analysis history, metric comparison between versions
 - [ ] WebSockets for real-time streaming
 - [ ] JWT authentication, public API with rate limiting
-- [ ] GitHub Action for CI/CD
+- [x] GitHub Action for CI/CD — `.github/workflows/ci.yml` (typecheck/lint/build/test on every push/PR) + `release.yml` (tag → GitHub Release with CHANGELOG notes + frontend build artifact)
 
 ### 💡 Future
 - [ ] VS Code extension
 - [ ] Jupyter Notebook analysis (`.ipynb`)
 - [ ] ApexVision integration (`/analyze/image` with OpenCV + YOLOv11)
 - [ ] Team dashboard with aggregated metrics
+
+---
+
+## 📝 Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 
 ---
 
@@ -367,4 +456,4 @@ docker compose down -v                         # Stop + delete volumes
 
 ## 📄 License
 
-Apache License 2.0 — see [LICENSE](LICENSE)
+GPL-3.0 — see [LICENSE](LICENSE)

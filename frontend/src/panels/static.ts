@@ -4,92 +4,87 @@
 //  Sin IA. Parsers: Python AST, tree-sitter C/C++, regex TS/JS
 // ══════════════════════════════════════════
 
-import { api }        from '../api/client'
 import type { StaticProjectResult } from '../api/client'
+import { api } from '../api/client'
+import { state } from '../store/state'
 import { appendLog, toast } from '../utils/helpers'
-import { state }      from '../store/state'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface ParsedFunction {
-  name:         string
-  line:         number
-  end_line?:    number
-  loc?:         number
-  complexity:   number
-  big_o:        string
+  name: string
+  line: number
+  end_line?: number
+  loc?: number
+  complexity: number
+  big_o: string
   big_o_reason: string
-  calls?:       string[]
-  is_async?:    boolean
-  args?:        string[]
-  decorators?:  string[]
+  big_o_theta?: string
+  big_o_omega?: string
+  calls?: string[]
+  is_async?: boolean
+  args?: string[]
+  decorators?: string[]
 }
 
 interface ParsedClass {
-  name:     string
-  line:     number
-  bases?:   string[]
+  name: string
+  line: number
+  bases?: string[]
   methods?: Array<{ name: string; line: number }>
-  kind?:    string
+  kind?: string
 }
 
 interface ParsedImport {
-  module:  string
-  type:    string
-  line:    number
-  name?:   string
-  alias?:  string
+  module: string
+  type: string
+  line: number
+  name?: string
+  alias?: string
 }
 
 interface WasmHint {
-  function:          string
-  line:              number
-  priority:          number
-  reasons:           string[]
-  recommendation:    string
+  function: string
+  line: number
+  priority: number
+  reasons: string[]
+  recommendation: string
   estimated_speedup: string
 }
 
 interface StaticResult {
-  filename:   string
-  language:   string
-  functions:  ParsedFunction[]
-  classes:    ParsedClass[]
-  imports:    ParsedImport[]
-  exports:    Array<{ name: string; line: number }>
+  filename: string
+  language: string
+  functions: ParsedFunction[]
+  classes: ParsedClass[]
+  imports: ParsedImport[]
+  exports: Array<{ name: string; line: number }>
   interfaces?: Array<{ name: string; line: number }>
-  types?:      Array<{ name: string; line: number }>
-  dead_code:  Array<{ type: string; name?: string; module: string; line: number }>
+  types?: Array<{ name: string; line: number }>
+  dead_code: Array<{ type: string; name?: string; module: string; line: number }>
   call_graph: Array<{ from: string; to: string }>
   wasm_hints: WasmHint[]
-  summary:    Record<string, number | string>
-  error?:     string
+  summary: Record<string, number | string>
+  error?: string
 }
 
 // ─── Colores Big O ────────────────────────────────────────────────────────────
 
 const BIG_O_COLOR: Record<string, string> = {
-  'O(1)':       'var(--ok)',
-  'O(log n)':   '#8ef5c0',
-  'O(n)':       'var(--info)',
+  'O(1)': 'var(--ok)',
+  'O(log n)': '#8ef5c0',
+  'O(n)': 'var(--info)',
   'O(n log n)': 'var(--warn)',
-  'O(n²)':      '#ff8a00',
-  'O(n³)':      'var(--err)',
-  'O(2^n)':     'var(--err)',
+  'O(n²)': '#ff8a00',
+  'O(n³)': 'var(--err)',
+  'O(2^n)': 'var(--err)',
 }
-const BIG_O_BADGE: Record<string, string> = {
-  'O(1)':       'bg-ok',
-  'O(log n)':   'bg-ok',
-  'O(n)':       'bg-info',
-  'O(n log n)': 'bg-warn',
-  'O(n²)':      'bg-hot',
-  'O(n³)':      'bg-crit',
-  'O(2^n)':     'bg-crit',
-}
-
 const LANG_ICON: Record<string, string> = {
-  python: '🐍', c: '⚙️', cpp: '⚙️',
-  javascript: '🟨', typescript: '🟦',
+  python: '🐍',
+  c: '⚙️',
+  cpp: '⚙️',
+  javascript: '🟨',
+  typescript: '🟦',
 }
 
 // ─── Estado del panel ─────────────────────────────────────────────────────────
@@ -104,9 +99,7 @@ export function renderStaticPanel(): void {
   if (!el) return
 
   const f = state.currentFile
-  const fileOpts = state.files.map(f =>
-    `<option value="${f.id}">${f.name}</option>`
-  ).join('')
+  const fileOpts = state.files.map((f) => `<option value="${f.id}">${f.name}</option>`).join('')
 
   el.innerHTML = `
     <!-- Toolbar -->
@@ -123,11 +116,12 @@ export function renderStaticPanel(): void {
 
     <!-- Contenido -->
     <div class="st-body" id="st-body">
-      ${!state.files.length
-        ? `<div class="empty"><span class="empty-icon">🔬</span>
+      ${
+        !state.files.length
+          ? `<div class="empty"><span class="empty-icon">🔬</span>
             Carga archivos .py .ts .js .c .cpp para el análisis estático
            </div>`
-        : `<div class="empty"><span class="empty-icon">🔬</span>
+          : `<div class="empty"><span class="empty-icon">🔬</span>
             Selecciona un archivo y haz clic en Analizar
            </div>`
       }
@@ -154,8 +148,11 @@ function _attachStaticEvents(el: HTMLElement): void {
 
 async function _runSingle(): Promise<void> {
   const sel = document.getElementById('st-file-sel') as HTMLSelectElement
-  const f   = state.files.find(x => x.id === sel?.value)
-  if (!f) { toast('Selecciona un archivo', 'warn'); return }
+  const f = state.files.find((x) => x.id === sel?.value)
+  if (!f) {
+    toast('Selecciona un archivo', 'warn')
+    return
+  }
 
   _setLoading(true)
   try {
@@ -174,12 +171,15 @@ async function _runSingle(): Promise<void> {
 // ─── Análisis del proyecto completo ──────────────────────────────────────────
 
 async function _runProject(): Promise<void> {
-  if (!state.files.length) { toast('Carga archivos primero', 'warn'); return }
+  if (!state.files.length) {
+    toast('Carga archivos primero', 'warn')
+    return
+  }
 
   _setLoading(true)
   try {
-    const files = state.files.map(f => ({ filename: f.name, content: f.content }))
-    const data  = await api.staticParseProject(files)
+    const files = state.files.map((f) => ({ filename: f.name, content: f.content }))
+    const data = await api.staticParseProject(files)
     _renderProjectResult(data)
     appendLog('ok', `🔬 Proyecto: ${files.length} archivos analizados`, 'be')
   } catch (e) {
@@ -233,15 +233,15 @@ function _renderResult(r: StaticResult): void {
 // ─── Secciones de render ──────────────────────────────────────────────────────
 
 function _renderSummaryCards(r: StaticResult): string {
-  const s   = r.summary as Record<string, number>
+  const s = r.summary as Record<string, number>
   const avg = typeof s.avg_complexity === 'number' ? s.avg_complexity : 0
   const avgColor = avg < 5 ? 'var(--ok)' : avg < 10 ? 'var(--warn)' : 'var(--err)'
 
   return `
   <div class="st-summary-row">
     ${sc('📐', String(s.total_functions ?? r.functions.length), 'Funciones')}
-    ${sc('🏛', String(s.total_classes ?? r.classes.length),    'Clases')}
-    ${sc('📦', String(s.total_imports ?? r.imports.length),    'Imports')}
+    ${sc('🏛', String(s.total_classes ?? r.classes.length), 'Clases')}
+    ${sc('📦', String(s.total_imports ?? r.imports.length), 'Imports')}
     ${sc('🗑️', String(s.unused_imports ?? r.dead_code.length), 'No usados', s.unused_imports ? 'var(--warn)' : undefined)}
     ${sc('🧮', avg.toFixed(1), 'CC promedio', avgColor)}
     ${sc('📏', String(s.max_loc_function ?? 0), 'Max LOC/fn')}
@@ -259,33 +259,40 @@ function sc(icon: string, val: string, label: string, color?: string): string {
 function _renderBigOTable(functions: ParsedFunction[]): string {
   if (!functions.length) return ''
 
-  const rows = functions.map(f => {
-    const color = BIG_O_COLOR[f.big_o] ?? 'var(--muted)'
-    const isHot = ['O(n²)','O(n³)','O(2^n)'].includes(f.big_o)
-    return `<tr class="${isHot ? 'bigo-hot' : ''}">
+  const rows = functions
+    .map((f) => {
+      const color = BIG_O_COLOR[f.big_o] ?? 'var(--muted)'
+      const isHot = ['O(n²)', 'O(n³)', 'O(2^n)'].includes(f.big_o)
+      return `<tr class="${isHot ? 'bigo-hot' : ''}">
       <td class="bigo-fn">${esc(f.name)}
         ${f.is_async ? '<span class="bigo-async">async</span>' : ''}
       </td>
       <td><span class="bigo-badge" style="color:${color};border-color:${color}">${esc(f.big_o)}</span></td>
+      <td class="bigo-thetaomega">${f.big_o_theta ? esc(f.big_o_theta) : '—'} / ${f.big_o_omega ? esc(f.big_o_omega) : '—'}</td>
       <td class="bigo-reason">${esc(f.big_o_reason)}</td>
       <td class="bigo-cc" style="color:${f.complexity >= 10 ? 'var(--err)' : f.complexity >= 5 ? 'var(--warn)' : 'var(--ok)'}">${f.complexity}</td>
       <td class="bigo-loc">${f.loc ?? '—'}</td>
       <td class="bigo-line">:${f.line}</td>
     </tr>`
-  }).join('')
+    })
+    .join('')
 
   return `
   <div class="metric-section">
     <div class="ms-title">📊 Algorithm Complexity — Big O</div>
-    <table class="bigo-table">
-      <thead><tr>
-        <th>Función</th><th>Big O</th><th>Razón</th>
-        <th title="Complejidad ciclomática McCabe">CC</th>
-        <th title="Líneas de código">LOC</th>
-        <th>Línea</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
+    <div class="table-scroll">
+      <table class="bigo-table">
+        <thead><tr>
+          <th>Función</th><th title="Peor caso">Big O</th>
+          <th title="Cota ajustada (Θ) / Mejor caso (Ω)">Θ / Ω</th>
+          <th>Razón</th>
+          <th title="Complejidad ciclomática McCabe">CC</th>
+          <th title="Líneas de código">LOC</th>
+          <th>Línea</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
   </div>`
 }
 
@@ -295,9 +302,10 @@ function _renderFunctions(functions: ParsedFunction[]): string {
   return `
   <div class="metric-section">
     <div class="ms-title">⚙️ Funciones (${functions.length})</div>
-    ${functions.map(f => {
-      const color = BIG_O_COLOR[f.big_o] ?? 'var(--muted)'
-      return `<div class="st-fn-item">
+    ${functions
+      .map((f) => {
+        const color = BIG_O_COLOR[f.big_o] ?? 'var(--muted)'
+        return `<div class="st-fn-item">
         <div class="st-fn-head">
           ${f.is_async ? '<span class="st-async-badge">async</span>' : ''}
           <span class="st-fn-name">${esc(f.name)}</span>
@@ -306,13 +314,14 @@ function _renderFunctions(functions: ParsedFunction[]): string {
           <span style="margin-left:auto;font-family:var(--mono);font-size:.65rem;color:${color}">${esc(f.big_o)}</span>
         </div>
         <div class="st-fn-meta">
-          <span>CC: <b style="color:${f.complexity>=10?'var(--err)':f.complexity>=5?'var(--warn)':'var(--ok)'}">${f.complexity}</b></span>
+          <span>CC: <b style="color:${f.complexity >= 10 ? 'var(--err)' : f.complexity >= 5 ? 'var(--warn)' : 'var(--ok)'}">${f.complexity}</b></span>
           ${f.loc ? `<span>LOC: ${f.loc}</span>` : ''}
           ${f.decorators?.length ? `<span>@${f.decorators.map(esc).join(' @')}</span>` : ''}
-          ${f.calls?.length ? `<span>llama: ${f.calls.slice(0,4).map(esc).join(', ')}${f.calls.length > 4 ? '…' : ''}</span>` : ''}
+          ${f.calls?.length ? `<span>llama: ${f.calls.slice(0, 4).map(esc).join(', ')}${f.calls.length > 4 ? '…' : ''}</span>` : ''}
         </div>
       </div>`
-    }).join('')}
+      })
+      .join('')}
   </div>`
 }
 
@@ -321,7 +330,9 @@ function _renderClasses(classes: ParsedClass[], lang: string): string {
   return `
   <div class="metric-section">
     <div class="ms-title">${title} (${classes.length})</div>
-    ${classes.map(c => `
+    ${classes
+      .map(
+        (c) => `
       <div class="st-class-item">
         <div class="st-fn-head">
           <span class="st-fn-name">${esc(c.name)}</span>
@@ -329,94 +340,107 @@ function _renderClasses(classes: ParsedClass[], lang: string): string {
           <span class="st-fn-line">línea ${c.line}</span>
           ${c.kind ? `<span style="font-size:.6rem;color:var(--muted);font-family:var(--mono)">${c.kind}</span>` : ''}
         </div>
-        ${c.methods?.length ? `
+        ${
+          c.methods?.length
+            ? `
           <div class="st-fn-meta">
-            Métodos: ${c.methods.map(m => `<span class="st-method-chip">${esc(m.name)}</span>`).join('')}
-          </div>` : ''}
+            Métodos: ${c.methods.map((m) => `<span class="st-method-chip">${esc(m.name)}</span>`).join('')}
+          </div>`
+            : ''
+        }
       </div>
-    `).join('')}
+    `,
+      )
+      .join('')}
   </div>`
 }
 
 function _renderImports(imports: ParsedImport[], dead: StaticResult['dead_code']): string {
-  const deadSet = new Set(dead.map(d => d.module + (d.name ?? '')))
-
   return `
   <div class="metric-section">
     <div class="ms-title">📦 Imports (${imports.length})
       ${dead.length ? `<span style="color:var(--warn);font-size:.65rem;margin-left:8px">⚠️ ${dead.length} no usados</span>` : ''}
     </div>
     <div class="st-import-grid">
-      ${imports.map(imp => {
-        const key     = imp.module + (imp.name ?? '')
-        const isDeadI = dead.some(d => d.module === imp.module)
-        return `<div class="st-import-chip ${isDeadI ? 'st-import-dead' : ''}">
-          <span class="st-import-type">${imp.type.replace('_import','').replace('esm_','')}</span>
+      ${imports
+        .map((imp) => {
+          const isDeadI = dead.some((d) => d.module === imp.module)
+          return `<div class="st-import-chip ${isDeadI ? 'st-import-dead' : ''}">
+          <span class="st-import-type">${imp.type.replace('_import', '').replace('esm_', '')}</span>
           <span>${esc(imp.module)}</span>
-          ${imp.name  ? `<span class="st-import-name">→ ${esc(imp.name)}</span>`  : ''}
+          ${imp.name ? `<span class="st-import-name">→ ${esc(imp.name)}</span>` : ''}
           ${imp.alias ? `<span class="st-import-name">as ${esc(imp.alias)}</span>` : ''}
           <span class="st-import-line">:${imp.line}</span>
           ${isDeadI ? '<span class="st-unused-badge">no usado</span>' : ''}
         </div>`
-      }).join('')}
+        })
+        .join('')}
     </div>
   </div>`
 }
 
 function _renderInterfaces(
-  interfaces: Array<{name:string;line:number}>,
-  types:      Array<{name:string;line:number}>
+  interfaces: Array<{ name: string; line: number }>,
+  types: Array<{ name: string; line: number }>,
 ): string {
   return `
   <div class="metric-section">
     <div class="ms-title">🔷 TypeScript — Interfaces & Types</div>
     <div class="st-import-grid">
-      ${interfaces.map(i =>
-        `<div class="st-import-chip" style="border-color:var(--info)">
+      ${interfaces
+        .map(
+          (i) =>
+            `<div class="st-import-chip" style="border-color:var(--info)">
           <span class="st-import-type">interface</span>
           <span style="color:var(--info)">${esc(i.name)}</span>
           <span class="st-import-line">:${i.line}</span>
-        </div>`
-      ).join('')}
-      ${types.map(t =>
-        `<div class="st-import-chip" style="border-color:var(--purple)">
+        </div>`,
+        )
+        .join('')}
+      ${types
+        .map(
+          (t) =>
+            `<div class="st-import-chip" style="border-color:var(--purple)">
           <span class="st-import-type">type</span>
           <span style="color:var(--purple)">${esc(t.name)}</span>
           <span class="st-import-line">:${t.line}</span>
-        </div>`
-      ).join('')}
+        </div>`,
+        )
+        .join('')}
     </div>
   </div>`
 }
 
-function _renderCallGraph(edges: Array<{from:string;to:string}>): string {
+function _renderCallGraph(edges: Array<{ from: string; to: string }>): string {
   return `
   <div class="metric-section">
     <div class="ms-title">🔗 Call Graph (${edges.length} conexiones)</div>
     <div class="st-callgraph">
-      ${edges.map(e =>
-        `<div class="st-cg-edge">
+      ${edges
+        .map(
+          (e) =>
+            `<div class="st-cg-edge">
           <span class="st-cg-caller">${esc(e.from)}</span>
           <span class="st-cg-arrow">→</span>
           <span class="st-cg-callee">${esc(e.to)}</span>
-        </div>`
-      ).join('')}
+        </div>`,
+        )
+        .join('')}
     </div>
   </div>`
 }
 
 function _renderWasmHints(hints: WasmHint[]): string {
   const priorityLabel = (p: number) =>
-    p >= 5 ? ['🔴 Crítico', 'var(--err)']   :
-    p >= 3 ? ['🟠 Alto',    '#ff8a00']       :
-             ['🟡 Medio',   'var(--warn)']
+    p >= 5 ? ['🔴 Crítico', 'var(--err)'] : p >= 3 ? ['🟠 Alto', '#ff8a00'] : ['🟡 Medio', 'var(--warn)']
 
   return `
   <div class="metric-section">
     <div class="ms-title">⚡ WASM / Cython — Hot Paths (${hints.length})</div>
-    ${hints.map(h => {
-      const [label, color] = priorityLabel(h.priority)
-      return `<div class="st-wasm-item">
+    ${hints
+      .map((h) => {
+        const [label, color] = priorityLabel(h.priority)
+        return `<div class="st-wasm-item">
         <div class="st-fn-head">
           <span class="st-fn-name">${esc(h.function)}</span>
           <span style="font-size:.65rem;color:${color};font-family:var(--mono)">${label}</span>
@@ -424,11 +448,12 @@ function _renderWasmHints(hints: WasmHint[]): string {
           <span style="margin-left:auto;font-size:.65rem;color:var(--ok)">⚡ ${esc(h.estimated_speedup)}</span>
         </div>
         <ul class="st-wasm-reasons">
-          ${h.reasons.map(r => `<li>${esc(r)}</li>`).join('')}
+          ${h.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}
         </ul>
         <div class="st-wasm-rec">💡 ${esc(h.recommendation)}</div>
       </div>`
-    }).join('')}
+      })
+      .join('')}
   </div>`
 }
 
@@ -436,63 +461,79 @@ function _renderWasmHints(hints: WasmHint[]): string {
 
 function _renderProjectResult(data: StaticProjectResult): void {
   const body = document.getElementById('st-body')!
-  const s    = data.summary
+  const s = data.summary
   const dist = s.big_o_distribution ?? {}
 
   const distRows = Object.entries(dist)
-    .sort((a,b) => {
-      const order = ['O(1)','O(log n)','O(n)','O(n log n)','O(n²)','O(n³)','O(2^n)']
+    .sort((a, b) => {
+      const order = ['O(1)', 'O(log n)', 'O(n)', 'O(n log n)', 'O(n²)', 'O(n³)', 'O(2^n)']
       return order.indexOf(a[0]) - order.indexOf(b[0])
     })
     .map(([bigo, count]) => {
       const color = BIG_O_COLOR[bigo] ?? 'var(--muted)'
-      const max   = Math.max(...Object.values(dist))
-      const pct   = Math.round(count / max * 100)
+      const max = Math.max(...Object.values(dist))
+      const pct = Math.round((count / max) * 100)
       return `<div class="bigo-dist-row">
         <span class="bigo-badge" style="color:${color};border-color:${color};min-width:80px">${esc(bigo)}</span>
         <div class="bigo-dist-bar-wrap">
           <div class="bigo-dist-bar" style="width:${pct}%;background:${color}"></div>
         </div>
-        <span style="font-family:var(--mono);font-size:.65rem;color:var(--muted)">${count} fn${count>1?'s':''}</span>
+        <span style="font-family:var(--mono);font-size:.65rem;color:var(--muted)">${count} fn${count > 1 ? 's' : ''}</span>
       </div>`
-    }).join('')
+    })
+    .join('')
 
   const candidates = data.wasm_candidates ?? []
 
   body.innerHTML = `
     <div class="st-summary-row">
-      ${sc('📁', String(s.total_files ?? 0),     'Archivos')}
+      ${sc('📁', String(s.total_files ?? 0), 'Archivos')}
       ${sc('⚙️', String(s.total_functions ?? 0), 'Funciones')}
-      ${sc('🏛', String(s.total_classes ?? 0),   'Clases')}
-      ${sc('📦', String(s.total_imports ?? 0),   'Imports')}
-      ${sc('🗑️', String(s.unused_imports ?? 0),  'No usados', s.unused_imports ? 'var(--warn)' : undefined)}
+      ${sc('🏛', String(s.total_classes ?? 0), 'Clases')}
+      ${sc('📦', String(s.total_imports ?? 0), 'Imports')}
+      ${sc('🗑️', String(s.unused_imports ?? 0), 'No usados', s.unused_imports ? 'var(--warn)' : undefined)}
       ${sc('⚡', String(s.wasm_candidates ?? 0), 'WASM candidates', s.wasm_candidates ? 'var(--warn)' : undefined)}
     </div>
 
-    ${distRows ? `
+    ${
+      distRows
+        ? `
     <div class="metric-section">
       <div class="ms-title">📊 Distribución Big O del proyecto</div>
       <div style="padding:4px 0">${distRows}</div>
-    </div>` : ''}
+    </div>`
+        : ''
+    }
 
-    ${candidates.length ? `
+    ${
+      candidates.length
+        ? `
     <div class="metric-section">
       <div class="ms-title">⚡ WASM / Cython candidates</div>
-      ${candidates.map(c => `
+      ${candidates
+        .map(
+          (c) => `
         <div style="margin-bottom:8px">
           <div style="font-size:.72rem;font-weight:600;color:var(--info);margin-bottom:4px">📄 ${esc(c.file)}</div>
-          ${c.hints.map(h => `
+          ${c.hints
+            .map(
+              (h) => `
             <div class="st-wasm-item" style="margin-left:12px">
               <div class="st-fn-head">
                 <span class="st-fn-name">${esc(h.function)}</span>
                 <span style="font-size:.65rem;color:var(--warn)">priority ${h.priority}</span>
                 <span style="margin-left:auto;font-size:.65rem;color:var(--ok)">⚡ ${esc(h.estimated_speedup)}</span>
               </div>
-            </div>`
-          ).join('')}
+            </div>`,
+            )
+            .join('')}
         </div>
-      `).join('')}
-    </div>` : ''}
+      `,
+        )
+        .join('')}
+    </div>`
+        : ''
+    }
 
     <div style="font-size:.7rem;color:var(--muted);text-align:center;padding:8px 0;font-family:var(--mono)">
       Haz clic en Analizar con un archivo seleccionado para ver el detalle completo
@@ -504,12 +545,13 @@ function _renderProjectResult(data: StaticProjectResult): void {
 
 function _setLoading(on: boolean): void {
   _loading = on
-  const btn  = document.getElementById('st-run-btn')
+  const btn = document.getElementById('st-run-btn')
   const body = document.getElementById('st-body')
   if (on) {
-    btn?.setAttribute('disabled','')
+    btn?.setAttribute('disabled', '')
     if (btn) btn.textContent = '⏳ Analizando...'
-    if (body) body.innerHTML = `
+    if (body)
+      body.innerHTML = `
       <div class="empty">
         <span class="empty-icon">⚙️</span>
         Parseando AST...
@@ -522,13 +564,12 @@ function _setLoading(on: boolean): void {
 
 function _showError(msg: string): void {
   const body = document.getElementById('st-body')
-  if (body) body.innerHTML = `
+  if (body)
+    body.innerHTML = `
     <div class="st-error">⚠️ ${esc(msg)}</div>`
 }
 
 function esc(s: string | number | undefined): string {
   if (s == null) return ''
-  return String(s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from main import app
@@ -17,8 +18,8 @@ client = TestClient(app)
 
 # ─── /analyze/code ────────────────────────────────────────────────────────────
 
-class TestAnalyzeCode:
 
+class TestAnalyzeCode:
     SIMPLE_PY = "def hello(world):\n    print(world)\n"
     SYNTAX_ERR = "def bad(\n    pass\n"
     TYPED_PY = '''
@@ -30,11 +31,14 @@ x = add(1, 2)
 '''
 
     def test_analyze_valid_python(self):
-        res = client.post("/analyze/code", json={
-            "filename": "hello.py",
-            "content":  self.SIMPLE_PY,
-            "tools":    ["ast"],
-        })
+        res = client.post(
+            "/analyze/code",
+            json={
+                "filename": "hello.py",
+                "content": self.SIMPLE_PY,
+                "tools": ["ast"],
+            },
+        )
         assert res.status_code == 200
         data = res.json()
         assert data["filename"] == "hello.py"
@@ -42,42 +46,54 @@ x = add(1, 2)
         assert "ast" in data["tools_used"]
 
     def test_analyze_detects_print(self):
-        res = client.post("/analyze/code", json={
-            "filename": "hello.py",
-            "content":  self.SIMPLE_PY,
-            "tools":    ["ast"],
-        })
+        res = client.post(
+            "/analyze/code",
+            json={
+                "filename": "hello.py",
+                "content": self.SIMPLE_PY,
+                "tools": ["ast"],
+            },
+        )
         issues = res.json()["issues"]
         print_issues = [i for i in issues if i["code"] == "C002"]
         assert len(print_issues) >= 1
 
     def test_analyze_detects_missing_docstring(self):
-        res = client.post("/analyze/code", json={
-            "filename": "hello.py",
-            "content":  self.SIMPLE_PY,
-            "tools":    ["ast"],
-        })
+        res = client.post(
+            "/analyze/code",
+            json={
+                "filename": "hello.py",
+                "content": self.SIMPLE_PY,
+                "tools": ["ast"],
+            },
+        )
         issues = res.json()["issues"]
         doc_issues = [i for i in issues if i["code"] == "C001"]
         assert len(doc_issues) >= 1
 
     def test_analyze_no_docstring_warning_for_documented(self):
-        res = client.post("/analyze/code", json={
-            "filename": "good.py",
-            "content":  self.TYPED_PY,
-            "tools":    ["ast"],
-        })
+        res = client.post(
+            "/analyze/code",
+            json={
+                "filename": "good.py",
+                "content": self.TYPED_PY,
+                "tools": ["ast"],
+            },
+        )
         issues = res.json()["issues"]
         # add() tiene docstring → no debe generar C001 para esa función
-        doc_issues = [i for i in issues if i["code"] == "C001" and "add" in i.get("message","")]
+        doc_issues = [i for i in issues if i["code"] == "C001" and "add" in i.get("message", "")]
         assert len(doc_issues) == 0
 
     def test_analyze_syntax_error(self):
-        res = client.post("/analyze/code", json={
-            "filename": "bad.py",
-            "content":  self.SYNTAX_ERR,
-            "tools":    ["ast"],
-        })
+        res = client.post(
+            "/analyze/code",
+            json={
+                "filename": "bad.py",
+                "content": self.SYNTAX_ERR,
+                "tools": ["ast"],
+            },
+        )
         assert res.status_code == 200
         issues = res.json()["issues"]
         error_issues = [i for i in issues if i["severity"] == "error"]
@@ -86,76 +102,112 @@ x = add(1, 2)
 
     def test_analyze_generic_except(self):
         code = "try:\n    pass\nexcept:\n    pass\n"
-        res = client.post("/analyze/code", json={
-            "filename": "bad.py", "content": code, "tools": ["ast"],
-        })
+        res = client.post(
+            "/analyze/code",
+            json={
+                "filename": "bad.py",
+                "content": code,
+                "tools": ["ast"],
+            },
+        )
         issues = res.json()["issues"]
         assert any(i["code"] == "W002" for i in issues)
 
     def test_analyze_global_variable(self):
         code = "global x\nx = 1\n"
-        res = client.post("/analyze/code", json={
-            "filename": "bad.py", "content": code, "tools": ["ast"],
-        })
+        res = client.post(
+            "/analyze/code",
+            json={
+                "filename": "bad.py",
+                "content": code,
+                "tools": ["ast"],
+            },
+        )
         issues = res.json()["issues"]
         assert any(i["code"] == "W003" for i in issues)
 
     def test_analyze_long_line(self):
         long_line = "x = " + "a" * 130 + "\n"
-        res = client.post("/analyze/code", json={
-            "filename": "bad.py", "content": long_line, "tools": ["ast"],
-        })
+        res = client.post(
+            "/analyze/code",
+            json={
+                "filename": "bad.py",
+                "content": long_line,
+                "tools": ["ast"],
+            },
+        )
         issues = res.json()["issues"]
         assert any(i["code"] == "E501" for i in issues)
 
     def test_analyze_json_valid(self):
-        res = client.post("/analyze/code", json={
-            "filename": "data.json",
-            "content":  '{"key": "value"}',
-            "tools":    ["ast"],
-        })
+        res = client.post(
+            "/analyze/code",
+            json={
+                "filename": "data.json",
+                "content": '{"key": "value"}',
+                "tools": ["ast"],
+            },
+        )
         assert res.status_code == 200
         assert res.json()["issues"] == []
 
     def test_analyze_json_invalid(self):
-        res = client.post("/analyze/code", json={
-            "filename": "bad.json",
-            "content":  '{bad json}',
-            "tools":    ["ast"],
-        })
+        res = client.post(
+            "/analyze/code",
+            json={
+                "filename": "bad.json",
+                "content": "{bad json}",
+                "tools": ["ast"],
+            },
+        )
         assert res.status_code == 200
         issues = res.json()["issues"]
         assert any(i["tool"] == "json" for i in issues)
 
     def test_analyze_issues_sorted_by_line(self):
         code = "\n".join(["def f():", "    print(1)", "    print(2)", "    print(3)"])
-        res = client.post("/analyze/code", json={
-            "filename": "f.py", "content": code, "tools": ["ast"],
-        })
+        res = client.post(
+            "/analyze/code",
+            json={
+                "filename": "f.py",
+                "content": code,
+                "tools": ["ast"],
+            },
+        )
         issues = [i for i in res.json()["issues"] if i.get("line")]
         lines = [i["line"] for i in issues]
         assert lines == sorted(lines)
 
     def test_analyze_result_has_all_keys(self):
-        res = client.post("/analyze/code", json={
-            "filename": "x.py", "content": "x = 1\n", "tools": ["ast"],
-        })
+        res = client.post(
+            "/analyze/code",
+            json={
+                "filename": "x.py",
+                "content": "x = 1\n",
+                "tools": ["ast"],
+            },
+        )
         data = res.json()
-        for key in ("filename","ts","issues","metrics","complexity","maintainability","raw_stats","tools_used"):
+        for key in ("filename", "ts", "issues", "metrics", "complexity", "maintainability", "raw_stats", "tools_used"):
             assert key in data, f"Falta clave: {key}"
 
     def test_analyze_empty_content(self):
-        res = client.post("/analyze/code", json={
-            "filename": "empty.py", "content": "", "tools": ["ast"],
-        })
+        res = client.post(
+            "/analyze/code",
+            json={
+                "filename": "empty.py",
+                "content": "",
+                "tools": ["ast"],
+            },
+        )
         assert res.status_code == 200
         assert res.json()["issues"] == []
 
 
 # ─── /analyze/ml ──────────────────────────────────────────────────────────────
 
-class TestAnalyzeML:
 
+class TestAnalyzeML:
     SKLEARN_CODE = """
 import numpy as np
 import pandas as pd
@@ -215,53 +267,77 @@ X_train, X_test = train_test_split(X)
 """
 
     def test_ml_detects_libraries(self):
-        res = client.post("/analyze/ml", json={
-            "filename": "model.py", "content": self.SKLEARN_CODE,
-        })
+        res = client.post(
+            "/analyze/ml",
+            json={
+                "filename": "model.py",
+                "content": self.SKLEARN_CODE,
+            },
+        )
         assert res.status_code == 200
         data = res.json()
-        lib_names = [l["name"] for l in data["libraries"]]
-        assert "NumPy"       in lib_names
-        assert "Pandas"      in lib_names
+        lib_names = [lib["name"] for lib in data["libraries"]]
+        assert "NumPy" in lib_names
+        assert "Pandas" in lib_names
         assert "Scikit-learn" in lib_names
 
     def test_ml_detects_pipeline_stages(self):
-        res = client.post("/analyze/ml", json={
-            "filename": "model.py", "content": self.SKLEARN_CODE,
-        })
+        res = client.post(
+            "/analyze/ml",
+            json={
+                "filename": "model.py",
+                "content": self.SKLEARN_CODE,
+            },
+        )
         stage_ids = [s["id"] for s in res.json()["pipeline"]]
-        assert "carga_datos"   in stage_ids
-        assert "split"         in stage_ids
-        assert "escalado"      in stage_ids
+        assert "carga_datos" in stage_ids
+        assert "split" in stage_ids
+        assert "escalado" in stage_ids
         assert "entrenamiento" in stage_ids
-        assert "prediccion"    in stage_ids
-        assert "evaluacion"    in stage_ids
+        assert "prediccion" in stage_ids
+        assert "evaluacion" in stage_ids
 
     def test_ml_detects_random_forest_model(self):
-        res = client.post("/analyze/ml", json={
-            "filename": "model.py", "content": self.SKLEARN_CODE,
-        })
+        res = client.post(
+            "/analyze/ml",
+            json={
+                "filename": "model.py",
+                "content": self.SKLEARN_CODE,
+            },
+        )
         model_names = [m["name"] for m in res.json()["models"]]
         assert "RandomForestClassifier" in model_names
 
     def test_ml_detects_metrics(self):
-        res = client.post("/analyze/ml", json={
-            "filename": "model.py", "content": self.SKLEARN_CODE,
-        })
+        res = client.post(
+            "/analyze/ml",
+            json={
+                "filename": "model.py",
+                "content": self.SKLEARN_CODE,
+            },
+        )
         metrics = res.json()["metrics"]
         assert "accuracy" in metrics
 
     def test_ml_score_range(self):
-        res = client.post("/analyze/ml", json={
-            "filename": "model.py", "content": self.SKLEARN_CODE,
-        })
+        res = client.post(
+            "/analyze/ml",
+            json={
+                "filename": "model.py",
+                "content": self.SKLEARN_CODE,
+            },
+        )
         score = res.json()["score"]
         assert 0 <= score <= 100
 
     def test_ml_detects_data_leakage(self):
-        res = client.post("/analyze/ml", json={
-            "filename": "bad.py", "content": self.LEAKAGE_CODE,
-        })
+        res = client.post(
+            "/analyze/ml",
+            json={
+                "filename": "bad.py",
+                "content": self.LEAKAGE_CODE,
+            },
+        )
         issues = res.json()["issues"]
         leakage = [i for i in issues if i.get("category") == "data_leakage"]
         assert len(leakage) >= 1
@@ -269,35 +345,44 @@ X_train, X_test = train_test_split(X)
 
     def test_ml_pytorch_no_zero_grad_issue(self):
         bad_torch = self.TORCH_CODE.replace("optimizer.zero_grad()", "")
-        res = client.post("/analyze/ml", json={
-            "filename": "net.py", "content": bad_torch,
-        })
+        res = client.post(
+            "/analyze/ml",
+            json={
+                "filename": "net.py",
+                "content": bad_torch,
+            },
+        )
         issues = res.json()["issues"]
         pytorch_issues = [i for i in issues if i.get("category") == "pytorch"]
         assert any("zero_grad" in i["message"] for i in pytorch_issues)
 
     def test_ml_pytorch_with_zero_grad_no_issue(self):
-        res = client.post("/analyze/ml", json={
-            "filename": "net.py", "content": self.TORCH_CODE,
-        })
+        res = client.post(
+            "/analyze/ml",
+            json={
+                "filename": "net.py",
+                "content": self.TORCH_CODE,
+            },
+        )
         issues = res.json()["issues"]
-        zero_grad_issues = [
-            i for i in issues
-            if i.get("category") == "pytorch" and "zero_grad" in i.get("message","")
-        ]
+        zero_grad_issues = [i for i in issues if i.get("category") == "pytorch" and "zero_grad" in i.get("message", "")]
         assert len(zero_grad_issues) == 0
 
     def test_ml_no_random_state_warning(self):
         code = "from sklearn.model_selection import train_test_split\nX_train, X_test = train_test_split(X)\n"
         res = client.post("/analyze/ml", json={"filename": "m.py", "content": code})
         issues = res.json()["issues"]
-        rs_issues = [i for i in issues if "random_state" in i.get("message","")]
+        rs_issues = [i for i in issues if "random_state" in i.get("message", "")]
         assert len(rs_issues) >= 1
 
     def test_ml_generates_mermaid_diagram(self):
-        res = client.post("/analyze/ml", json={
-            "filename": "model.py", "content": self.SKLEARN_CODE,
-        })
+        res = client.post(
+            "/analyze/ml",
+            json={
+                "filename": "model.py",
+                "content": self.SKLEARN_CODE,
+            },
+        )
         diagram = res.json()["diagram"]
         assert diagram.startswith("flowchart TD")
         assert "Pipeline" in diagram
@@ -307,14 +392,29 @@ X_train, X_test = train_test_split(X)
         assert res.status_code == 200
         data = res.json()
         assert data["libraries"] == []
-        assert data["pipeline"]  == []
+        assert data["pipeline"] == []
 
     def test_ml_result_has_all_keys(self):
-        res = client.post("/analyze/ml", json={
-            "filename": "m.py", "content": self.SKLEARN_CODE,
-        })
+        res = client.post(
+            "/analyze/ml",
+            json={
+                "filename": "m.py",
+                "content": self.SKLEARN_CODE,
+            },
+        )
         data = res.json()
-        for key in ("filename","ts","libraries","pipeline","issues","metrics","models","diagram","score","suggestions"):
+        for key in (
+            "filename",
+            "ts",
+            "libraries",
+            "pipeline",
+            "issues",
+            "metrics",
+            "models",
+            "diagram",
+            "score",
+            "suggestions",
+        ):
             assert key in data, f"Falta clave: {key}"
 
     def test_ml_icecream_warning(self):
@@ -354,16 +454,24 @@ X_train, X_test = train_test_split(X)
         assert len(polars_issues) >= 1
 
     def test_ml_pipeline_sorted_by_line(self):
-        res = client.post("/analyze/ml", json={
-            "filename": "model.py", "content": self.SKLEARN_CODE,
-        })
+        res = client.post(
+            "/analyze/ml",
+            json={
+                "filename": "model.py",
+                "content": self.SKLEARN_CODE,
+            },
+        )
         lines = [s["line"] for s in res.json()["pipeline"]]
         assert lines == sorted(lines)
 
     def test_ml_suggestions_list(self):
-        res = client.post("/analyze/ml", json={
-            "filename": "model.py", "content": self.SKLEARN_CODE,
-        })
+        res = client.post(
+            "/analyze/ml",
+            json={
+                "filename": "model.py",
+                "content": self.SKLEARN_CODE,
+            },
+        )
         suggestions = res.json()["suggestions"]
         assert isinstance(suggestions, list)
         assert len(suggestions) <= 8
@@ -371,8 +479,8 @@ X_train, X_test = train_test_split(X)
 
 # ─── /analyze/diagram ─────────────────────────────────────────────────────────
 
-class TestAnalyzeDiagram:
 
+class TestAnalyzeDiagram:
     SIMPLE_CODE = """
 def load_data(path):
     \"\"\"Carga datos.\"\"\"
@@ -398,119 +506,171 @@ class Dog(Animal):
 """
 
     def test_flowchart_default(self):
-        res = client.post("/analyze/diagram", json={
-            "filename": "script.py", "content": self.SIMPLE_CODE,
-            "diagram_type": "flowchart",
-        })
+        res = client.post(
+            "/analyze/diagram",
+            json={
+                "filename": "script.py",
+                "content": self.SIMPLE_CODE,
+                "diagram_type": "flowchart",
+            },
+        )
         assert res.status_code == 200
         data = res.json()
         assert data["mermaid"].startswith("flowchart TD")
         assert "load_data" in data["mermaid"]
-        assert "process"   in data["mermaid"]
+        assert "process" in data["mermaid"]
 
     def test_flowchart_async_function_styled(self):
-        res = client.post("/analyze/diagram", json={
-            "filename": "script.py", "content": self.SIMPLE_CODE,
-            "diagram_type": "flowchart",
-        })
+        res = client.post(
+            "/analyze/diagram",
+            json={
+                "filename": "script.py",
+                "content": self.SIMPLE_CODE,
+                "diagram_type": "flowchart",
+            },
+        )
         mermaid = res.json()["mermaid"]
         # fetch es async → debe tener estilo morado (#b87dff)
         assert "#b87dff" in mermaid
 
     def test_flowchart_empty_file(self):
-        res = client.post("/analyze/diagram", json={
-            "filename": "empty.py", "content": "",
-            "diagram_type": "flowchart",
-        })
+        res = client.post(
+            "/analyze/diagram",
+            json={
+                "filename": "empty.py",
+                "content": "",
+                "diagram_type": "flowchart",
+            },
+        )
         assert res.status_code == 200
         assert "Sin funciones" in res.json()["mermaid"]
 
     def test_flowchart_syntax_error(self):
-        res = client.post("/analyze/diagram", json={
-            "filename": "bad.py", "content": "def bad(\n",
-            "diagram_type": "flowchart",
-        })
+        res = client.post(
+            "/analyze/diagram",
+            json={
+                "filename": "bad.py",
+                "content": "def bad(\n",
+                "diagram_type": "flowchart",
+            },
+        )
         assert res.status_code == 200
         assert "SyntaxError" in res.json()["mermaid"]
 
     def test_callgraph_detects_calls(self):
         code = "def a():\n    b()\n\ndef b():\n    pass\n"
-        res = client.post("/analyze/diagram", json={
-            "filename": "calls.py", "content": code,
-            "diagram_type": "callgraph",
-        })
+        res = client.post(
+            "/analyze/diagram",
+            json={
+                "filename": "calls.py",
+                "content": code,
+                "diagram_type": "callgraph",
+            },
+        )
         mermaid = res.json()["mermaid"]
         assert "graph LR" in mermaid
         assert "llama" in mermaid
 
     def test_callgraph_no_functions(self):
-        res = client.post("/analyze/diagram", json={
-            "filename": "x.py", "content": "x = 1\n",
-            "diagram_type": "callgraph",
-        })
+        res = client.post(
+            "/analyze/diagram",
+            json={
+                "filename": "x.py",
+                "content": "x = 1\n",
+                "diagram_type": "callgraph",
+            },
+        )
         assert "Sin funciones" in res.json()["mermaid"]
 
     def test_classes_diagram(self):
-        res = client.post("/analyze/diagram", json={
-            "filename": "classes.py", "content": self.CLASS_CODE,
-            "diagram_type": "classes",
-        })
+        res = client.post(
+            "/analyze/diagram",
+            json={
+                "filename": "classes.py",
+                "content": self.CLASS_CODE,
+                "diagram_type": "classes",
+            },
+        )
         mermaid = res.json()["mermaid"]
         assert "classDiagram" in mermaid
         assert "Animal" in mermaid
-        assert "Dog"    in mermaid
+        assert "Dog" in mermaid
         assert "hereda" in mermaid
 
     def test_classes_attributes(self):
-        res = client.post("/analyze/diagram", json={
-            "filename": "classes.py", "content": self.CLASS_CODE,
-            "diagram_type": "classes",
-        })
+        res = client.post(
+            "/analyze/diagram",
+            json={
+                "filename": "classes.py",
+                "content": self.CLASS_CODE,
+                "diagram_type": "classes",
+            },
+        )
         mermaid = res.json()["mermaid"]
-        assert "name" in mermaid    # atributo de instancia self.name
+        assert "name" in mermaid  # atributo de instancia self.name
 
     def test_sequence_diagram(self):
-        res = client.post("/analyze/diagram", json={
-            "filename": "seq.py", "content": self.SIMPLE_CODE,
-            "diagram_type": "sequence",
-        })
+        res = client.post(
+            "/analyze/diagram",
+            json={
+                "filename": "seq.py",
+                "content": self.SIMPLE_CODE,
+                "diagram_type": "sequence",
+            },
+        )
         mermaid = res.json()["mermaid"]
         assert "sequenceDiagram" in mermaid
-        assert "Usuario"         in mermaid
-        assert "invocar"         in mermaid
+        assert "Usuario" in mermaid
+        assert "invocar" in mermaid
 
     def test_sequence_single_function(self):
         code = "def only():\n    pass\n"
-        res = client.post("/analyze/diagram", json={
-            "filename": "one.py", "content": code,
-            "diagram_type": "sequence",
-        })
+        res = client.post(
+            "/analyze/diagram",
+            json={
+                "filename": "one.py",
+                "content": code,
+                "diagram_type": "sequence",
+            },
+        )
         mermaid = res.json()["mermaid"]
         assert "sequenceDiagram" in mermaid
 
     def test_generic_js_diagram(self):
         code = "function hello() {}\nconst world = () => {}\n"
-        res = client.post("/analyze/diagram", json={
-            "filename": "app.js", "content": code,
-            "diagram_type": "flowchart",
-        })
+        res = client.post(
+            "/analyze/diagram",
+            json={
+                "filename": "app.js",
+                "content": code,
+                "diagram_type": "flowchart",
+            },
+        )
         mermaid = res.json()["mermaid"]
         assert "flowchart TD" in mermaid
         assert "hello" in mermaid
 
     def test_generic_unknown_ext(self):
-        res = client.post("/analyze/diagram", json={
-            "filename": "file.rb", "content": "def method; end\n",
-            "diagram_type": "flowchart",
-        })
+        res = client.post(
+            "/analyze/diagram",
+            json={
+                "filename": "file.rb",
+                "content": "def method; end\n",
+                "diagram_type": "flowchart",
+            },
+        )
         assert res.status_code == 200
         assert "flowchart TD" in res.json()["mermaid"]
 
     def test_diagram_result_has_all_keys(self):
-        res = client.post("/analyze/diagram", json={
-            "filename": "x.py", "content": "x=1\n",
-            "diagram_type": "flowchart",
-        })
+        res = client.post(
+            "/analyze/diagram",
+            json={
+                "filename": "x.py",
+                "content": "x=1\n",
+                "diagram_type": "flowchart",
+            },
+        )
         data = res.json()
         for key in ("filename", "diagram_type", "mermaid", "ts"):
             assert key in data
@@ -518,33 +678,43 @@ class Dog(Animal):
 
 # ─── /analyze/api (check externo) ─────────────────────────────────────────────
 
-class TestCheckApi:
 
+class TestCheckApi:
     def test_check_invalid_url_returns_down(self):
-        res = client.post("/analyze/api", json={
-            "urls": ["http://localhost:19999/nonexistent"],
-            "timeout": 2,
-        })
+        res = client.post(
+            "/analyze/api",
+            json={
+                "urls": ["http://localhost:19999/nonexistent"],
+                "timeout": 2,
+            },
+        )
         assert res.status_code == 200
         data = res.json()
         assert len(data["results"]) == 1
         assert data["results"][0]["status"] in ("down", "error", "unknown")
 
     def test_check_multiple_urls(self):
-        res = client.post("/analyze/api", json={
-            "urls": [
-                "http://localhost:19999/a",
-                "http://localhost:19999/b",
-            ],
-            "timeout": 1,
-        })
+        res = client.post(
+            "/analyze/api",
+            json={
+                "urls": [
+                    "http://localhost:19999/a",
+                    "http://localhost:19999/b",
+                ],
+                "timeout": 1,
+            },
+        )
         assert res.status_code == 200
         assert len(res.json()["results"]) == 2
 
     def test_check_result_has_required_fields(self):
-        res = client.post("/analyze/api", json={
-            "urls": ["http://localhost:19999/x"], "timeout": 1,
-        })
+        res = client.post(
+            "/analyze/api",
+            json={
+                "urls": ["http://localhost:19999/x"],
+                "timeout": 1,
+            },
+        )
         result = res.json()["results"][0]
         for field in ("url", "status", "code", "ms", "error", "ts"):
             assert field in result
@@ -552,8 +722,8 @@ class TestCheckApi:
 
 # ─── /analyze/logs-analyze ────────────────────────────────────────────────────
 
-class TestAnalyzeLogs:
 
+class TestAnalyzeLogs:
     LOG_CONTENT = """2024-01-01 10:00:00 INFO Server started
 2024-01-01 10:01:00 ERROR Connection refused
 2024-01-01 10:02:00 WARNING Deprecated API used
@@ -562,52 +732,70 @@ class TestAnalyzeLogs:
 """
 
     def test_analyze_logs_detects_errors(self):
-        res = client.post("/analyze/logs-analyze", json={
-            "files": [{"name": "app.log", "content": self.LOG_CONTENT}],
-        })
+        res = client.post(
+            "/analyze/logs-analyze",
+            json={
+                "files": [{"name": "app.log", "content": self.LOG_CONTENT}],
+            },
+        )
         assert res.status_code == 200
         data = res.json()
         assert len(data["errors"]) >= 2
 
     def test_analyze_logs_detects_warnings(self):
-        res = client.post("/analyze/logs-analyze", json={
-            "files": [{"name": "app.log", "content": self.LOG_CONTENT}],
-        })
+        res = client.post(
+            "/analyze/logs-analyze",
+            json={
+                "files": [{"name": "app.log", "content": self.LOG_CONTENT}],
+            },
+        )
         assert len(res.json()["warnings"]) >= 1
 
     def test_analyze_logs_summary(self):
-        res = client.post("/analyze/logs-analyze", json={
-            "files": [{"name": "app.log", "content": self.LOG_CONTENT}],
-        })
+        res = client.post(
+            "/analyze/logs-analyze",
+            json={
+                "files": [{"name": "app.log", "content": self.LOG_CONTENT}],
+            },
+        )
         summary = res.json()["summary"]
         assert "app.log" in summary
         assert summary["app.log"]["total_lines"] == 5
         assert summary["app.log"]["counts"]["error"] >= 2
 
     def test_analyze_multiple_log_files(self):
-        res = client.post("/analyze/logs-analyze", json={
-            "files": [
-                {"name": "a.log", "content": "ERROR boom\n"},
-                {"name": "b.log", "content": "INFO ok\n"},
-            ],
-        })
+        res = client.post(
+            "/analyze/logs-analyze",
+            json={
+                "files": [
+                    {"name": "a.log", "content": "ERROR boom\n"},
+                    {"name": "b.log", "content": "INFO ok\n"},
+                ],
+            },
+        )
         assert res.status_code == 200
         summary = res.json()["summary"]
         assert "a.log" in summary
         assert "b.log" in summary
 
     def test_analyze_empty_log(self):
-        res = client.post("/analyze/logs-analyze", json={
-            "files": [{"name": "empty.log", "content": ""}],
-        })
+        res = client.post(
+            "/analyze/logs-analyze",
+            json={
+                "files": [{"name": "empty.log", "content": ""}],
+            },
+        )
         assert res.status_code == 200
-        assert res.json()["errors"]   == []
+        assert res.json()["errors"] == []
         assert res.json()["warnings"] == []
 
     def test_analyze_logs_result_keys(self):
-        res = client.post("/analyze/logs-analyze", json={
-            "files": [{"name": "x.log", "content": "ERROR x\n"}],
-        })
+        res = client.post(
+            "/analyze/logs-analyze",
+            json={
+                "files": [{"name": "x.log", "content": "ERROR x\n"}],
+            },
+        )
         data = res.json()
         for key in ("errors", "warnings", "summary", "ts"):
             assert key in data
@@ -615,13 +803,13 @@ class TestAnalyzeLogs:
 
 # ─── /logs y /api/history ─────────────────────────────────────────────────────
 
-class TestLogsHistory:
 
+class TestLogsHistory:
     def test_get_logs(self):
         res = client.get("/logs")
         assert res.status_code == 200
         data = res.json()
-        assert "logs"  in data
+        assert "logs" in data
         assert "total" in data
         assert isinstance(data["logs"], list)
 

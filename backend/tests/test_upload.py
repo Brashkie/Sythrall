@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 # Importar la app
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from main import app
@@ -21,6 +22,7 @@ client = TestClient(app)
 
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
+
 
 def _make_zip(files: dict[str, str]) -> bytes:
     """Crea un ZIP en memoria con los archivos especificados."""
@@ -32,6 +34,7 @@ def _make_zip(files: dict[str, str]) -> bytes:
 
 
 # ─── Health ───────────────────────────────────────────────────────────────────
+
 
 class TestHealth:
     def test_health_ok(self):
@@ -56,6 +59,7 @@ class TestHealth:
 
 # ─── Upload files ─────────────────────────────────────────────────────────────
 
+
 class TestUploadFiles:
     def test_upload_single_file(self):
         res = client.post(
@@ -73,7 +77,7 @@ class TestUploadFiles:
         res = client.post(
             "/api/upload/files",
             files=[
-                ("files", ("app.py",  b"x = 1",        "text/plain")),
+                ("files", ("app.py", b"x = 1", "text/plain")),
                 ("files", ("main.ts", b"const x = 1;", "text/plain")),
             ],
         )
@@ -81,7 +85,7 @@ class TestUploadFiles:
         data = res.json()
         assert data["total_files"] == 2
         children_names = {c["name"] for c in data["tree"]["children"]}
-        assert "app.py"  in children_names
+        assert "app.py" in children_names
         assert "main.ts" in children_names
 
     def test_upload_with_project_name(self):
@@ -113,14 +117,15 @@ class TestUploadFiles:
 
 # ─── Upload folder ────────────────────────────────────────────────────────────
 
+
 class TestUploadFolder:
     def test_upload_folder_structure(self):
         res = client.post(
             "/api/upload/folder",
             files=[
-                ("files", ("src/app.ts",              b"export {}",  "text/plain")),
-                ("files", ("src/components/btn.ts",   b"export {}",  "text/plain")),
-                ("files", ("package.json",             b"{}",         "text/plain")),
+                ("files", ("src/app.ts", b"export {}", "text/plain")),
+                ("files", ("src/components/btn.ts", b"export {}", "text/plain")),
+                ("files", ("package.json", b"{}", "text/plain")),
             ],
         )
         assert res.status_code == 200
@@ -140,13 +145,16 @@ class TestUploadFolder:
 
 # ─── Upload ZIP ───────────────────────────────────────────────────────────────
 
+
 class TestUploadZip:
     def test_upload_valid_zip(self):
-        zip_bytes = _make_zip({
-            "app.py":             "print('hello')",
-            "src/utils.py":       "def helper(): pass",
-            "requirements.txt":   "fastapi\nuvicorn",
-        })
+        zip_bytes = _make_zip(
+            {
+                "app.py": "print('hello')",
+                "src/utils.py": "def helper(): pass",
+                "requirements.txt": "fastapi\nuvicorn",
+            }
+        )
         res = client.post(
             "/api/upload/zip",
             files=[("file", ("project.zip", zip_bytes, "application/zip"))],
@@ -176,10 +184,12 @@ class TestUploadZip:
         assert res.status_code == 400
 
     def test_upload_zip_skips_blocked_extensions(self):
-        zip_bytes = _make_zip({
-            "good.py":  "print('ok')",
-            "bad.exe":  "\x4d\x5a",
-        })
+        zip_bytes = _make_zip(
+            {
+                "good.py": "print('ok')",
+                "bad.exe": "\x4d\x5a",
+            }
+        )
         res = client.post(
             "/api/upload/zip",
             files=[("file", ("mixed.zip", zip_bytes, "application/zip"))],
@@ -187,7 +197,7 @@ class TestUploadZip:
         assert res.status_code == 200
         data = res.json()
         assert data["extracted"] == 1  # Solo good.py
-        assert data["skipped"] >= 1    # bad.exe fue bloqueado
+        assert data["skipped"] >= 1  # bad.exe fue bloqueado
 
     def test_upload_zip_invalid_content_returns_400(self):
         res = client.post(
@@ -199,13 +209,14 @@ class TestUploadZip:
 
 # ─── Project tree ─────────────────────────────────────────────────────────────
 
+
 class TestProjectTree:
     def _create_project(self) -> str:
         res = client.post(
             "/api/upload/files",
             files=[
-                ("files", ("app.py",   b"x = 1", "text/plain")),
-                ("files", ("main.ts",  b"y = 2", "text/plain")),
+                ("files", ("app.py", b"x = 1", "text/plain")),
+                ("files", ("main.ts", b"y = 2", "text/plain")),
             ],
         )
         return res.json()["project_id"]
@@ -239,6 +250,7 @@ class TestProjectTree:
 
 
 # ─── Projects list ────────────────────────────────────────────────────────────
+
 
 class TestProjectsList:
     def test_list_projects(self):
@@ -278,6 +290,7 @@ class TestProjectsList:
 
 # ─── ProjectService unit tests ────────────────────────────────────────────────
 
+
 class TestProjectService:
     def test_build_tree_structure(self, tmp_path: Path):
         from services.project_service import build_tree
@@ -296,10 +309,12 @@ class TestProjectService:
     def test_extract_zip_extracts_files(self, tmp_path: Path):
         from services.project_service import extract_zip
 
-        zip_bytes = _make_zip({
-            "hello.py": "print('hello')",
-            "nested/world.ts": "export {}",
-        })
+        zip_bytes = _make_zip(
+            {
+                "hello.py": "print('hello')",
+                "nested/world.ts": "export {}",
+            }
+        )
 
         result = extract_zip(zip_bytes, tmp_path)
 
@@ -311,10 +326,12 @@ class TestProjectService:
     def test_extract_zip_blocks_executables(self, tmp_path: Path):
         from services.project_service import extract_zip
 
-        zip_bytes = _make_zip({
-            "ok.py":  "pass",
-            "bad.exe": "\x4d\x5a",
-        })
+        zip_bytes = _make_zip(
+            {
+                "ok.py": "pass",
+                "bad.exe": "\x4d\x5a",
+            }
+        )
 
         result = extract_zip(zip_bytes, tmp_path)
         assert result["extracted"] == 1
@@ -336,6 +353,6 @@ class TestProjectService:
     def test_fmt_size(self):
         from services.project_service import _fmt_size
 
-        assert "B"  in _fmt_size(500)
+        assert "B" in _fmt_size(500)
         assert "KB" in _fmt_size(2048)
         assert "MB" in _fmt_size(2 * 1024 * 1024)

@@ -4,37 +4,57 @@
 // ══════════════════════════════════════════
 // panels/upload.ts
 
+import type { ProjectSummary, ProjectTreeNode, UploadProgress, UploadResult } from '../api/client'
 import { api } from '../api/client'
 import { appendLog, toast } from '../utils/helpers'
-import type { UploadResult, ProjectSummary, ProjectTreeNode, UploadProgress } from '../api/client'
 
 // ─── Estado del panel ─────────────────────────────────────────────────────────
 
 type UploadTab = 'files' | 'folder' | 'zip'
 
 interface UploadPanelState {
-  activeTab:    UploadTab
+  activeTab: UploadTab
   pendingFiles: File[]
-  pendingZip:   File | null
-  projectName:  string
-  isUploading:  boolean
-  uploadPct:    number
-  projects:     ProjectSummary[]
+  pendingZip: File | null
+  projectName: string
+  isUploading: boolean
+  uploadPct: number
+  projects: ProjectSummary[]
   activeResult: UploadResult | null
 }
 
 const st: UploadPanelState = {
-  activeTab: 'files', pendingFiles: [], pendingZip: null,
-  projectName: '', isUploading: false, uploadPct: 0,
-  projects: [], activeResult: null,
+  activeTab: 'files',
+  pendingFiles: [],
+  pendingZip: null,
+  projectName: '',
+  isUploading: false,
+  uploadPct: 0,
+  projects: [],
+  activeResult: null,
 }
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
 
 const TABS: Record<UploadTab, { icon: string; label: string; hint: string; dropText: string }> = {
-  files:  { icon: '📄', label: 'Archivos', hint: 'Cualquier extensión · Máx 50 MB c/u',   dropText: 'Arrastra archivos aquí'   },
-  folder: { icon: '📁', label: 'Carpeta',  hint: 'Se preserva la estructura de carpetas', dropText: 'Arrastra una carpeta aquí' },
-  zip:    { icon: '🗜️', label: 'ZIP',      hint: 'Se descomprime automáticamente · Máx 200 MB', dropText: 'Arrastra un .zip aquí' },
+  files: {
+    icon: '📄',
+    label: 'Archivos',
+    hint: 'Cualquier extensión · Máx 50 MB c/u',
+    dropText: 'Arrastra archivos aquí',
+  },
+  folder: {
+    icon: '📁',
+    label: 'Carpeta',
+    hint: 'Se preserva la estructura de carpetas',
+    dropText: 'Arrastra una carpeta aquí',
+  },
+  zip: {
+    icon: '🗜️',
+    label: 'ZIP',
+    hint: 'Se descomprime automáticamente · Máx 200 MB',
+    dropText: 'Arrastra un .zip aquí',
+  },
 }
 
 // ─── Render principal ─────────────────────────────────────────────────────────
@@ -50,22 +70,29 @@ export function renderUploadPanel(): void {
   el.innerHTML = `
     <!-- Tabs -->
     <div class="up-tabs">
-      ${(Object.entries(TABS) as [UploadTab, typeof tab][]).map(([id, t]) => `
+      ${(Object.entries(TABS) as [UploadTab, typeof tab][])
+        .map(
+          ([id, t]) => `
         <button class="up-tab ${st.activeTab === id ? 'active' : ''}" data-up-tab="${id}">
           ${t.icon} ${t.label}
-        </button>`).join('')}
+        </button>`,
+        )
+        .join('')}
     </div>
 
     <!-- Drop zone -->
     <div class="up-dropzone ${hasPending ? 'has-files' : ''}" id="up-dropzone">
-      ${!hasPending ? `
+      ${
+        !hasPending
+          ? `
         <div class="up-drop-content">
           <div class="up-drop-icon">${tab.icon}</div>
           <div class="up-drop-primary">${tab.dropText}</div>
           <div class="up-drop-secondary">o haz clic para seleccionar</div>
           <div class="up-drop-hint">${tab.hint}</div>
         </div>
-      ` : `
+      `
+          : `
         <div class="up-pending">
           <div class="up-drop-icon">${tab.icon}</div>
           <div class="up-pending-count">
@@ -75,20 +102,25 @@ export function renderUploadPanel(): void {
           <div class="up-pending-size">Tamaño total: ${totalSize}</div>
           <button class="btn btn-danger btn-sm" id="up-clear-btn">✕ Limpiar</button>
         </div>
-      `}
+      `
+      }
     </div>
 
     <!-- Input oculto -->
     <input type="file" id="up-file-input" style="display:none" />
 
     <!-- Nombre del proyecto -->
-    ${hasPending ? `
+    ${
+      hasPending
+        ? `
       <div class="up-name-field">
         <label for="up-project-name">Nombre del proyecto (opcional)</label>
         <input type="text" id="up-project-name" class="up-text-input"
           placeholder="mi-proyecto" value="${esc(st.projectName)}" />
       </div>
-    ` : ''}
+    `
+        : ''
+    }
 
     <!-- Botón de subida -->
     <button class="btn btn-primary" id="up-submit-btn" style="width:100%;justify-content:center"
@@ -97,11 +129,15 @@ export function renderUploadPanel(): void {
     </button>
 
     <!-- Progress bar -->
-    ${st.isUploading ? `
+    ${
+      st.isUploading
+        ? `
       <div class="up-progress-wrap">
         <div class="up-progress-bar" style="width:${st.uploadPct}%"></div>
       </div>
-    ` : ''}
+    `
+        : ''
+    }
 
     <!-- Resultado -->
     ${st.activeResult ? renderResult(st.activeResult) : ''}
@@ -116,12 +152,13 @@ export function renderUploadPanel(): void {
 // ─── Resultado de subida ──────────────────────────────────────────────────────
 
 function renderResult(r: UploadResult): string {
-  const errHtml = (r.errors?.length ?? 0) > 0
-    ? `<div class="up-partial-errors">
+  const errHtml =
+    (r.errors?.length ?? 0) > 0
+      ? `<div class="up-partial-errors">
         <div class="up-partial-title">⚠️ ${r.errors!.length} archivo(s) con problemas:</div>
-        <ul>${r.errors!.map(e => `<li>${esc(e.file)}: ${esc(e.reason)}</li>`).join('')}</ul>
+        <ul>${r.errors!.map((e) => `<li>${esc(e.file)}: ${esc(e.reason)}</li>`).join('')}</ul>
        </div>`
-    : ''
+      : ''
 
   const treeHtml = r.tree ? renderTree(r.tree, 0) : ''
   const info = r.info
@@ -139,14 +176,21 @@ function renderResult(r: UploadResult): string {
         </button>
       </div>
       ${errHtml}
-      ${info ? `
+      ${
+        info
+          ? `
         <div class="up-result-stats">
           ${statChip('📄', info.total_files + ' archivos')}
           ${statChip('💻', info.code_files + ' código')}
           ${statChip('💾', info.total_size_fmt)}
-          ${Object.entries(info.by_extension).slice(0, 3).map(([ext, n]) => statChip('', `${ext} ×${n}`)).join('')}
+          ${Object.entries(info.by_extension)
+            .slice(0, 3)
+            .map(([ext, n]) => statChip('', `${ext} ×${n}`))
+            .join('')}
         </div>
-      ` : ''}
+      `
+          : ''
+      }
       ${treeHtml ? `<div class="up-tree">${treeHtml}</div>` : ''}
     </div>
   `
@@ -159,11 +203,32 @@ function statChip(icon: string, label: string): string {
 // ─── Árbol de archivos ────────────────────────────────────────────────────────
 
 const EXT_ICONS: Record<string, string> = {
-  '.py':'🐍','.ts':'🟦','.tsx':'⚛️','.js':'🟨','.jsx':'⚛️',
-  '.html':'🌐','.css':'🎨','.scss':'🎨','.json':'📋','.yaml':'📋','.yml':'📋',
-  '.md':'📝','.txt':'📄','.env':'🔑','.go':'🐹','.rs':'🦀',
-  '.java':'☕','.cpp':'⚙️','.c':'⚙️','.rb':'💎','.php':'🐘',
-  '.png':'🖼️','.jpg':'🖼️','.svg':'🖼️','.zip':'🗜️','.pdf':'📕',
+  '.py': '🐍',
+  '.ts': '🟦',
+  '.tsx': '⚛️',
+  '.js': '🟨',
+  '.jsx': '⚛️',
+  '.html': '🌐',
+  '.css': '🎨',
+  '.scss': '🎨',
+  '.json': '📋',
+  '.yaml': '📋',
+  '.yml': '📋',
+  '.md': '📝',
+  '.txt': '📄',
+  '.env': '🔑',
+  '.go': '🐹',
+  '.rs': '🦀',
+  '.java': '☕',
+  '.cpp': '⚙️',
+  '.c': '⚙️',
+  '.rb': '💎',
+  '.php': '🐘',
+  '.png': '🖼️',
+  '.jpg': '🖼️',
+  '.svg': '🖼️',
+  '.zip': '🗜️',
+  '.pdf': '📕',
 }
 
 // Nodos expandidos (persiste entre re-renders)
@@ -178,11 +243,9 @@ function renderTree(node: ProjectTreeNode, depth: number): string {
 
   if (node.type === 'directory') {
     const isOpen = expanded.has(node.path)
-    const pad    = depth * 14
+    const pad = depth * 14
 
-    const childrenHtml = isOpen && node.children
-      ? node.children.map(c => renderTree(c, depth + 1)).join('')
-      : ''
+    const childrenHtml = isOpen && node.children ? node.children.map((c) => renderTree(c, depth + 1)).join('') : ''
 
     return `
       <div class="tree-dir">
@@ -194,14 +257,14 @@ function renderTree(node: ProjectTreeNode, depth: number): string {
         </div>
         <div class="tree-children" ${isOpen ? '' : 'style="display:none"'}>
           ${childrenHtml}
-          ${node.truncated ? `<div class="tree-truncated" style="padding-left:${(depth+1)*14+20}px">… árbol truncado</div>` : ''}
+          ${node.truncated ? `<div class="tree-truncated" style="padding-left:${(depth + 1) * 14 + 20}px">… árbol truncado</div>` : ''}
         </div>
       </div>`
   }
 
   // File
-  const pad      = depth * 14 + 20
-  const icon     = EXT_ICONS[node.extension ?? ''] ?? '📄'
+  const pad = depth * 14 + 20
+  const icon = EXT_ICONS[node.extension ?? ''] ?? '📄'
   const isActive = selectedPath === node.path
 
   return `
@@ -222,7 +285,10 @@ function renderRecentProjects(): string {
   return `
     <div class="metric-section" style="margin-top:10px">
       <div class="ms-title">📋 Proyectos recientes</div>
-      ${st.projects.slice(0, 5).map(p => `
+      ${st.projects
+        .slice(0, 5)
+        .map(
+          (p) => `
         <div class="up-recent-item">
           <span>📁</span>
           <div class="up-recent-info">
@@ -232,7 +298,9 @@ function renderRecentProjects(): string {
           <button class="btn btn-ghost btn-sm" data-load-project="${esc(p.project_id)}" title="Cargar">📂</button>
           <button class="btn btn-danger btn-sm" data-del-project="${esc(p.project_id)}" title="Eliminar">🗑️</button>
         </div>
-      `).join('')}
+      `,
+        )
+        .join('')}
     </div>`
 }
 
@@ -240,11 +308,11 @@ function renderRecentProjects(): string {
 
 function attachUploadEvents(el: HTMLElement): void {
   // ── Tabs
-  el.querySelectorAll<HTMLElement>('[data-up-tab]').forEach(btn => {
+  el.querySelectorAll<HTMLElement>('[data-up-tab]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      st.activeTab    = btn.dataset['upTab'] as UploadTab
+      st.activeTab = btn.dataset['upTab'] as UploadTab
       st.pendingFiles = []
-      st.pendingZip   = null
+      st.pendingZip = null
       renderUploadPanel()
     })
   })
@@ -254,10 +322,15 @@ function attachUploadEvents(el: HTMLElement): void {
 
   // ── Drag & drop en dropzone
   const dz = el.querySelector<HTMLElement>('#up-dropzone')
-  dz?.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); dz.classList.add('drag-over') })
+  dz?.addEventListener('dragover', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dz.classList.add('drag-over')
+  })
   dz?.addEventListener('dragleave', () => dz.classList.remove('drag-over'))
-  dz?.addEventListener('drop', e => {
-    e.preventDefault(); e.stopPropagation()
+  dz?.addEventListener('drop', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
     dz.classList.remove('drag-over')
     handleDrop(e as DragEvent)
   })
@@ -274,14 +347,16 @@ function attachUploadEvents(el: HTMLElement): void {
   })
 
   // ── Project name
-  el.querySelector<HTMLInputElement>('#up-project-name')?.addEventListener('input', e => {
+  el.querySelector<HTMLInputElement>('#up-project-name')?.addEventListener('input', (e) => {
     st.projectName = (e.target as HTMLInputElement).value.trim()
   })
 
   // ── Clear
-  el.querySelector('#up-clear-btn')?.addEventListener('click', e => {
+  el.querySelector('#up-clear-btn')?.addEventListener('click', (e) => {
     e.stopPropagation()
-    st.pendingFiles = []; st.pendingZip = null; st.activeResult = null
+    st.pendingFiles = []
+    st.pendingZip = null
+    st.activeResult = null
     renderUploadPanel()
   })
 
@@ -289,7 +364,7 @@ function attachUploadEvents(el: HTMLElement): void {
   el.querySelector('#up-submit-btn')?.addEventListener('click', () => doUpload())
 
   // ── Árbol: toggle dirs + selección de archivos
-  el.addEventListener('click', async e => {
+  el.addEventListener('click', async (e) => {
     const target = e.target as HTMLElement
 
     const toggle = target.closest<HTMLElement>('[data-tree-toggle]')
@@ -339,11 +414,14 @@ function attachUploadEvents(el: HTMLElement): void {
   })
 
   // ── Recientes
-  el.querySelectorAll<HTMLElement>('[data-load-project]').forEach(btn => {
-    btn.addEventListener('click', e => { e.stopPropagation(); loadProject(btn.dataset['loadProject']!) })
+  el.querySelectorAll<HTMLElement>('[data-load-project]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      loadProject(btn.dataset['loadProject']!)
+    })
   })
-  el.querySelectorAll<HTMLElement>('[data-del-project]').forEach(btn => {
-    btn.addEventListener('click', async e => {
+  el.querySelectorAll<HTMLElement>('[data-del-project]').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
       e.stopPropagation()
       if (!confirm('¿Eliminar este proyecto?')) return
       await removeProject(btn.dataset['delProject']!)
@@ -358,7 +436,7 @@ function triggerInput(): void {
   if (!input) return
 
   input.multiple = st.activeTab !== 'zip'
-  input.accept   = st.activeTab === 'zip' ? '.zip' : '*'
+  input.accept = st.activeTab === 'zip' ? '.zip' : '*'
 
   if (st.activeTab === 'folder') {
     input.setAttribute('webkitdirectory', '')
@@ -395,15 +473,16 @@ function handleDrop(e: DragEvent): void {
 async function doUpload(): Promise<void> {
   if (st.isUploading) return
 
-  st.isUploading = true; st.uploadPct = 0
+  st.isUploading = true
+  st.uploadPct = 0
   renderUploadPanel()
 
   const onProgress = (p: UploadProgress) => {
     st.uploadPct = p.percent
     // Actualizar solo la barra sin re-render completo
-    const bar   = document.querySelector<HTMLElement>('.up-progress-bar')
+    const bar = document.querySelector<HTMLElement>('.up-progress-bar')
     const label = document.querySelector<HTMLElement>('#up-submit-btn')
-    if (bar)   bar.style.width   = p.percent + '%'
+    if (bar) bar.style.width = p.percent + '%'
     if (label) label.textContent = `⏳ Subiendo... ${p.percent}%`
   }
 
@@ -413,7 +492,11 @@ async function doUpload(): Promise<void> {
     if (st.activeTab === 'zip') {
       if (!st.pendingZip) throw new Error('No hay ZIP seleccionado.')
       result = await api.uploadZip(st.pendingZip, st.projectName, onProgress)
-      appendLog('ok', `🗜️ ZIP subido: ${result.project_name} — ${result.extracted ?? result.total_files} archivos extraídos`, 'be')
+      appendLog(
+        'ok',
+        `🗜️ ZIP subido: ${result.project_name} — ${result.extracted ?? result.total_files} archivos extraídos`,
+        'be',
+      )
     } else if (st.activeTab === 'folder') {
       if (!st.pendingFiles.length) throw new Error('No hay archivos.')
       result = await api.uploadFolder(st.pendingFiles, st.projectName, onProgress)
@@ -424,15 +507,14 @@ async function doUpload(): Promise<void> {
       appendLog('ok', `📄 ${result.total_files} archivo(s) subido(s) al proyecto ${result.project_name}`, 'be')
     }
 
-    st.activeResult  = result
-    st.pendingFiles  = []
-    st.pendingZip    = null
-    st.projectName   = ''
+    st.activeResult = result
+    st.pendingFiles = []
+    st.pendingZip = null
+    st.projectName = ''
     toast(`✅ ${result.total_files} archivos subidos`, 'ok')
 
     // Refrescar lista de proyectos
     await loadRecentProjects()
-
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error al subir.'
     toast('❌ ' + msg, 'err')
@@ -459,7 +541,9 @@ async function loadFileInEditor(projectId: string, filePath: string): Promise<vo
       ext: ext.startsWith('.') ? ext : '.' + ext,
       size: fileContent.size,
       content: fileContent.content,
-      issues: [], metrics: {}, analyzed: false,
+      issues: [],
+      metrics: {},
+      analyzed: false,
     })
 
     // Cambiar al tab editor
@@ -478,12 +562,12 @@ async function loadProject(projectId: string): Promise<void> {
   try {
     const data = await api.getProjectTree(projectId)
     st.activeResult = {
-      project_id:   data.project_id,
+      project_id: data.project_id,
       project_name: data.project_id.slice(0, 8),
-      type:         'files',
-      total_files:  data.info.total_files,
-      tree:         data.tree,
-      info:         data.info,
+      type: 'files',
+      total_files: data.info.total_files,
+      tree: data.tree,
+      info: data.info,
     }
     expanded.clear()
     selectedPath = null
@@ -533,7 +617,5 @@ function fmtSize(bytes: number): string {
 }
 
 function esc(str: string): string {
-  return str
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }

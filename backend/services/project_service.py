@@ -3,7 +3,6 @@ Service: ProjectService
 Lógica de negocio para manejo de proyectos subidos.
 """
 
-import os
 import io
 import zipfile
 import shutil
@@ -19,27 +18,74 @@ BLOCKED_EXTENSIONS = {".exe", ".dll", ".so", ".bin", ".sh", ".bat", ".cmd", ".ps
 
 # Carpetas a ignorar en el árbol
 IGNORED_DIRS = {
-    "__pycache__", ".git", ".svn", "node_modules", ".venv", "venv",
-    ".idea", ".vscode", "dist", "build", ".next", ".nuxt", "coverage",
-    ".pytest_cache", ".mypy_cache", ".tox", "*.egg-info",
+    "__pycache__",
+    ".git",
+    ".svn",
+    "node_modules",
+    ".venv",
+    "venv",
+    ".idea",
+    ".vscode",
+    "dist",
+    "build",
+    ".next",
+    ".nuxt",
+    "coverage",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".tox",
+    "*.egg-info",
 }
 
 # Extensiones de código para estadísticas
 CODE_EXTENSIONS = {
-    ".py", ".ts", ".tsx", ".js", ".jsx", ".java", ".cpp", ".c", ".cs",
-    ".go", ".rs", ".rb", ".php", ".swift", ".kt", ".scala", ".r",
-    ".html", ".css", ".scss", ".sass", ".less", ".vue", ".svelte",
-    ".json", ".yaml", ".yml", ".toml", ".ini", ".env", ".md", ".txt",
-    ".sql", ".graphql", ".sh", ".bash", ".zsh",
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".java",
+    ".cpp",
+    ".c",
+    ".cs",
+    ".go",
+    ".rs",
+    ".rb",
+    ".php",
+    ".swift",
+    ".kt",
+    ".scala",
+    ".r",
+    ".html",
+    ".css",
+    ".scss",
+    ".sass",
+    ".less",
+    ".vue",
+    ".svelte",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".ini",
+    ".env",
+    ".md",
+    ".txt",
+    ".sql",
+    ".graphql",
+    ".sh",
+    ".bash",
+    ".zsh",
 }
 
 
 # ─── Árbol de archivos ────────────────────────────────────────────────────────
 
+
 def build_tree(directory: Path, max_depth: int = 10, _depth: int = 0) -> dict:
     """
     Construye un árbol JSON de la estructura de archivos.
-    
+
     Retorna:
     {
         "name": "src",
@@ -55,9 +101,9 @@ def build_tree(directory: Path, max_depth: int = 10, _depth: int = 0) -> dict:
         return {"name": directory.name, "type": "directory", "path": str(directory), "children": [], "truncated": True}
 
     node: dict[str, Any] = {
-        "name":     directory.name,
-        "type":     "directory",
-        "path":     str(directory.relative_to(directory.parent) if _depth == 0 else directory),
+        "name": directory.name,
+        "type": "directory",
+        "path": str(directory.relative_to(directory.parent) if _depth == 0 else directory),
         "children": [],
     }
 
@@ -67,7 +113,7 @@ def build_tree(directory: Path, max_depth: int = 10, _depth: int = 0) -> dict:
         node["error"] = "Sin permisos de lectura"
         return node
 
-    dirs  = [e for e in entries if e.is_dir()  and e.name not in IGNORED_DIRS]
+    dirs = [e for e in entries if e.is_dir() and e.name not in IGNORED_DIRS]
     files = [e for e in entries if e.is_file()]
 
     for subdir in dirs:
@@ -77,19 +123,21 @@ def build_tree(directory: Path, max_depth: int = 10, _depth: int = 0) -> dict:
         node["children"].append(child)
 
     for file in files:
-        stat     = file.stat()
-        ext      = file.suffix.lower()
+        stat = file.stat()
+        ext = file.suffix.lower()
         rel_path = _relative_path(file, directory if _depth == 0 else None)
-        node["children"].append({
-            "name":      file.name,
-            "type":      "file",
-            "path":      rel_path,
-            "size":      stat.st_size,
-            "size_fmt":  _fmt_size(stat.st_size),
-            "extension": ext,
-            "is_code":   ext in CODE_EXTENSIONS,
-            "modified":  datetime.fromtimestamp(stat.st_mtime).isoformat(),
-        })
+        node["children"].append(
+            {
+                "name": file.name,
+                "type": "file",
+                "path": rel_path,
+                "size": stat.st_size,
+                "size_fmt": _fmt_size(stat.st_size),
+                "extension": ext,
+                "is_code": ext in CODE_EXTENSIONS,
+                "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            }
+        )
 
     return node
 
@@ -113,21 +161,17 @@ def _fmt_size(size: int) -> str:
 
 # ─── Extraer ZIP ──────────────────────────────────────────────────────────────
 
+
 def extract_zip(content: bytes, dest_dir: Path) -> dict:
     """
     Descomprime un ZIP en dest_dir con validaciones de seguridad.
     Retorna estadísticas de la extracción.
     """
     extracted = 0
-    skipped   = 0
+    skipped = 0
     errors: list[dict] = []
 
     with zipfile.ZipFile(io.BytesIO(content)) as zf:
-        # Detectar si hay un directorio raíz único (ej: my-project-main/)
-        names      = zf.namelist()
-        root_parts = set(Path(n).parts[0] for n in names if n)
-        single_root = len(root_parts) == 1 and not any(n == list(root_parts)[0] for n in names if "/" not in n)
-
         for member in zf.infolist():
             # Ignorar directorios vacíos
             if member.filename.endswith("/"):
@@ -135,7 +179,7 @@ def extract_zip(content: bytes, dest_dir: Path) -> dict:
 
             # Path traversal check
             member_path = Path(member.filename)
-            safe_parts  = [p for p in member_path.parts if p not in (".", "..") and p != ""]
+            safe_parts = [p for p in member_path.parts if p not in (".", "..") and p != ""]
             if not safe_parts:
                 skipped += 1
                 continue
@@ -173,6 +217,7 @@ def extract_zip(content: bytes, dest_dir: Path) -> dict:
 
 # ─── Guardar archivos desde memoria ──────────────────────────────────────────
 
+
 def save_files(files_data: list[dict], dest_dir: Path) -> list[dict]:
     """Guarda una lista de {path, content_bytes} en dest_dir."""
     saved = []
@@ -186,12 +231,13 @@ def save_files(files_data: list[dict], dest_dir: Path) -> list[dict]:
 
 # ─── Info del proyecto ────────────────────────────────────────────────────────
 
+
 def get_project_info(project_dir: Path) -> dict:
     """Estadísticas generales de un proyecto."""
     total_files = 0
-    total_size  = 0
+    total_size = 0
     by_ext: dict[str, int] = {}
-    code_files  = 0
+    code_files = 0
 
     for path in project_dir.rglob("*"):
         if path.is_file():
@@ -207,16 +253,17 @@ def get_project_info(project_dir: Path) -> dict:
     top_ext = sorted(by_ext.items(), key=lambda x: x[1], reverse=True)[:10]
 
     return {
-        "total_files":  total_files,
-        "total_size":   total_size,
+        "total_files": total_files,
+        "total_size": total_size,
         "total_size_fmt": _fmt_size(total_size),
-        "code_files":   code_files,
+        "code_files": code_files,
         "by_extension": dict(top_ext),
-        "created_at":   datetime.now().isoformat(),
+        "created_at": datetime.now().isoformat(),
     }
 
 
 # ─── Listar proyectos ─────────────────────────────────────────────────────────
+
 
 def list_projects(uploads_dir: Path) -> list[dict]:
     """Lista todos los proyectos en uploads_dir."""
@@ -228,16 +275,19 @@ def list_projects(uploads_dir: Path) -> list[dict]:
         if not project_dir.is_dir():
             continue
         info = get_project_info(project_dir)
-        projects.append({
-            "project_id": project_dir.name,
-            "path":       str(project_dir),
-            **info,
-        })
+        projects.append(
+            {
+                "project_id": project_dir.name,
+                "path": str(project_dir),
+                **info,
+            }
+        )
 
     return projects
 
 
 # ─── Eliminar proyecto ────────────────────────────────────────────────────────
+
 
 def delete_project(project_dir: Path) -> None:
     """Elimina un proyecto y todos sus archivos."""

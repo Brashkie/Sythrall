@@ -8,28 +8,28 @@ let initialized = false
 
 // ── Zoom state
 interface ZoomState {
-  scale:   number
+  scale: number
   offsetX: number
   offsetY: number
 }
 
 const zoom: ZoomState = { scale: 1, offsetX: 0, offsetY: 0 }
-const ZOOM_MIN  = 0.15
-const ZOOM_MAX  = 5
+const ZOOM_MIN = 0.15
+const ZOOM_MAX = 5
 const ZOOM_STEP = 0.15
 
-let viewport:    HTMLElement | null = null
-let canvas:      HTMLElement | null = null
+let viewport: HTMLElement | null = null
+let canvas: HTMLElement | null = null
 let zoomLevelEl: HTMLElement | null = null
-let toastEl:     HTMLElement | null = null
-let toastTimer:  ReturnType<typeof setTimeout> | null = null
+let toastEl: HTMLElement | null = null
+let toastTimer: ReturnType<typeof setTimeout> | null = null
 
 // ── Pan state
-let isPanning   = false
-let panStartX   = 0
-let panStartY   = 0
-let panOriginX  = 0
-let panOriginY  = 0
+let isPanning = false
+let panStartX = 0
+let panStartY = 0
+let panOriginX = 0
+let panOriginY = 0
 
 // ════════════════════════════════════════════════
 //  MERMAID INIT
@@ -41,24 +41,24 @@ export function initMermaid(): void {
     theme: 'dark',
     darkMode: true,
     themeVariables: {
-      primaryColor:       '#1a2040',
-      primaryTextColor:   '#c8d4f0',
+      primaryColor: '#1a2040',
+      primaryTextColor: '#c8d4f0',
       primaryBorderColor: '#2d3768',
-      lineColor:          '#4a5880',
-      secondaryColor:     '#0e1225',
-      background:         '#060810',
-      mainBkg:            '#0e1225',
-      fontSize:           '13px',
+      lineColor: '#4a5880',
+      secondaryColor: '#0e1225',
+      background: '#060810',
+      mainBkg: '#0e1225',
+      fontSize: '13px',
     },
-    flowchart:  { curve: 'basis', padding: 18 },
-    sequence:   { actorMargin: 70 },
+    flowchart: { curve: 'basis', padding: 18 },
+    sequence: { actorMargin: 70 },
   })
   initialized = true
 }
 
 export async function renderDiagram(code: string): Promise<string> {
   if (!initialized) initMermaid()
-  const id     = 'mermaid-' + Date.now()
+  const id = 'mermaid-' + Date.now()
   const result = await mermaid.render(id, code)
   return result.svg
 }
@@ -68,8 +68,8 @@ export async function renderDiagram(code: string): Promise<string> {
 // ════════════════════════════════════════════════
 
 export function initDiagramZoom(): void {
-  viewport    = document.getElementById('diag-viewport')
-  canvas      = document.getElementById('diag-canvas')
+  viewport = document.getElementById('diag-viewport')
+  canvas = document.getElementById('diag-canvas')
   zoomLevelEl = document.getElementById('zoom-level')
 
   if (!viewport || !canvas) return
@@ -83,14 +83,14 @@ export function initDiagramZoom(): void {
   viewport.addEventListener('wheel', onWheel, { passive: false })
 
   // Mouse drag → pan
-  viewport.addEventListener('mousedown',  onMouseDown)
-  window.addEventListener('mousemove',    onMouseMove)
-  window.addEventListener('mouseup',      onMouseUp)
+  viewport.addEventListener('mousedown', onMouseDown)
+  window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('mouseup', onMouseUp)
 
   // Touch → pinch zoom + pan
   viewport.addEventListener('touchstart', onTouchStart, { passive: false })
-  viewport.addEventListener('touchmove',  onTouchMove,  { passive: false })
-  viewport.addEventListener('touchend',   onTouchEnd)
+  viewport.addEventListener('touchmove', onTouchMove, { passive: false })
+  viewport.addEventListener('touchend', onTouchEnd)
 
   // Keyboard shortcuts
   document.addEventListener('keydown', onKeyDown)
@@ -113,16 +113,19 @@ export function resetZoom(animate = true): void {
 export function fitDiagram(animate = true): void {
   if (!viewport || !canvas) return
   const svg = canvas.querySelector('svg')
-  if (!svg) { resetZoom(animate); return }
+  if (!svg) {
+    resetZoom(animate)
+    return
+  }
 
   const vw = viewport.clientWidth
   const vh = viewport.clientHeight
-  const sw = svg.scrollWidth  || parseInt(svg.getAttribute('width')  ?? '800')
-  const sh = svg.scrollHeight || parseInt(svg.getAttribute('height') ?? '600')
+  const sw = svg.scrollWidth || parseInt(svg.getAttribute('width') ?? '800', 10)
+  const sh = svg.scrollHeight || parseInt(svg.getAttribute('height') ?? '600', 10)
 
   const scaleX = (vw - 48) / sw
   const scaleY = (vh - 48) / sh
-  const fit    = Math.min(scaleX, scaleY, 1)   // nunca agrandar más de 1:1
+  const fit = Math.min(scaleX, scaleY, 1) // nunca agrandar más de 1:1
 
   // Centrar
   const ox = (vw - sw * fit) / 2
@@ -136,7 +139,7 @@ export function fitDiagram(animate = true): void {
 // ════════════════════════════════════════════════
 
 function applyZoom(newScale: number, pivot: { x: number; y: number }): void {
-  const s  = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, newScale))
+  const s = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, newScale))
   const ds = s / zoom.scale
 
   // Mantener el punto bajo el cursor fijo
@@ -147,7 +150,7 @@ function applyZoom(newScale: number, pivot: { x: number; y: number }): void {
 }
 
 function setZoom(scale: number, ox: number, oy: number, animate: boolean): void {
-  zoom.scale   = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, scale))
+  zoom.scale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, scale))
   zoom.offsetX = ox
   zoom.offsetY = oy
 
@@ -191,16 +194,16 @@ function onWheel(e: WheelEvent): void {
     y: e.clientY - rect.top,
   }
 
-  const delta  = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP
+  const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP
   applyZoom(zoom.scale + delta, pivot)
 }
 
 // ── Mouse pan
 function onMouseDown(e: MouseEvent): void {
   if (e.button !== 0) return
-  isPanning  = true
-  panStartX  = e.clientX
-  panStartY  = e.clientY
+  isPanning = true
+  panStartX = e.clientX
+  panStartY = e.clientY
   panOriginX = zoom.offsetX
   panOriginY = zoom.offsetY
 }
@@ -211,8 +214,7 @@ function onMouseMove(e: MouseEvent): void {
   const dy = e.clientY - panStartY
   zoom.offsetX = panOriginX + dx
   zoom.offsetY = panOriginY + dy
-  if (canvas) canvas.style.transform =
-    `translate(${zoom.offsetX}px, ${zoom.offsetY}px) scale(${zoom.scale})`
+  if (canvas) canvas.style.transform = `translate(${zoom.offsetX}px, ${zoom.offsetY}px) scale(${zoom.scale})`
 }
 
 function onMouseUp(): void {
@@ -232,9 +234,9 @@ function onTouchStart(e: TouchEvent): void {
     lastTouchMidX = mid.x
     lastTouchMidY = mid.y
   } else if (e.touches.length === 1) {
-    isPanning  = true
-    panStartX  = e.touches[0].clientX
-    panStartY  = e.touches[0].clientY
+    isPanning = true
+    panStartX = e.touches[0].clientX
+    panStartY = e.touches[0].clientY
     panOriginX = zoom.offsetX
     panOriginY = zoom.offsetY
   }
@@ -244,7 +246,7 @@ function onTouchMove(e: TouchEvent): void {
   e.preventDefault()
   if (e.touches.length === 2) {
     const dist = getTouchDist(e)
-    const mid  = getTouchMid(e)
+    const mid = getTouchMid(e)
     const rect = viewport!.getBoundingClientRect()
     const pivot = { x: mid.x - rect.left, y: mid.y - rect.top }
 
@@ -255,8 +257,7 @@ function onTouchMove(e: TouchEvent): void {
     // Pan simultáneo al pinch
     zoom.offsetX += mid.x - lastTouchMidX
     zoom.offsetY += mid.y - lastTouchMidY
-    if (canvas) canvas.style.transform =
-      `translate(${zoom.offsetX}px, ${zoom.offsetY}px) scale(${zoom.scale})`
+    if (canvas) canvas.style.transform = `translate(${zoom.offsetX}px, ${zoom.offsetY}px) scale(${zoom.scale})`
 
     lastTouchDist = dist
     lastTouchMidX = mid.x
@@ -266,8 +267,7 @@ function onTouchMove(e: TouchEvent): void {
     const dy = e.touches[0].clientY - panStartY
     zoom.offsetX = panOriginX + dx
     zoom.offsetY = panOriginY + dy
-    if (canvas) canvas.style.transform =
-      `translate(${zoom.offsetX}px, ${zoom.offsetY}px) scale(${zoom.scale})`
+    if (canvas) canvas.style.transform = `translate(${zoom.offsetX}px, ${zoom.offsetY}px) scale(${zoom.scale})`
   }
 }
 
@@ -295,10 +295,22 @@ function onKeyDown(e: KeyboardEvent): void {
   if (!panel?.classList.contains('active')) return
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return
 
-  if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomIn()  }
-  if (e.key === '-')                  { e.preventDefault(); zoomOut() }
-  if (e.key === '0')                  { e.preventDefault(); resetZoom(true) }
-  if (e.key === 'f' || e.key === 'F') { e.preventDefault(); fitDiagram(true) }
+  if (e.key === '+' || e.key === '=') {
+    e.preventDefault()
+    zoomIn()
+  }
+  if (e.key === '-') {
+    e.preventDefault()
+    zoomOut()
+  }
+  if (e.key === '0') {
+    e.preventDefault()
+    resetZoom(true)
+  }
+  if (e.key === 'f' || e.key === 'F') {
+    e.preventDefault()
+    fitDiagram(true)
+  }
 }
 
 // ── Reinicia posición al renderizar nuevo diagrama

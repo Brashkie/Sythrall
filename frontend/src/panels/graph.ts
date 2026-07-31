@@ -4,54 +4,47 @@
 //  Fase 1: archivos del sidebar
 // ══════════════════════════════════════════
 
-import { api }        from '../api/client'
 import type { GraphResult } from '../api/client'
-import { state }      from '../store/state'
+import { api } from '../api/client'
+import { state } from '../store/state'
 import { appendLog, toast } from '../utils/helpers'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface GraphNode {
-  id:        string
-  label:     string
+  id: string
+  label: string
   language?: string
-  functions?:number
-  imports?:  number
+  functions?: number
+  imports?: number
   in_cycle?: boolean
-  big_o?:    string
-  cc?:       number
-  color?:    string
-  level?:    string
+  big_o?: string
+  cc?: number
+  color?: string
+  level?: string
   // heatmap
-  name?:     string
-  file?:     string
+  name?: string
+  file?: string
   file_short?: string
-  cc_color?:   string
-  cc_level?:   string
+  cc_color?: string
+  cc_level?: string
   bigo_color?: string
   bigo_level?: string
-  loc?:        number
-}
-
-interface GraphEdge {
-  from:      string
-  to:        string
-  via?:      string
-  is_cycle?: boolean
+  loc?: number
 }
 
 // GraphResult se importa de client.ts
 // Tipos adicionales para Fase 2
 interface DirTreeNode {
-  name:      string
-  type:      'file' | 'directory'
-  path:      string
-  stats?:    {
+  name: string
+  type: 'file' | 'directory'
+  path: string
+  stats?: {
     functions: number
-    avg_cc:    number
+    avg_cc: number
     hot_paths: number
-    language:  string
-    imports:   number
+    language: string
+    imports: number
     dead_code: number
   }
   children?: DirTreeNode[]
@@ -59,19 +52,10 @@ interface DirTreeNode {
 
 // ─── Estado del módulo ────────────────────────────────────────────────────────
 
-let _currentType  = 'import'
+let _currentType = 'import'
 let _currentResult: GraphResult | null = null
 let _viewMode: 'tree' | 'force' = 'tree'
-let _forceSimulation: unknown = null  // d3 simulation
-
-// ─── Tipos disponibles ────────────────────────────────────────────────────────
-
-const GRAPH_TYPES = [
-  { id: 'import',   label: 'Import Graph',            icon: '📦' },
-  { id: 'call',     label: 'Call Graph',              icon: '🔗' },
-  { id: 'circular', label: 'Circular Dependencies',   icon: '🔄' },
-  { id: 'heatmap',  label: 'Complexity Heatmap',      icon: '🌡️' },
-]
+const _forceSimulation: unknown = null // d3 simulation
 
 // ══════════════════════════════════════════
 //  API pública — llamada desde diagram panel
@@ -85,8 +69,8 @@ const GRAPH_TYPES = [
 export async function generateCodeGraph(
   graphType: string,
   onMermaid: (code: string) => void,
-  onForce:   (result: GraphResult) => void,
-  onStatus:  (msg: string, ok: boolean) => void,
+  onForce: (result: GraphResult) => void,
+  onStatus: (msg: string, ok: boolean) => void,
 ): Promise<void> {
   if (!state.files.length) {
     toast('Carga archivos primero', 'warn')
@@ -96,10 +80,10 @@ export async function generateCodeGraph(
   _currentType = graphType
   onStatus('Analizando...', true)
 
-  const files = state.files.map(f => ({ filename: f.name, content: f.content }))
+  const files = state.files.map((f) => ({ filename: f.name, content: f.content }))
 
   try {
-    const result = await api.analyzeGraph(files, graphType) as GraphResult
+    const result = (await api.analyzeGraph(files, graphType)) as GraphResult
     _currentResult = result
 
     if (result.error) {
@@ -121,7 +105,7 @@ export async function generateCodeGraph(
     } else if (graphType === 'call') {
       statusMsg = `${summary.total_functions ?? 0} funciones · ${summary.total_calls ?? 0} llamadas`
     } else if (graphType === 'circular') {
-      const n = (result.cycles?.length ?? 0)
+      const n = result.cycles?.length ?? 0
       statusMsg = n > 0 ? `🔴 ${n} ciclo(s) detectado(s)` : '✅ Sin dependencias circulares'
     } else if (graphType === 'heatmap') {
       statusMsg = `${summary.total_functions ?? 0} fn · ${summary.hot_paths ?? 0} hot paths`
@@ -129,7 +113,6 @@ export async function generateCodeGraph(
 
     onStatus(statusMsg, !result.has_cycles)
     appendLog('ok', `🕸 Graph ${graphType}: ${statusMsg}`, 'be')
-
   } catch (e) {
     const msg = (e as Error).message
     onStatus(`Error: ${msg}`, false)
@@ -149,28 +132,27 @@ export async function generateCodeGraph(
  */
 export function renderForceGraph(
   container: HTMLElement,
-  result:    GraphResult,
+  result: GraphResult,
   onNodeClick?: (nodeId: string) => void,
 ): void {
   container.innerHTML = ''
 
-  const nodes = result.graph_type === 'heatmap'
-    ? (result.functions ?? []).map(f => ({
-        id:    `${f.file_short}::${f.name}`,
-        label: f.name ?? '',
-        color: f.cc_color ?? '#4a5880',
-        size:  Math.max(20, Math.min(50, (f.cc ?? 1) * 5)),
-        meta:  `${f.file_short} · CC=${f.cc} · ${f.big_o}`,
-      }))
-    : (result.nodes ?? []).map(n => ({
-        id:    n.id,
-        label: _shortLabel(n.label || n.id),
-        color: n.in_cycle ? '#ff3366'
-             : n.color    ? n.color
-             : _langColor(n.language ?? ''),
-        size:  Math.max(18, Math.min(40, 18 + (n.functions ?? 0) * 2)),
-        meta:  _nodeMetaText(n, result.graph_type),
-      }))
+  const nodes =
+    result.graph_type === 'heatmap'
+      ? (result.functions ?? []).map((f) => ({
+          id: `${f.file_short}::${f.name}`,
+          label: f.name ?? '',
+          color: f.cc_color ?? '#4a5880',
+          size: Math.max(20, Math.min(50, (f.cc ?? 1) * 5)),
+          meta: `${f.file_short} · CC=${f.cc} · ${f.big_o}`,
+        }))
+      : (result.nodes ?? []).map((n) => ({
+          id: n.id,
+          label: _shortLabel(n.label || n.id),
+          color: n.in_cycle ? '#ff3366' : n.color ? n.color : _langColor(n.language ?? ''),
+          size: Math.max(18, Math.min(40, 18 + (n.functions ?? 0) * 2)),
+          meta: _nodeMetaText(n, result.graph_type),
+        }))
 
   const edges = result.edges ?? []
 
@@ -179,13 +161,13 @@ export function renderForceGraph(
     return
   }
 
-  const W = container.clientWidth  || 600
+  const W = container.clientWidth || 600
   const H = container.clientHeight || 400
 
   // Asignar posiciones iniciales en círculo
   nodes.forEach((n, i) => {
     const angle = (2 * Math.PI * i) / nodes.length
-    const r     = Math.min(W, H) * 0.35
+    const r = Math.min(W, H) * 0.35
     ;(n as any).x = W / 2 + r * Math.cos(angle)
     ;(n as any).y = H / 2 + r * Math.sin(angle)
     ;(n as any).vx = 0
@@ -194,7 +176,7 @@ export function renderForceGraph(
 
   // Crear SVG
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-  svg.setAttribute('width',  '100%')
+  svg.setAttribute('width', '100%')
   svg.setAttribute('height', '100%')
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`)
   svg.style.cssText = 'cursor:grab;overflow:hidden;background:var(--s0)'
@@ -275,7 +257,7 @@ export function renderForceGraph(
     nodeEls.push({ g: ng, circle, text, data: nd })
 
     // Hover → tooltip
-    ng.addEventListener('mouseenter', (ev: MouseEvent) => {
+    ng.addEventListener('mouseenter', (_ev: MouseEvent) => {
       tooltip.innerHTML = `<b>${nd.label}</b><br>${nd.meta ?? ''}`
       tooltip.style.display = 'block'
       circle.setAttribute('stroke-width', '3')
@@ -286,8 +268,8 @@ export function renderForceGraph(
     })
     ng.addEventListener('mousemove', (ev: MouseEvent) => {
       const rect = container.getBoundingClientRect()
-      tooltip.style.left = (ev.clientX - rect.left + 12) + 'px'
-      tooltip.style.top  = (ev.clientY - rect.top  - 10) + 'px'
+      tooltip.style.left = ev.clientX - rect.left + 12 + 'px'
+      tooltip.style.top = ev.clientY - rect.top - 10 + 'px'
     })
 
     // Click → callback
@@ -296,7 +278,9 @@ export function renderForceGraph(
     })
 
     // Drag
-    let dragging = false, dx = 0, dy = 0
+    let dragging = false,
+      dx = 0,
+      dy = 0
     ng.addEventListener('mousedown', (ev: MouseEvent) => {
       ev.stopPropagation()
       dragging = true
@@ -312,7 +296,10 @@ export function renderForceGraph(
       _updatePositions()
     })
     window.addEventListener('mouseup', () => {
-      if (dragging) { dragging = false; svg.style.cursor = 'grab' }
+      if (dragging) {
+        dragging = false
+        svg.style.cursor = 'grab'
+      }
     })
   }
 
@@ -324,18 +311,18 @@ export function renderForceGraph(
 
     edges.forEach((e, i) => {
       const from = nodeMap[e.from]
-      const to   = nodeMap[e.to]
+      const to = nodeMap[e.to]
       if (from && to) {
         // Ajustar endpoints para que la flecha no quede sobre el nodo
-        const dx  = to.x - from.x
-        const dy  = to.y - from.y
+        const dx = to.x - from.x
+        const dy = to.y - from.y
         const len = Math.sqrt(dx * dx + dy * dy) || 1
-        const r1  = from.size / 2 + 2
-        const r2  = to.size   / 2 + 8
+        const r1 = from.size / 2 + 2
+        const r2 = to.size / 2 + 8
         edgeEls[i]?.setAttribute('x1', String(from.x + (dx / len) * r1))
         edgeEls[i]?.setAttribute('y1', String(from.y + (dy / len) * r1))
-        edgeEls[i]?.setAttribute('x2', String(to.x   - (dx / len) * r2))
-        edgeEls[i]?.setAttribute('y2', String(to.y   - (dy / len) * r2))
+        edgeEls[i]?.setAttribute('x2', String(to.x - (dx / len) * r2))
+        edgeEls[i]?.setAttribute('y2', String(to.y - (dy / len) * r2))
       }
     })
   }
@@ -351,25 +338,32 @@ export function renderForceGraph(
     // Repulsión entre nodos
     for (let i = 0; i < allNodes.length; i++) {
       for (let j = i + 1; j < allNodes.length; j++) {
-        const a  = allNodes[i], b = allNodes[j]
-        const dx = b.x - a.x, dy = b.y - a.y
+        const a = allNodes[i],
+          b = allNodes[j]
+        const dx = b.x - a.x,
+          dy = b.y - a.y
         const d2 = dx * dx + dy * dy + 1
-        const f  = 1500 / d2
-        a.vx -= dx * f; a.vy -= dy * f
-        b.vx += dx * f; b.vy += dy * f
+        const f = 1500 / d2
+        a.vx -= dx * f
+        a.vy -= dy * f
+        b.vx += dx * f
+        b.vy += dy * f
       }
     }
 
     // Atracción por edges
     for (const e of edges) {
       const from = nodeMap[e.from]
-      const to   = nodeMap[e.to]
+      const to = nodeMap[e.to]
       if (!from || !to) continue
-      const dx = to.x - from.x, dy = to.y - from.y
-      const d  = Math.sqrt(dx * dx + dy * dy) + 1
-      const f  = (d - 120) * 0.04
-      from.vx += dx * f / d; from.vy += dy * f / d
-      to.vx   -= dx * f / d; to.vy   -= dy * f / d
+      const dx = to.x - from.x,
+        dy = to.y - from.y
+      const d = Math.sqrt(dx * dx + dy * dy) + 1
+      const f = (d - 120) * 0.04
+      from.vx += (dx * f) / d
+      from.vy += (dy * f) / d
+      to.vx -= (dx * f) / d
+      to.vy -= (dy * f) / d
     }
 
     // Gravedad hacia centro
@@ -380,9 +374,10 @@ export function renderForceGraph(
 
     // Aplicar velocidad + fricción + bounds
     for (const n of allNodes as any[]) {
-      n.vx *= 0.85; n.vy *= 0.85
-      n.x  = Math.max(30, Math.min(W - 30, n.x + n.vx))
-      n.y  = Math.max(30, Math.min(H - 30, n.y + n.vy))
+      n.vx *= 0.85
+      n.vy *= 0.85
+      n.x = Math.max(30, Math.min(W - 30, n.x + n.vx))
+      n.y = Math.max(30, Math.min(H - 30, n.y + n.vy))
     }
 
     _updatePositions()
@@ -398,11 +393,11 @@ export function renderForceGraph(
 
 function _langColor(lang: string): string {
   const map: Record<string, string> = {
-    python:     '#3d9eff',
+    python: '#3d9eff',
     typescript: '#b87dff',
     javascript: '#ffb627',
-    c:          '#00f5a0',
-    cpp:        '#00f5a0',
+    c: '#00f5a0',
+    cpp: '#00f5a0',
   }
   return map[lang] ?? '#4a5880'
 }
@@ -426,10 +421,15 @@ function _nodeMetaText(n: GraphNode, graphType: string): string {
 
 // ─── Toggle view mode ─────────────────────────────────────────────────────────
 
-export function getViewMode(): 'tree' | 'force' { return _viewMode }
-export function setViewMode(m: 'tree' | 'force'): void { _viewMode = m }
-export function getCurrentResult(): GraphResult | null { return _currentResult }
-
+export function getViewMode(): 'tree' | 'force' {
+  return _viewMode
+}
+export function setViewMode(m: 'tree' | 'force'): void {
+  _viewMode = m
+}
+export function getCurrentResult(): GraphResult | null {
+  return _currentResult
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  FASE 2 — Graph desde proyectos ZIP/subidos
@@ -441,12 +441,12 @@ export function getCurrentResult(): GraphResult | null { return _currentResult }
  * También retorna el dir_tree para el renderizado en árbol.
  */
 export async function generateProjectGraph(
-  projectId:  string,
-  graphType:  string,
-  onMermaid:  (code: string) => void,
-  onForce:    (result: GraphResult) => void,
-  onDirTree:  (tree: DirTreeNode) => void,
-  onStatus:   (msg: string, ok: boolean) => void,
+  projectId: string,
+  graphType: string,
+  onMermaid: (code: string) => void,
+  onForce: (result: GraphResult) => void,
+  onDirTree: (tree: DirTreeNode) => void,
+  onStatus: (msg: string, ok: boolean) => void,
 ): Promise<void> {
   if (!projectId) {
     toast('Selecciona un proyecto primero', 'warn')
@@ -456,11 +456,11 @@ export async function generateProjectGraph(
   onStatus('Analizando proyecto...', true)
 
   try {
-    const result = await api.analyzeProjectGraph(projectId, graphType) as GraphResult & {
-      dir_tree?:    DirTreeNode
+    const result = (await api.analyzeProjectGraph(projectId, graphType)) as GraphResult & {
+      dir_tree?: DirTreeNode
       total_files?: number
-      file_list?:   string[]
-      project_id?:  string
+      file_list?: string[]
+      project_id?: string
     }
 
     if (result.error) {
@@ -487,15 +487,17 @@ export async function generateProjectGraph(
     } else if (graphType === 'call') {
       msg = `${summary.total_functions ?? 0} funciones · ${summary.total_calls ?? 0} llamadas`
     } else if (graphType === 'circular') {
-      const n = (result.cycles?.length ?? 0)
-      msg = n > 0 ? `🔴 ${n} ciclo(s) — ${summary.affected_files ?? 0} archivos afectados` : '✅ Sin dependencias circulares'
+      const n = result.cycles?.length ?? 0
+      msg =
+        n > 0
+          ? `🔴 ${n} ciclo(s) — ${summary.affected_files ?? 0} archivos afectados`
+          : '✅ Sin dependencias circulares'
     } else if (graphType === 'heatmap') {
       msg = `${summary.total_functions ?? 0} fn · ${summary.hot_paths ?? 0} hot paths · CC promedio ${summary.avg_cc ?? 0}`
     }
 
-    onStatus(msg, !(result.has_cycles))
+    onStatus(msg, !result.has_cycles)
     appendLog('ok', `🕸 Graph proyecto ${graphType}: ${msg}`, 'be')
-
   } catch (e) {
     const msg = (e as Error).message
     onStatus(`Error: ${msg}`, false)
@@ -510,23 +512,22 @@ export async function generateProjectGraph(
  * Muestra metadata de complejidad por archivo.
  * Al hacer click en un archivo llama onFileClick(path).
  */
-export function renderDirTree(
-  container:   HTMLElement,
-  tree:        DirTreeNode,
-  onFileClick: (path: string) => void,
-): void {
+export function renderDirTree(container: HTMLElement, tree: DirTreeNode, onFileClick: (path: string) => void): void {
   container.innerHTML = ''
 
   const CC_COLORS: Record<string, string> = {
-    low:      'var(--ok)',
-    medium:   'var(--warn)',
-    high:     '#ff8a00',
+    low: 'var(--ok)',
+    medium: 'var(--warn)',
+    high: '#ff8a00',
     critical: 'var(--err)',
   }
 
   const LANG_ICONS: Record<string, string> = {
-    python: '🐍', typescript: '🟦', javascript: '🟨',
-    c: '⚙️', cpp: '⚙️',
+    python: '🐍',
+    typescript: '🟦',
+    javascript: '🟨',
+    c: '⚙️',
+    cpp: '⚙️',
   }
 
   function buildNode(node: DirTreeNode, depth: number): HTMLElement {
@@ -541,12 +542,16 @@ export function renderDirTree(
       font-family: var(--mono); font-size: .72rem; color: var(--txt);
       transition: background .1s;
     `
-    row.addEventListener('mouseenter', () => { row.style.background = 'var(--s1)' })
-    row.addEventListener('mouseleave', () => { row.style.background = '' })
+    row.addEventListener('mouseenter', () => {
+      row.style.background = 'var(--s1)'
+    })
+    row.addEventListener('mouseleave', () => {
+      row.style.background = ''
+    })
 
     if (node.type === 'directory') {
       // Ícono de carpeta + toggle
-      let expanded = depth < 2  // expandir las primeras 2 niveles
+      let expanded = depth < 2 // expandir las primeras 2 niveles
       const toggle = document.createElement('span')
       toggle.textContent = expanded ? '▾' : '▸'
       toggle.style.cssText = 'font-size:.6rem;color:var(--muted);width:10px;flex-shrink:0'
@@ -576,7 +581,7 @@ export function renderDirTree(
       const childContainer = document.createElement('div')
       childContainer.style.display = expanded ? 'block' : 'none'
 
-      for (const child of (node.children ?? [])) {
+      for (const child of node.children ?? []) {
         childContainer.appendChild(buildNode(child, depth + 1))
       }
       wrapper.appendChild(childContainer)
@@ -587,12 +592,11 @@ export function renderDirTree(
         toggle.textContent = expanded ? '▾' : '▸'
         childContainer.style.display = expanded ? 'block' : 'none'
       })
-
     } else {
       // Archivo
-      const stats   = node.stats
-      const lang    = stats?.language ?? ''
-      const icon    = LANG_ICONS[lang] ?? '📄'
+      const stats = node.stats
+      const lang = stats?.language ?? ''
+      const icon = LANG_ICONS[lang] ?? '📄'
       const hotPath = (stats?.hot_paths ?? 0) > 0
 
       const iconEl = document.createElement('span')
@@ -601,18 +605,16 @@ export function renderDirTree(
 
       const nameEl = document.createElement('span')
       nameEl.textContent = node.name
-      nameEl.style.cssText = hotPath
-        ? 'color:var(--err);font-weight:600'
-        : 'color:var(--txt)'
+      nameEl.style.cssText = hotPath ? 'color:var(--err);font-weight:600' : 'color:var(--txt)'
 
-      row.appendChild(document.createElement('span'))  // spacer para alinear con folders
+      row.appendChild(document.createElement('span')) // spacer para alinear con folders
       row.appendChild(iconEl)
       row.appendChild(nameEl)
 
       // Stats badge
       if (stats && stats.functions > 0) {
         const badge = document.createElement('span')
-        const cc    = stats.avg_cc
+        const cc = stats.avg_cc
         const ccLvl = cc <= 5 ? 'low' : cc <= 10 ? 'medium' : cc <= 20 ? 'high' : 'critical'
         badge.style.cssText = `
           margin-left: auto; font-size: .58rem; padding: 1px 5px;
@@ -654,14 +656,14 @@ export function renderDirTree(
  * Dado un projectId y el path del nodo, carga el archivo en el editor.
  */
 export async function openNodeInEditor(
-  projectId:   string,
-  nodePath:    string,
-  onContent:   (filename: string, content: string, language: string) => void,
+  projectId: string,
+  nodePath: string,
+  onContent: (filename: string, content: string, language: string) => void,
 ): Promise<void> {
   try {
     const fc = await api.getFileContent(projectId, nodePath)
     if (fc?.content) {
-      const ext  = nodePath.split('.').pop() ?? ''
+      const ext = nodePath.split('.').pop() ?? ''
       const lang = _extToLanguage(ext)
       onContent(nodePath, fc.content, lang)
       appendLog('ok', `📂 Abierto: ${nodePath}`, 'fe')
@@ -673,9 +675,15 @@ export async function openNodeInEditor(
 
 function _extToLanguage(ext: string): string {
   const map: Record<string, string> = {
-    py: 'python', ts: 'typescript', tsx: 'typescript',
-    js: 'javascript', jsx: 'javascript',
-    c: 'c', cpp: 'cpp', h: 'c', hpp: 'cpp',
+    py: 'python',
+    ts: 'typescript',
+    tsx: 'typescript',
+    js: 'javascript',
+    jsx: 'javascript',
+    c: 'c',
+    cpp: 'cpp',
+    h: 'c',
+    hpp: 'cpp',
   }
   return map[ext] ?? 'plaintext'
 }

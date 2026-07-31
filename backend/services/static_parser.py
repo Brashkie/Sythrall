@@ -12,16 +12,16 @@ from __future__ import annotations
 
 import ast
 import re
-import symtable
 from pathlib import Path
 from typing import Any
 
 # ── tree-sitter (C/C++) ───────────────────────────────────────────────────────
 try:
     from tree_sitter import Language, Parser as TSParser
-    import tree_sitter_c   as tsc
+    import tree_sitter_c as tsc
     import tree_sitter_cpp as tscpp
-    _C_LANG   = Language(tsc.language())
+
+    _C_LANG = Language(tsc.language())
     _CPP_LANG = Language(tscpp.language())
     HAS_TREESITTER = True
 except Exception:
@@ -30,6 +30,7 @@ except Exception:
 # ── networkx (grafos) ─────────────────────────────────────────────────────────
 try:
     import networkx as nx
+
     HAS_NX = True
 except ImportError:
     HAS_NX = False
@@ -38,6 +39,7 @@ except ImportError:
 # ══════════════════════════════════════════════════════════════════════════════
 #  ENTRADA PRINCIPAL
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def parse_file(filename: str, content: str) -> dict[str, Any]:
     """Despacha al parser correcto según extensión."""
@@ -56,88 +58,111 @@ def parse_file(filename: str, content: str) -> dict[str, Any]:
         else:
             return _unsupported(filename, ext)
     except Exception as e:
-        return {"filename": filename, "language": ext, "error": str(e),
-                "functions": [], "classes": [], "imports": [], "exports": [],
-                "complexity": [], "big_o": [], "dead_code": [], "wasm_hints": []}
+        return {
+            "filename": filename,
+            "language": ext,
+            "error": str(e),
+            "functions": [],
+            "classes": [],
+            "imports": [],
+            "exports": [],
+            "complexity": [],
+            "big_o": [],
+            "dead_code": [],
+            "wasm_hints": [],
+        }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  PYTHON PARSER  (ast + symtable)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _parse_python(filename: str, content: str) -> dict:
-    tree  = ast.parse(content, filename=filename)
-    lines = content.splitlines()
+    tree = ast.parse(content, filename=filename)
 
     functions: list[dict] = []
-    classes:   list[dict] = []
-    imports:   list[dict] = []
+    classes: list[dict] = []
+    imports: list[dict] = []
 
     # ── Imports ───────────────────────────────────────────────────────────────
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                imports.append({
-                    "module": alias.name,
-                    "alias":  alias.asname,
-                    "type":   "import",
-                    "line":   node.lineno,
-                })
+                imports.append(
+                    {
+                        "module": alias.name,
+                        "alias": alias.asname,
+                        "type": "import",
+                        "line": node.lineno,
+                    }
+                )
         elif isinstance(node, ast.ImportFrom):
             mod = node.module or ""
             for alias in node.names:
-                imports.append({
-                    "module": mod,
-                    "name":   alias.name,
-                    "alias":  alias.asname,
-                    "type":   "from_import",
-                    "line":   node.lineno,
-                })
+                imports.append(
+                    {
+                        "module": mod,
+                        "name": alias.name,
+                        "alias": alias.asname,
+                        "type": "from_import",
+                        "line": node.lineno,
+                    }
+                )
 
     # ── Funciones y clases ────────────────────────────────────────────────────
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            end   = _end_line(node)
-            loc   = end - node.lineno + 1
-            cc    = _cyclomatic_python(node)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            end = _end_line(node)
+            loc = end - node.lineno + 1
+            cc = _cyclomatic_python(node)
             bigo, bigo_reason = _infer_big_o_python(node)
+            bigo_theta, bigo_omega = _theta_omega_python(node, bigo)
             decorators = [_decorator_name(d) for d in node.decorator_list]
 
-            functions.append({
-                "name":       node.name,
-                "line":       node.lineno,
-                "end_line":   end,
-                "loc":        loc,
-                "args":       [a.arg for a in node.args.args],
-                "is_async":   isinstance(node, ast.AsyncFunctionDef),
-                "decorators": decorators,
-                "docstring":  ast.get_docstring(node),
-                "complexity": cc,
-                "big_o":      bigo,
-                "big_o_reason": bigo_reason,
-                "calls":      _extract_calls_python(node),
-                "returns_annotated": node.returns is not None,
-            })
+            functions.append(
+                {
+                    "name": node.name,
+                    "line": node.lineno,
+                    "end_line": end,
+                    "loc": loc,
+                    "args": [a.arg for a in node.args.args],
+                    "is_async": isinstance(node, ast.AsyncFunctionDef),
+                    "decorators": decorators,
+                    "docstring": ast.get_docstring(node),
+                    "complexity": cc,
+                    "big_o": bigo,
+                    "big_o_reason": bigo_reason,
+                    "big_o_theta": bigo_theta,
+                    "big_o_omega": bigo_omega,
+                    "calls": _extract_calls_python(node),
+                    "returns_annotated": node.returns is not None,
+                }
+            )
 
         elif isinstance(node, ast.ClassDef):
             methods = []
             for item in node.body:
-                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    methods.append({
-                        "name": item.name,
-                        "line": item.lineno,
-                        "args": [a.arg for a in item.args.args],
-                        "is_async": isinstance(item, ast.AsyncFunctionDef),
-                    })
+                if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
+                    methods.append(
+                        {
+                            "name": item.name,
+                            "line": item.lineno,
+                            "args": [a.arg for a in item.args.args],
+                            "is_async": isinstance(item, ast.AsyncFunctionDef),
+                        }
+                    )
             bases = [_node_name(b) for b in node.bases]
-            classes.append({
-                "name":       node.name,
-                "line":       node.lineno,
-                "bases":      bases,
-                "methods":    methods,
-                "decorators": [_decorator_name(d) for d in node.decorator_list],
-                "docstring":  ast.get_docstring(node),
-            })
+            classes.append(
+                {
+                    "name": node.name,
+                    "line": node.lineno,
+                    "bases": bases,
+                    "methods": methods,
+                    "decorators": [_decorator_name(d) for d in node.decorator_list],
+                    "docstring": ast.get_docstring(node),
+                }
+            )
 
     # ── Imports no usados (heurística) ───────────────────────────────────────
     used_names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
@@ -147,12 +172,14 @@ def _parse_python(filename: str, content: str) -> dict:
         alias = imp.get("alias") or imp.get("name") or imp["module"].split(".")[0]
         if alias and alias != "*":
             if alias not in used_names and alias not in used_attrs:
-                dead_imports.append({
-                    "type":   "unused_import",
-                    "name":   alias,
-                    "module": imp["module"],
-                    "line":   imp["line"],
-                })
+                dead_imports.append(
+                    {
+                        "type": "unused_import",
+                        "name": alias,
+                        "module": imp["module"],
+                        "line": imp["line"],
+                    }
+                )
 
     # ── WASM / hot path hints ─────────────────────────────────────────────────
     wasm_hints = _wasm_hints_python(functions, content)
@@ -164,24 +191,22 @@ def _parse_python(filename: str, content: str) -> dict:
     circular = _detect_circular_imports(imports)
 
     return {
-        "filename":    filename,
-        "language":    "python",
-        "functions":   functions,
-        "classes":     classes,
-        "imports":     imports,
-        "exports":     [],           # Python no tiene exports explícitos
-        "dead_code":   dead_imports,
-        "call_graph":  call_graph,
+        "filename": filename,
+        "language": "python",
+        "functions": functions,
+        "classes": classes,
+        "imports": imports,
+        "exports": [],  # Python no tiene exports explícitos
+        "dead_code": dead_imports,
+        "call_graph": call_graph,
         "circular_deps": circular,
-        "wasm_hints":  wasm_hints,
+        "wasm_hints": wasm_hints,
         "summary": {
             "total_functions": len(functions),
-            "total_classes":   len(classes),
-            "total_imports":   len(imports),
-            "unused_imports":  len(dead_imports),
-            "avg_complexity":  round(
-                sum(f["complexity"] for f in functions) / len(functions), 2
-            ) if functions else 0,
+            "total_classes": len(classes),
+            "total_imports": len(imports),
+            "unused_imports": len(dead_imports),
+            "avg_complexity": round(sum(f["complexity"] for f in functions) / len(functions), 2) if functions else 0,
             "max_loc_function": max((f["loc"] for f in functions), default=0),
         },
     }
@@ -191,36 +216,37 @@ def _parse_python(filename: str, content: str) -> dict:
 #  C PARSER  (tree-sitter)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _parse_c(filename: str, content: str) -> dict:
     if not HAS_TREESITTER:
         return _unsupported(filename, ".c", reason="tree-sitter no instalado")
 
     parser = TSParser(_C_LANG)
-    tree   = parser.parse(content.encode())
-    root   = tree.root_node
+    tree = parser.parse(content.encode())
+    root = tree.root_node
 
     functions = _ts_extract_functions(root, content, "c")
-    includes  = _ts_extract_includes(root, content)
-    structs   = _ts_extract_structs(root, content)
-    macros    = _ts_extract_macros(root, content)
+    includes = _ts_extract_includes(root, content)
+    structs = _ts_extract_structs(root, content)
+    macros = _ts_extract_macros(root, content)
     wasm_hints = _wasm_hints_c(functions, content)
 
     return {
-        "filename":  filename,
-        "language":  "c",
+        "filename": filename,
+        "language": "c",
         "functions": functions,
-        "classes":   structs,
-        "imports":   includes,
-        "exports":   [],
+        "classes": structs,
+        "imports": includes,
+        "exports": [],
         "dead_code": [],
-        "macros":    macros,
+        "macros": macros,
         "call_graph": _build_call_graph(functions),
         "wasm_hints": wasm_hints,
         "summary": {
             "total_functions": len(functions),
-            "total_structs":   len(structs),
-            "total_includes":  len(includes),
-            "total_macros":    len(macros),
+            "total_structs": len(structs),
+            "total_includes": len(includes),
+            "total_macros": len(macros),
         },
     }
 
@@ -230,66 +256,75 @@ def _parse_cpp(filename: str, content: str) -> dict:
         return _unsupported(filename, ".cpp", reason="tree-sitter no instalado")
 
     parser = TSParser(_CPP_LANG)
-    tree   = parser.parse(content.encode())
-    root   = tree.root_node
+    tree = parser.parse(content.encode())
+    root = tree.root_node
 
     functions = _ts_extract_functions(root, content, "cpp")
-    includes  = _ts_extract_includes(root, content)
-    classes   = _ts_extract_classes_cpp(root, content)
-    macros    = _ts_extract_macros(root, content)
+    includes = _ts_extract_includes(root, content)
+    classes = _ts_extract_classes_cpp(root, content)
+    macros = _ts_extract_macros(root, content)
     wasm_hints = _wasm_hints_c(functions, content)
 
     return {
-        "filename":  filename,
-        "language":  "cpp",
+        "filename": filename,
+        "language": "cpp",
         "functions": functions,
-        "classes":   classes,
-        "imports":   includes,
-        "exports":   [],
+        "classes": classes,
+        "imports": includes,
+        "exports": [],
         "dead_code": [],
-        "macros":    macros,
+        "macros": macros,
         "call_graph": _build_call_graph(functions),
         "wasm_hints": wasm_hints,
         "summary": {
             "total_functions": len(functions),
-            "total_classes":   len(classes),
-            "total_includes":  len(includes),
+            "total_classes": len(classes),
+            "total_includes": len(includes),
         },
     }
 
 
 # ── tree-sitter helpers ───────────────────────────────────────────────────────
 
+
 def _ts_extract_functions(root, content: str, lang: str) -> list[dict]:
     functions = []
-    lines     = content.splitlines()
+    lines = content.splitlines()
 
     def walk(node):
         if node.type == "function_definition":
-            name  = _ts_func_name(node)
+            name = _ts_func_name(node)
             start = node.start_point[0] + 1
-            end   = node.end_point[0]   + 1
-            loc   = end - start + 1
-            body_src = "\n".join(lines[start-1:end])
+            end = node.end_point[0] + 1
+            loc = end - start + 1
+            body_src = "\n".join(lines[start - 1 : end])
 
             # Complejidad ciclomática básica por conteo de branch keywords
-            cc = 1 + body_src.count(" if ") + body_src.count(" else if ") + \
-                 body_src.count(" for ") + body_src.count(" while ") + \
-                 body_src.count(" case ") + body_src.count(" && ") + \
-                 body_src.count(" || ")
+            cc = (
+                1
+                + body_src.count(" if ")
+                + body_src.count(" else if ")
+                + body_src.count(" for ")
+                + body_src.count(" while ")
+                + body_src.count(" case ")
+                + body_src.count(" && ")
+                + body_src.count(" || ")
+            )
 
             bigo, reason = _infer_big_o_c(body_src)
 
-            functions.append({
-                "name":       name,
-                "line":       start,
-                "end_line":   end,
-                "loc":        loc,
-                "complexity": cc,
-                "big_o":      bigo,
-                "big_o_reason": reason,
-                "calls":      _extract_calls_c(node),
-            })
+            functions.append(
+                {
+                    "name": name,
+                    "line": start,
+                    "end_line": end,
+                    "loc": loc,
+                    "complexity": cc,
+                    "big_o": bigo,
+                    "big_o_reason": reason,
+                    "calls": _extract_calls_c(node),
+                }
+            )
         for child in node.children:
             walk(child)
 
@@ -311,75 +346,91 @@ def _ts_func_name(node) -> str:
 
 def _ts_extract_includes(root, content: str) -> list[dict]:
     includes = []
+
     def walk(node):
         if node.type == "preproc_include":
-            path_node = next((c for c in node.children if c.type in
-                              ("string_literal", "system_lib_string")), None)
+            path_node = next((c for c in node.children if c.type in ("string_literal", "system_lib_string")), None)
             if path_node:
                 raw = path_node.text.decode("utf-8", errors="replace").strip('"<>')
-                includes.append({
-                    "module": raw,
-                    "type":   "include",
-                    "line":   node.start_point[0] + 1,
-                })
+                includes.append(
+                    {
+                        "module": raw,
+                        "type": "include",
+                        "line": node.start_point[0] + 1,
+                    }
+                )
         for child in node.children:
             walk(child)
+
     walk(root)
     return includes
 
 
 def _ts_extract_structs(root, content: str) -> list[dict]:
     structs = []
+
     def walk(node):
         if node.type in ("struct_specifier", "union_specifier"):
             name_node = next((c for c in node.children if c.type == "type_identifier"), None)
             if name_node:
-                structs.append({
-                    "name": name_node.text.decode("utf-8", errors="replace"),
-                    "line": node.start_point[0] + 1,
-                    "kind": node.type.replace("_specifier",""),
-                })
+                structs.append(
+                    {
+                        "name": name_node.text.decode("utf-8", errors="replace"),
+                        "line": node.start_point[0] + 1,
+                        "kind": node.type.replace("_specifier", ""),
+                    }
+                )
         for child in node.children:
             walk(child)
+
     walk(root)
     return structs
 
 
 def _ts_extract_classes_cpp(root, content: str) -> list[dict]:
     classes = []
+
     def walk(node):
         if node.type == "class_specifier":
             name_node = next((c for c in node.children if c.type == "type_identifier"), None)
             if name_node:
-                classes.append({
-                    "name": name_node.text.decode("utf-8", errors="replace"),
-                    "line": node.start_point[0] + 1,
-                    "kind": "class",
-                })
+                classes.append(
+                    {
+                        "name": name_node.text.decode("utf-8", errors="replace"),
+                        "line": node.start_point[0] + 1,
+                        "kind": "class",
+                    }
+                )
         for child in node.children:
             walk(child)
+
     walk(root)
     return classes
 
 
 def _ts_extract_macros(root, content: str) -> list[dict]:
     macros = []
+
     def walk(node):
         if node.type == "preproc_def":
             name_node = next((c for c in node.children if c.type == "identifier"), None)
             if name_node:
-                macros.append({
-                    "name": name_node.text.decode("utf-8", errors="replace"),
-                    "line": node.start_point[0] + 1,
-                })
+                macros.append(
+                    {
+                        "name": name_node.text.decode("utf-8", errors="replace"),
+                        "line": node.start_point[0] + 1,
+                    }
+                )
         for child in node.children:
             walk(child)
+
     walk(root)
     return macros
 
 
 def _extract_calls_c(func_node) -> list[str]:
     calls = []
+
     def walk(node):
         if node.type == "call_expression":
             fn = next((c for c in node.children if c.type == "identifier"), None)
@@ -387,6 +438,7 @@ def _extract_calls_c(func_node) -> list[str]:
                 calls.append(fn.text.decode("utf-8", errors="replace"))
         for child in node.children:
             walk(child)
+
     walk(func_node)
     return list(set(calls))
 
@@ -396,16 +448,18 @@ def _extract_calls_c(func_node) -> list[str]:
 # ══════════════════════════════════════════════════════════════════════════════
 
 _JS_FUNC_RE = re.compile(
-    r'(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)'
-    r'|const\s+(\w+)\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>'
-    r'|(?:export\s+)?(?:async\s+)?function\s*\(([^)]*)\)',
+    r"(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)"
+    r"|const\s+(\w+)\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>"
+    r"|(?:export\s+)?(?:async\s+)?function\s*\(([^)]*)\)",
     re.MULTILINE,
 )
-_JS_CLASS_RE  = re.compile(r'(?:export\s+)?class\s+(\w+)(?:\s+extends\s+(\w+))?', re.MULTILINE)
-_JS_IMPORT_RE = re.compile(r"import\s+(?:{[^}]+}|[\w*]+)?\s*(?:,\s*{[^}]+})?\s*from\s+['\"]([^'\"]+)['\"]", re.MULTILINE)
-_JS_EXPORT_RE = re.compile(r'export\s+(?:default\s+)?(?:function|class|const|let|var)\s+(\w+)', re.MULTILINE)
-_TS_IFACE_RE  = re.compile(r'(?:export\s+)?interface\s+(\w+)', re.MULTILINE)
-_TS_TYPE_RE   = re.compile(r'(?:export\s+)?type\s+(\w+)\s*=', re.MULTILINE)
+_JS_CLASS_RE = re.compile(r"(?:export\s+)?class\s+(\w+)(?:\s+extends\s+(\w+))?", re.MULTILINE)
+_JS_IMPORT_RE = re.compile(
+    r"import\s+(?:{[^}]+}|[\w*]+)?\s*(?:,\s*{[^}]+})?\s*from\s+['\"]([^'\"]+)['\"]", re.MULTILINE
+)
+_JS_EXPORT_RE = re.compile(r"export\s+(?:default\s+)?(?:function|class|const|let|var)\s+(\w+)", re.MULTILINE)
+_TS_IFACE_RE = re.compile(r"(?:export\s+)?interface\s+(\w+)", re.MULTILINE)
+_TS_TYPE_RE = re.compile(r"(?:export\s+)?type\s+(\w+)\s*=", re.MULTILINE)
 
 
 def _parse_js(filename: str, content: str) -> dict:
@@ -417,71 +471,77 @@ def _parse_ts(filename: str, content: str) -> dict:
 
 
 def _parse_js_ts(filename: str, content: str, lang: str) -> dict:
-    lines    = content.splitlines()
-    n_lines  = len(lines)
+    lines = content.splitlines()
+    n_lines = len(lines)
 
     # ── Funciones ─────────────────────────────────────────────────────────────
     functions: list[dict] = []
-    seen_funcs: set[str]  = set()
+    seen_funcs: set[str] = set()
 
     for m in _JS_FUNC_RE.finditer(content):
         name = m.group(1) or m.group(3) or "<anonymous>"
         if name in seen_funcs:
             continue
         seen_funcs.add(name)
-        line_no = content[:m.start()].count("\n") + 1
+        line_no = content[: m.start()].count("\n") + 1
         # Calcular LOC aproximado buscando la llave de cierre
-        loc  = _estimate_js_func_loc(content, m.start())
-        body = "\n".join(lines[line_no-1: line_no-1+loc])
-        cc   = _cyclomatic_js(body)
+        loc = _estimate_js_func_loc(content, m.start())
+        body = "\n".join(lines[line_no - 1 : line_no - 1 + loc])
+        cc = _cyclomatic_js(body)
         bigo, reason = _infer_big_o_js(body)
 
-        functions.append({
-            "name":       name,
-            "line":       line_no,
-            "end_line":   min(line_no + loc, n_lines),
-            "loc":        loc,
-            "complexity": cc,
-            "big_o":      bigo,
-            "big_o_reason": reason,
-            "calls":      _extract_calls_js(body),
-            "is_async":   "async" in content[max(0,m.start()-10):m.start()+5],
-        })
+        functions.append(
+            {
+                "name": name,
+                "line": line_no,
+                "end_line": min(line_no + loc, n_lines),
+                "loc": loc,
+                "complexity": cc,
+                "big_o": bigo,
+                "big_o_reason": reason,
+                "calls": _extract_calls_js(body),
+                "is_async": "async" in content[max(0, m.start() - 10) : m.start() + 5],
+            }
+        )
 
     # ── Clases ────────────────────────────────────────────────────────────────
     classes = []
     for m in _JS_CLASS_RE.finditer(content):
-        line_no = content[:m.start()].count("\n") + 1
-        classes.append({
-            "name":    m.group(1),
-            "extends": m.group(2),
-            "line":    line_no,
-        })
+        line_no = content[: m.start()].count("\n") + 1
+        classes.append(
+            {
+                "name": m.group(1),
+                "extends": m.group(2),
+                "line": line_no,
+            }
+        )
 
     # ── Imports ───────────────────────────────────────────────────────────────
     imports = []
     for m in _JS_IMPORT_RE.finditer(content):
-        line_no = content[:m.start()].count("\n") + 1
-        imports.append({
-            "module": m.group(1),
-            "type":   "esm_import",
-            "line":   line_no,
-        })
+        line_no = content[: m.start()].count("\n") + 1
+        imports.append(
+            {
+                "module": m.group(1),
+                "type": "esm_import",
+                "line": line_no,
+            }
+        )
 
     # ── Exports ───────────────────────────────────────────────────────────────
     exports = []
     for m in _JS_EXPORT_RE.finditer(content):
-        line_no = content[:m.start()].count("\n") + 1
+        line_no = content[: m.start()].count("\n") + 1
         exports.append({"name": m.group(1), "line": line_no})
 
     # ── TypeScript extras ─────────────────────────────────────────────────────
     interfaces, types_list = [], []
     if lang == "typescript":
         for m in _TS_IFACE_RE.finditer(content):
-            line_no = content[:m.start()].count("\n") + 1
+            line_no = content[: m.start()].count("\n") + 1
             interfaces.append({"name": m.group(1), "line": line_no})
         for m in _TS_TYPE_RE.finditer(content):
-            line_no = content[:m.start()].count("\n") + 1
+            line_no = content[: m.start()].count("\n") + 1
             types_list.append({"name": m.group(1), "line": line_no})
 
     # ── Imports no usados ─────────────────────────────────────────────────────
@@ -491,27 +551,25 @@ def _parse_js_ts(filename: str, content: str, lang: str) -> dict:
     wasm_hints = _wasm_hints_js(functions, content)
 
     return {
-        "filename":   filename,
-        "language":   lang,
-        "functions":  functions,
-        "classes":    classes,
-        "imports":    imports,
-        "exports":    exports,
+        "filename": filename,
+        "language": lang,
+        "functions": functions,
+        "classes": classes,
+        "imports": imports,
+        "exports": exports,
         "interfaces": interfaces,
-        "types":      types_list,
-        "dead_code":  dead_imports,
+        "types": types_list,
+        "dead_code": dead_imports,
         "call_graph": _build_call_graph(functions),
         "wasm_hints": wasm_hints,
         "summary": {
-            "total_functions":  len(functions),
-            "total_classes":    len(classes),
-            "total_imports":    len(imports),
-            "total_exports":    len(exports),
+            "total_functions": len(functions),
+            "total_classes": len(classes),
+            "total_imports": len(imports),
+            "total_exports": len(exports),
             "total_interfaces": len(interfaces),
-            "unused_imports":   len(dead_imports),
-            "avg_complexity":   round(
-                sum(f["complexity"] for f in functions) / len(functions), 2
-            ) if functions else 0,
+            "unused_imports": len(dead_imports),
+            "avg_complexity": round(sum(f["complexity"] for f in functions) / len(functions), 2) if functions else 0,
         },
     }
 
@@ -528,7 +586,7 @@ def _estimate_js_func_loc(content: str, start: int) -> int:
         elif ch == "}" and in_func:
             depth -= 1
             if depth == 0:
-                return content[start:i+1].count("\n") + 1
+                return content[start : i + 1].count("\n") + 1
         elif ch == "\n":
             max_loc += 1
         i += 1
@@ -536,22 +594,24 @@ def _estimate_js_func_loc(content: str, start: int) -> int:
 
 
 def _extract_calls_js(body: str) -> list[str]:
-    return list(set(re.findall(r'(\w+)\s*\(', body)))
+    return list(set(re.findall(r"(\w+)\s*\(", body)))
 
 
 def _dead_js_imports(imports: list[dict], content: str) -> list[dict]:
     dead = []
     for imp in imports:
-        mod = imp["module"].split("/")[-1].replace("-","_").replace(".","_")
+        mod = imp["module"].split("/")[-1].replace("-", "_").replace(".", "_")
         # Buscar si el módulo o algo que de él se importa está en el contenido
         # Heurística simple: buscar el nombre base del módulo
-        base = re.sub(r'[^a-zA-Z0-9_]','', mod)
+        base = re.sub(r"[^a-zA-Z0-9_]", "", mod)
         if base and len(base) > 1 and content.count(base) <= 1:
-            dead.append({
-                "type":   "possibly_unused_import",
-                "module": imp["module"],
-                "line":   imp["line"],
-            })
+            dead.append(
+                {
+                    "type": "possibly_unused_import",
+                    "module": imp["module"],
+                    "line": imp["line"],
+                }
+            )
     return dead
 
 
@@ -559,10 +619,11 @@ def _dead_js_imports(imports: list[dict], content: str) -> list[dict]:
 #  BIG O HEURÍSTICA
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _count_loop_depth_python(node: ast.AST) -> int:
     """Profundidad máxima de loops anidados en un nodo Python AST."""
     LOOP_TYPES = (ast.For, ast.While)
-    max_depth  = [0]
+    max_depth = [0]
 
     def walk(n, depth):
         for child in ast.iter_child_nodes(n):
@@ -579,7 +640,7 @@ def _has_binary_split_python(node: ast.AST) -> bool:
         if isinstance(n, ast.BinOp):
             if isinstance(n.op, ast.FloorDiv) and isinstance(n.right, ast.Constant) and n.right.value == 2:
                 return True
-            if isinstance(n.op, ast.RShift)   and isinstance(n.right, ast.Constant) and n.right.value == 1:
+            if isinstance(n.op, ast.RShift) and isinstance(n.right, ast.Constant) and n.right.value == 1:
                 return True
     return False
 
@@ -592,35 +653,62 @@ def _has_recursion_python(func: ast.FunctionDef) -> bool:
 
 
 def _infer_big_o_python(func: ast.FunctionDef) -> tuple[str, str]:
-    depth     = _count_loop_depth_python(func)
+    depth = _count_loop_depth_python(func)
     recursive = _has_recursion_python(func)
-    binary    = _has_binary_split_python(func)
+    binary = _has_binary_split_python(func)
 
     if depth == 0 and not recursive:
-        return "O(1)", "sin loops ni recursión"
+        return "O(1)", "Sin loops ni recursión — el tiempo no depende de n"
     if depth == 1 and binary:
-        return "O(log n)", "loop con división binaria"
+        return "O(log n)", "Loop con división binaria — el rango se reduce a la mitad en cada iteración"
     if depth == 1 and recursive:
-        return "O(n log n)", "loop + recursión"
+        return "O(n log n)", "Loop combinado con recursión — mezcla un paso lineal con reducción logarítmica"
     if depth == 1:
-        return "O(n)", "un loop"
+        return "O(n)", "Un loop — recorre los n elementos una vez"
     if depth == 2:
-        return "O(n²)", "loops anidados dobles"
+        return "O(n²)", "2 loops anidados — el loop interno se ejecuta n veces por cada iteración del externo"
     if depth == 3:
-        return "O(n³)", "loops anidados triples"
+        return "O(n³)", "3 loops anidados — cada nivel adicional multiplica el trabajo por n"
     if depth >= 4:
-        return f"O(n^{depth})", f"{depth} loops anidados"
+        return f"O(n^{depth})", f"{depth} loops anidados — crecimiento polinomial de grado {depth}"
     if recursive and not binary:
-        return "O(2^n)", "recursión sin división"
-    return "O(n)", "caso base"
+        return (
+            "O(2^n)",
+            "Recursión sin reducir el problema — cada llamada genera nuevas llamadas sin dividir la entrada",
+        )
+    return "O(n)", "Caso base — comportamiento lineal por defecto"
+
+
+def _has_early_exit_python(func: ast.FunctionDef) -> bool:
+    """Detecta un break/return dentro de un loop — indica que el mejor caso
+    puede terminar antes de recorrer todos los elementos (ej. búsqueda lineal)."""
+    for node in ast.walk(func):
+        if isinstance(node, ast.For | ast.While):
+            for inner in ast.walk(node):
+                if isinstance(inner, ast.Break | ast.Return):
+                    return True
+    return False
+
+
+def _theta_omega_python(func: ast.FunctionDef, worst: str) -> tuple[str, str]:
+    """Cota ajustada (Θ) y mejor caso (Ω) a partir del peor caso (O) ya inferido.
+
+    Heurística: si hay un break/return dentro de un loop, el mejor caso puede
+    terminar en la primera iteración (Ω(1)), como en una búsqueda lineal que
+    encuentra el elemento de una — en ese caso no hay una cota Θ única, varía
+    entre el mejor y el peor caso. Sin salida temprana, el loop siempre corre
+    hasta el final sin importar los datos, así que Θ = Ω = O.
+    """
+    suffix = worst[1:]  # "O(n²)" -> "(n²)"
+    if _has_early_exit_python(func):
+        return f"varía entre Ω(1) y O{suffix}", "Ω(1)"
+    return f"Θ{suffix}", f"Ω{suffix}"
 
 
 def _infer_big_o_c(body: str) -> tuple[str, str]:
     """Heurística Big O para C/C++ basada en keywords del cuerpo."""
-    loops = body.count(" for ") + body.count("\tfor ") + \
-            body.count(" while ") + body.count("\twhile ")
+    loops = body.count(" for ") + body.count("\tfor ") + body.count(" while ") + body.count("\twhile ")
     has_binary = "/ 2" in body or ">> 1" in body or "mid" in body
-    has_recurse = False  # Simplificado para C
 
     if loops == 0:
         return "O(1)", "sin loops"
@@ -636,12 +724,9 @@ def _infer_big_o_c(body: str) -> tuple[str, str]:
 
 
 def _infer_big_o_js(body: str) -> tuple[str, str]:
-    loops = len(re.findall(r'\b(for|while|forEach|map|filter|reduce)\b', body))
+    loops = len(re.findall(r"\b(for|while|forEach|map|filter|reduce)\b", body))
     has_binary = "/ 2" in body or ">> 1" in body or "Math.floor" in body
-    nested = bool(re.search(
-        r'(for|while|forEach|map)[^{]*\{[^}]*(for|while|forEach|map)',
-        body, re.DOTALL
-    ))
+    nested = bool(re.search(r"(for|while|forEach|map)[^{]*\{[^}]*(for|while|forEach|map)", body, re.DOTALL))
 
     if loops == 0:
         return "O(1)", "sin loops"
@@ -658,12 +743,14 @@ def _infer_big_o_js(body: str) -> tuple[str, str]:
 #  CYCLOMATIC COMPLEXITY
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _cyclomatic_python(func: ast.FunctionDef) -> int:
     """Complejidad ciclomática de McCabe para Python."""
     cc = 1
     for node in ast.walk(func):
-        if isinstance(node, (ast.If, ast.While, ast.For, ast.ExceptHandler,
-                              ast.With, ast.Assert, ast.comprehension)):
+        if isinstance(
+            node, ast.If | ast.While | ast.For | ast.ExceptHandler | ast.With | ast.Assert | ast.comprehension
+        ):
             cc += 1
         elif isinstance(node, ast.BoolOp):
             cc += len(node.values) - 1
@@ -672,8 +759,7 @@ def _cyclomatic_python(func: ast.FunctionDef) -> int:
 
 def _cyclomatic_js(body: str) -> int:
     cc = 1
-    keywords = ["if ", "else if ", "for ", "while ", "case ", "catch ",
-                "&&", "||", "? "]
+    keywords = ["if ", "else if ", "for ", "while ", "case ", "catch ", "&&", "||", "? "]
     for kw in keywords:
         cc += body.count(kw)
     return cc
@@ -683,11 +769,12 @@ def _cyclomatic_js(body: str) -> int:
 #  CALL GRAPH
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _build_call_graph(functions: list[dict]) -> list[dict]:
     """Construye edges del call graph a partir de las llamadas detectadas."""
     func_names = {f["name"] for f in functions}
     edges: list[dict] = []
-    seen:  set[str]   = set()
+    seen: set[str] = set()
 
     for func in functions:
         caller = func["name"]
@@ -716,13 +803,14 @@ def _extract_calls_python(func: ast.FunctionDef) -> list[str]:
 #  CIRCULAR IMPORTS (Python)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _detect_circular_imports(imports: list[dict]) -> list[str]:
     """Detecta posibles ciclos entre módulos importados."""
     if not HAS_NX:
         return []
     G = nx.DiGraph()
     for imp in imports:
-        mod  = imp["module"]
+        mod = imp["module"]
         parts = mod.split(".")
         if len(parts) >= 2:
             G.add_edge(parts[0], parts[-1])
@@ -738,18 +826,16 @@ def _detect_circular_imports(imports: list[dict]) -> list[str]:
 # ══════════════════════════════════════════════════════════════════════════════
 
 # Umbrales para considerar un hot path
-_WASM_CC_THRESHOLD  = 5    # Complejidad ciclomática
-_WASM_LOC_THRESHOLD = 30   # Líneas de código
-_WASM_BIGO_HOT      = {"O(n²)", "O(n³)", "O(2^n)"}  # Big O que se benefician de WASM
+_WASM_CC_THRESHOLD = 5  # Complejidad ciclomática
+_WASM_LOC_THRESHOLD = 30  # Líneas de código
+_WASM_BIGO_HOT = {"O(n²)", "O(n³)", "O(2^n)"}  # Big O que se benefician de WASM
 
 
 def _wasm_hints_python(functions: list[dict], content: str) -> list[dict]:
     hints: list[dict] = []
 
-    # Detectar uso actual de Cython o ctypes
-    has_cython  = bool(re.search(r'\bcimport\b|\bcdef\b|\bcpdef\b', content))
-    has_ctypes  = "ctypes" in content
-    has_cffi    = "cffi" in content
+    # Detectar uso actual de Cython
+    has_cython = bool(re.search(r"\bcimport\b|\bcdef\b|\bcpdef\b", content))
 
     for func in functions:
         reasons: list[str] = []
@@ -768,34 +854,53 @@ def _wasm_hints_python(functions: list[dict], content: str) -> list[dict]:
             priority += 1
 
         # Detectar operaciones numéricas intensivas
-        is_numeric = any(kw in func["name"].lower() for kw in
-                         ["sort","search","compute","calc","matrix","multiply","fft",
-                          "transform","encode","decode","hash","compress","convolve"])
+        is_numeric = any(
+            kw in func["name"].lower()
+            for kw in [
+                "sort",
+                "search",
+                "compute",
+                "calc",
+                "matrix",
+                "multiply",
+                "fft",
+                "transform",
+                "encode",
+                "decode",
+                "hash",
+                "compress",
+                "convolve",
+            ]
+        )
         if is_numeric:
             reasons.append("Nombre sugiere operación numérica intensiva")
             priority += 2
 
         if reasons:
             rec = _wasm_recommendation_python(func, has_cython)
-            hints.append({
-                "function":       func["name"],
-                "line":           func["line"],
-                "priority":       priority,
-                "reasons":        reasons,
-                "recommendation": rec,
-                "estimated_speedup": _estimate_speedup(func),
-            })
+            hints.append(
+                {
+                    "function": func["name"],
+                    "line": func["line"],
+                    "priority": priority,
+                    "reasons": reasons,
+                    "recommendation": rec,
+                    "estimated_speedup": _estimate_speedup(func),
+                }
+            )
 
     # Detección de módulos .wasm en el contenido
     if "import.wasm" in content or ".wasm" in content:
-        hints.append({
-            "function": "<module>",
-            "line":     1,
-            "priority": 5,
-            "reasons":  ["Archivo usa módulos .wasm directamente"],
-            "recommendation": "Asegúrate de que los bindings WASM están tipados correctamente",
-            "estimated_speedup": "N/A",
-        })
+        hints.append(
+            {
+                "function": "<module>",
+                "line": 1,
+                "priority": 5,
+                "reasons": ["Archivo usa módulos .wasm directamente"],
+                "recommendation": "Asegúrate de que los bindings WASM están tipados correctamente",
+                "estimated_speedup": "N/A",
+            }
+        )
 
     return sorted(hints, key=lambda x: -x["priority"])
 
@@ -804,14 +909,16 @@ def _wasm_hints_c(functions: list[dict], content: str) -> list[dict]:
     hints: list[dict] = []
     for func in functions:
         if func["big_o"] in _WASM_BIGO_HOT or func["complexity"] >= _WASM_CC_THRESHOLD:
-            hints.append({
-                "function":  func["name"],
-                "line":      func["line"],
-                "priority":  3,
-                "reasons":   [f"Hot path C — {func['big_o']}, CC={func['complexity']}"],
-                "recommendation": "Compilar con Emscripten: emcc -O3 -s WASM=1",
-                "estimated_speedup": "2-10x vs JavaScript",
-            })
+            hints.append(
+                {
+                    "function": func["name"],
+                    "line": func["line"],
+                    "priority": 3,
+                    "reasons": [f"Hot path C — {func['big_o']}, CC={func['complexity']}"],
+                    "recommendation": "Compilar con Emscripten: emcc -O3 -s WASM=1",
+                    "estimated_speedup": "2-10x vs JavaScript",
+                }
+            )
     return hints
 
 
@@ -819,14 +926,16 @@ def _wasm_hints_js(functions: list[dict], content: str) -> list[dict]:
     hints: list[dict] = []
     for func in functions:
         if func["big_o"] in _WASM_BIGO_HOT:
-            hints.append({
-                "function":  func["name"],
-                "line":      func["line"],
-                "priority":  3,
-                "reasons":   [f"Hot path JS — {func['big_o']}"],
-                "recommendation": "Considera mover esta función a un módulo Rust/C++ compilado a WASM",
-                "estimated_speedup": "3-20x para operaciones numéricas",
-            })
+            hints.append(
+                {
+                    "function": func["name"],
+                    "line": func["line"],
+                    "priority": 3,
+                    "reasons": [f"Hot path JS — {func['big_o']}"],
+                    "recommendation": "Considera mover esta función a un módulo Rust/C++ compilado a WASM",
+                    "estimated_speedup": "3-20x para operaciones numéricas",
+                }
+            )
     return hints
 
 
@@ -861,7 +970,7 @@ def _wasm_recommendation_python(func: dict, has_cython: bool) -> str:
 
 def _estimate_speedup(func: dict) -> str:
     bigo = func["big_o"]
-    cc   = func["complexity"]
+    cc = func["complexity"]
     if bigo in ("O(n³)", "O(2^n)"):
         return "10-100x (crítico)"
     if bigo == "O(n²)":
@@ -875,28 +984,40 @@ def _estimate_speedup(func: dict) -> str:
 #  HELPERS GENÉRICOS
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _end_line(node: ast.AST) -> int:
     return getattr(node, "end_lineno", getattr(node, "lineno", 0))
 
 
 def _decorator_name(node: ast.expr) -> str:
-    if isinstance(node, ast.Name):      return node.id
-    if isinstance(node, ast.Attribute): return f"{_node_name(node.value)}.{node.attr}"
-    if isinstance(node, ast.Call):      return _decorator_name(node.func)
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return f"{_node_name(node.value)}.{node.attr}"
+    if isinstance(node, ast.Call):
+        return _decorator_name(node.func)
     return "?"
 
 
 def _node_name(node: ast.expr) -> str:
-    if isinstance(node, ast.Name):      return node.id
-    if isinstance(node, ast.Attribute): return f"{_node_name(node.value)}.{node.attr}"
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return f"{_node_name(node.value)}.{node.attr}"
     return "?"
 
 
 def _unsupported(filename: str, ext: str, reason: str = "") -> dict:
     return {
-        "filename": filename, "language": ext,
+        "filename": filename,
+        "language": ext,
         "error": reason or f"Extensión '{ext}' no soportada",
-        "functions": [], "classes": [], "imports": [], "exports": [],
-        "dead_code": [], "call_graph": [], "wasm_hints": [],
+        "functions": [],
+        "classes": [],
+        "imports": [],
+        "exports": [],
+        "dead_code": [],
+        "call_graph": [],
+        "wasm_hints": [],
         "summary": {},
     }

@@ -5,7 +5,7 @@ Migración exacta de GET /logs y GET /api/history del app.py Flask v3.0.
 
 from fastapi import APIRouter, Query
 
-from shared import LOG_HISTORY, API_HISTORY, now
+from shared import LOG_HISTORY, API_HISTORY
 
 router = APIRouter()
 

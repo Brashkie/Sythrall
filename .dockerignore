@@ -1,0 +1,18 @@
+# Keeps the build context small now that both backend/ and frontend/
+# Dockerfiles share the repo root as their context.
+
+node_modules
+dist
+.vite
+.venv
+venv
+__pycache__
+**/__pycache__
+*.pyc
+.pytest_cache
+backend/uploads
+.git
+.github
+scripts
+*.md
+.vscode

@@ -2,9 +2,7 @@
 //  CodeWatch PRO — Utilities
 // ══════════════════════════════════════════
 
-export function debounce<T extends (...args: unknown[]) => void>(
-  fn: T, ms: number
-): (...args: Parameters<T>) => void {
+export function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): (...args: Parameters<T>) => void {
   let timer: ReturnType<typeof setTimeout>
   return (...args: Parameters<T>) => {
     clearTimeout(timer)
@@ -13,7 +11,7 @@ export function debounce<T extends (...args: unknown[]) => void>(
 }
 
 export function delay(ms: number): Promise<void> {
-  return new Promise(r => setTimeout(r, ms))
+  return new Promise((r) => setTimeout(r, ms))
 }
 
 export function nowStr(): string {
@@ -22,22 +20,17 @@ export function nowStr(): string {
 
 export function nowTs(): string {
   const d = new Date()
-  return [d.getHours(), d.getMinutes(), d.getSeconds()]
-    .map(n => String(n).padStart(2, '0'))
-    .join(':')
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':')
 }
 
 export function fmtBytes(b: number): string {
-  if (b < 1024)    return b + 'B'
+  if (b < 1024) return b + 'B'
   if (b < 1048576) return (b / 1024).toFixed(1) + 'KB'
   return (b / 1048576).toFixed(1) + 'MB'
 }
 
 export function esc(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
 export function getExt(name: string): string {
@@ -72,8 +65,8 @@ export type ToastType = 'ok' | 'err' | 'warn' | 'info'
 
 export function toast(msg: string, type: ToastType = 'info'): void {
   const colors: Record<ToastType, string> = {
-    ok:   '#00f5a0',
-    err:  '#ff3366',
+    ok: '#00f5a0',
+    err: '#ff3366',
     warn: '#ffb627',
     info: '#3d9eff',
   }
@@ -106,10 +99,16 @@ export function appendLog(type: LogLevel, msg: string, src: 'fe' | 'be' = 'fe'):
   const el = document.getElementById('log-stream')
   if (!el) return
   const colors: Record<LogLevel, string> = {
-    ok:'#00f5a0', err:'#ff3366', warn:'#ffb627', info:'#c8d4f0'
+    ok: '#00f5a0',
+    err: '#ff3366',
+    warn: '#ffb627',
+    info: '#c8d4f0',
   }
   const icons: Record<LogLevel, string> = {
-    ok:'✓', err:'✕', warn:'⚠', info:'·'
+    ok: '✓',
+    err: '✕',
+    warn: '⚠',
+    info: '·',
   }
   const row = document.createElement('div')
   row.className = 'ls-row'

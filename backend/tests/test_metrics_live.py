@@ -2,8 +2,10 @@
 Tests — Live Metrics + Validate + Safe Mode
 pytest tests/test_metrics_live.py -v
 """
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from fastapi.testclient import TestClient
@@ -83,6 +85,7 @@ BINARY_CODE = "def test():\n    pass\x00\x00\x00binary data here\x00\x00"
 
 # ─── /metrics/live — Python ──────────────────────────────────────────────────
 
+
 class TestLiveMetricsPython:
     def test_live_ok(self):
         r = client.post("/metrics/live", json={"filename": "test.py", "content": PY_SIMPLE})
@@ -158,6 +161,7 @@ class TestLiveMetricsPython:
 
 # ─── /metrics/live — TypeScript ──────────────────────────────────────────────
 
+
 class TestLiveMetricsTS:
     def test_live_ts_ok(self):
         r = client.post("/metrics/live", json={"filename": "app.ts", "content": TS_CODE})
@@ -186,6 +190,7 @@ class TestLiveMetricsTS:
 
 
 # ─── /metrics/validate ───────────────────────────────────────────────────────
+
 
 class TestValidate:
     def test_validate_ok(self):
@@ -227,13 +232,23 @@ class TestValidate:
 
     def test_validate_response_structure(self):
         data = client.post("/metrics/validate", json={"filename": "test.py", "content": PY_SIMPLE}).json()
-        required = ["filename", "valid", "warnings", "errors", "safe_mode",
-                    "is_binary", "is_truncated", "encoding_ok", "size_bytes"]
+        required = [
+            "filename",
+            "valid",
+            "warnings",
+            "errors",
+            "safe_mode",
+            "is_binary",
+            "is_truncated",
+            "encoding_ok",
+            "size_bytes",
+        ]
         for key in required:
             assert key in data, f"Falta campo: {key}"
 
 
 # ─── /metrics/health ─────────────────────────────────────────────────────────
+
 
 class TestMetricsHealth:
     def test_health_ok(self):

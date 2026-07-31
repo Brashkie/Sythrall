@@ -20,8 +20,8 @@
 //     explorerSelectFile(id)
 // ══════════════════════════════════════════
 
-import type { CodeFile } from '../types'
 import { state } from '../store/state'
+import type { CodeFile } from '../types'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -30,27 +30,47 @@ interface ExplorerOptions {
 }
 
 interface Tab {
-  id:       string
-  name:     string
+  id: string
+  name: string
   modified: boolean
 }
 
 // ─── Estado interno ───────────────────────────────────────────────────────────
 
-let _opts:        ExplorerOptions | null = null
-let _tabs:        Tab[]   = []
-let _activeTabId: string  = ''
-let _searchOpen   = false
-let _searchQuery  = ''
+let _opts: ExplorerOptions | null = null
+const _tabs: Tab[] = []
+let _activeTabId: string = ''
+let _searchOpen = false
+let _searchQuery = ''
 
 // ─── Iconos ───────────────────────────────────────────────────────────────────
 
 const EXT_ICON: Record<string, string> = {
-  '.py':   '🐍', '.ts':  '🟦', '.tsx': '⚛️',  '.js':  '🟨', '.jsx': '⚛️',
-  '.html': '🌐', '.css': '🎨', '.scss':'🎨',  '.json':'📋', '.yaml':'⚙️',
-  '.yml':  '⚙️', '.md':  '📝', '.sql': '🗄️', '.go':  '🐹', '.rs':  '🦀',
-  '.java': '☕', '.cpp': '⚙️', '.c':   '⚙️', '.sh':  '💻', '.txt': '📄',
-  '.log':  '📜', '.env': '🔑', '.toml':'📋', '.vue': '💚', '.svelte':'🔥',
+  '.py': '🐍',
+  '.ts': '🟦',
+  '.tsx': '⚛️',
+  '.js': '🟨',
+  '.jsx': '⚛️',
+  '.html': '🌐',
+  '.css': '🎨',
+  '.scss': '🎨',
+  '.json': '📋',
+  '.yaml': '⚙️',
+  '.yml': '⚙️',
+  '.md': '📝',
+  '.sql': '🗄️',
+  '.go': '🐹',
+  '.rs': '🦀',
+  '.java': '☕',
+  '.cpp': '⚙️',
+  '.c': '⚙️',
+  '.sh': '💻',
+  '.txt': '📄',
+  '.log': '📜',
+  '.env': '🔑',
+  '.toml': '📋',
+  '.vue': '💚',
+  '.svelte': '🔥',
 }
 
 function extIcon(ext: string): string {
@@ -122,18 +142,18 @@ function _renderFileTree(): void {
         <div class="exp-group" data-ext="${ext}">
           <div class="exp-group-head" data-toggle-group="${ext}">
             <span class="exp-arrow">▾</span>
-            <span>${icon} ${ext.toUpperCase().replace('.','')}</span>
+            <span>${icon} ${ext.toUpperCase().replace('.', '')}</span>
             <span class="exp-count">${files.length}</span>
           </div>
           <div class="exp-group-body" data-group-body="${ext}">
-            ${files.map(f => _fileNodeHtml(f)).join('')}
+            ${files.map((f) => _fileNodeHtml(f)).join('')}
           </div>
         </div>
       `
     }
   } else {
     // Un solo tipo: lista plana
-    html = state.files.map(f => _fileNodeHtml(f)).join('')
+    html = state.files.map((f) => _fileNodeHtml(f)).join('')
   }
 
   container.innerHTML = html
@@ -142,22 +162,24 @@ function _renderFileTree(): void {
 
 function _fileNodeHtml(f: CodeFile): string {
   const isActive = f === state.currentFile
-  const n        = f.issues.length
-  const errCount = f.issues.filter(i => i.severity === 'error').length
-  const warnCount = f.issues.filter(i => i.severity === 'warning').length
+  const n = f.issues.length
+  const errCount = f.issues.filter((i) => i.severity === 'error').length
+  const warnCount = f.issues.filter((i) => i.severity === 'warning').length
 
   let badge = ''
-  if (errCount)      badge = `<span class="exp-badge exp-badge-err">${errCount}</span>`
+  if (errCount) badge = `<span class="exp-badge exp-badge-err">${errCount}</span>`
   else if (warnCount) badge = `<span class="exp-badge exp-badge-warn">${warnCount}</span>`
   else if (f.analyzed) badge = `<span class="exp-badge exp-badge-ok">✓</span>`
 
   const cls = [
     'exp-file',
-    isActive  ? 'exp-file-active'  : '',
-    errCount  ? 'exp-file-err'     : '',
+    isActive ? 'exp-file-active' : '',
+    errCount ? 'exp-file-err' : '',
     warnCount && !errCount ? 'exp-file-warn' : '',
     f.analyzed && !n ? 'exp-file-ok' : '',
-  ].filter(Boolean).join(' ')
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return `
     <div class="${cls}" data-file-id="${f.id}" title="${f.name}">
@@ -184,7 +206,7 @@ function _attachTreeEvents(container: HTMLElement): void {
 
     // Seleccionar archivo
     const fileNode = target.closest<HTMLElement>('[data-file-id]')
-    const fileId   = fileNode?.dataset['fileId']
+    const fileId = fileNode?.dataset['fileId']
     if (fileId) {
       explorerSelectFile(fileId)
       return
@@ -192,9 +214,9 @@ function _attachTreeEvents(container: HTMLElement): void {
 
     // Toggle grupo
     const groupHead = target.closest<HTMLElement>('[data-toggle-group]')
-    const groupExt  = groupHead?.dataset['toggleGroup']
+    const groupExt = groupHead?.dataset['toggleGroup']
     if (groupExt) {
-      const body  = container.querySelector<HTMLElement>(`[data-group-body="${groupExt}"]`)
+      const body = container.querySelector<HTMLElement>(`[data-group-body="${groupExt}"]`)
       const arrow = groupHead.querySelector('.exp-arrow') as HTMLElement
       if (body) {
         const isOpen = body.style.display !== 'none'
@@ -206,14 +228,14 @@ function _attachTreeEvents(container: HTMLElement): void {
 }
 
 function _removeFileFromExplorer(id: string): void {
-  state.files = state.files.filter(f => f.id !== id)
+  state.files = state.files.filter((f) => f.id !== id)
   if (state.currentFile?.id === id) state.currentFile = null
   _closeTab(id)
   _renderFileTree()
   _renderFileTabs()
 
   // Delegar al sistema existente
-  import('./app').then(m => {
+  import('./app').then((m) => {
     m.updateFileTree?.()
     m.updateSelectors?.()
     m.updateStats?.()
@@ -247,14 +269,18 @@ function _renderFileTabs(): void {
   }
 
   bar.style.display = 'flex'
-  bar.innerHTML = _tabs.map(tab => `
+  bar.innerHTML = _tabs
+    .map(
+      (tab) => `
     <div class="exp-tab ${tab.id === _activeTabId ? 'exp-tab-active' : ''}" data-tab-id="${tab.id}">
       <span class="exp-tab-icon">${extIcon(_getExt(tab.name))}</span>
       <span class="exp-tab-name">${tab.name}</span>
       ${tab.modified ? '<span class="exp-tab-dot">●</span>' : ''}
       <button class="exp-tab-close" data-close-tab="${tab.id}">✕</button>
     </div>
-  `).join('')
+  `,
+    )
+    .join('')
 
   // Scroll al tab activo
   const activeTab = bar.querySelector<HTMLElement>('.exp-tab-active')
@@ -279,7 +305,7 @@ function _renderFileTabs(): void {
 }
 
 function _openTab(file: CodeFile): void {
-  if (!_tabs.find(t => t.id === file.id)) {
+  if (!_tabs.find((t) => t.id === file.id)) {
     _tabs.push({ id: file.id, name: file.name, modified: false })
   }
   _activeTabId = file.id
@@ -287,7 +313,7 @@ function _openTab(file: CodeFile): void {
 }
 
 function _closeTab(id: string): void {
-  const idx = _tabs.findIndex(t => t.id === id)
+  const idx = _tabs.findIndex((t) => t.id === id)
   if (idx === -1) return
   _tabs.splice(idx, 1)
 
@@ -360,7 +386,7 @@ function _injectSearchOverlay(): void {
     const item = (e.target as HTMLElement).closest<HTMLElement>('[data-search-file]')
     if (!item) return
     const fileId = item.dataset['searchFile']
-    const line   = parseInt(item.dataset['searchLine'] ?? '1', 10)
+    const line = parseInt(item.dataset['searchLine'] ?? '1', 10)
     if (fileId) {
       explorerSelectFile(fileId)
       closeSearch()
@@ -375,12 +401,12 @@ function _injectSearchOverlay(): void {
 
 function _runSearch(): void {
   const results = document.getElementById('exp-search-results')
-  const count   = document.getElementById('exp-search-count')
+  const count = document.getElementById('exp-search-count')
   if (!results) return
 
-  const q          = _searchQuery.trim()
-  const useRegex   = (document.getElementById('exp-search-regex') as HTMLInputElement)?.checked
-  const matchCase  = (document.getElementById('exp-search-case') as HTMLInputElement)?.checked
+  const q = _searchQuery.trim()
+  const useRegex = (document.getElementById('exp-search-regex') as HTMLInputElement)?.checked
+  const matchCase = (document.getElementById('exp-search-case') as HTMLInputElement)?.checked
 
   if (!q) {
     results.innerHTML = '<div class="exp-search-empty">Escribe para buscar en todos los archivos cargados</div>'
@@ -410,9 +436,7 @@ function _runSearch(): void {
       if (pattern.test(lineText)) {
         // Resaltar match
         pattern.lastIndex = 0
-        const highlighted = lineText.replace(pattern, m =>
-          `<mark class="exp-search-mark">${_esc(m)}</mark>`
-        )
+        const highlighted = lineText.replace(pattern, (m) => `<mark class="exp-search-mark">${_esc(m)}</mark>`)
         fileMatches.push({ line: i + 1, text: lineText.trim(), highlighted })
         totalMatches++
       }
@@ -427,12 +451,17 @@ function _runSearch(): void {
           <span class="exp-search-file-name">${f.name}</span>
           <span class="exp-search-file-count">${fileMatches.length}</span>
         </div>
-        ${fileMatches.slice(0, 50).map(m => `
+        ${fileMatches
+          .slice(0, 50)
+          .map(
+            (m) => `
           <div class="exp-search-result" data-search-file="${f.id}" data-search-line="${m.line}">
             <span class="exp-search-line">${m.line}</span>
             <span class="exp-search-text">${m.highlighted.slice(0, 120)}</span>
           </div>
-        `).join('')}
+        `,
+          )
+          .join('')}
         ${fileMatches.length > 50 ? `<div class="exp-search-more">+${fileMatches.length - 50} más...</div>` : ''}
       </div>
     `
@@ -491,12 +520,12 @@ export function renderOutline(file: CodeFile): void {
 
   // Agrupar por kind
   const groups: Record<string, typeof items> = {
-    function:  [],
-    class:     [],
-    import:    [],
+    function: [],
+    class: [],
+    import: [],
     interface: [],
-    type:      [],
-    variable:  [],
+    type: [],
+    variable: [],
   }
   for (const item of items) {
     const g = groups[item.kind] ?? []
@@ -504,12 +533,12 @@ export function renderOutline(file: CodeFile): void {
   }
 
   const KIND_LABEL: Record<string, string> = {
-    function:  '⚙️ Functions',
-    class:     '🏛 Classes',
-    import:    '📦 Imports',
+    function: '⚙️ Functions',
+    class: '🏛 Classes',
+    import: '📦 Imports',
     interface: '📐 Interfaces',
-    type:      '🔷 Types',
-    variable:  '📌 Variables',
+    type: '🔷 Types',
+    variable: '📌 Variables',
   }
 
   let html = `
@@ -529,13 +558,17 @@ export function renderOutline(file: CodeFile): void {
           <span class="exp-count">${kindItems.length}</span>
         </div>
         <div class="exp-outline-group-body" data-outline-body="${kind}">
-          ${kindItems.map(item => `
+          ${kindItems
+            .map(
+              (item) => `
             <div class="exp-outline-item" data-outline-line="${item.line}" title="${item.name}">
               <span class="exp-outline-line">${item.line}</span>
               <span class="exp-outline-name">${item.name}</span>
               ${item.detail ? `<span class="exp-outline-detail">${item.detail}</span>` : ''}
             </div>
-          `).join('')}
+          `,
+            )
+            .join('')}
         </div>
       </div>
     `
@@ -544,10 +577,10 @@ export function renderOutline(file: CodeFile): void {
   container.innerHTML = html
 
   // Toggle grupos
-  container.querySelectorAll<HTMLElement>('[data-outline-toggle]').forEach(head => {
+  container.querySelectorAll<HTMLElement>('[data-outline-toggle]').forEach((head) => {
     head.addEventListener('click', () => {
-      const key   = head.dataset['outlineToggle']!
-      const body  = container.querySelector<HTMLElement>(`[data-outline-body="${key}"]`)
+      const key = head.dataset['outlineToggle']!
+      const body = container.querySelector<HTMLElement>(`[data-outline-body="${key}"]`)
       const arrow = head.querySelector('.exp-arrow') as HTMLElement
       if (!body) return
       const isOpen = body.style.display !== 'none'
@@ -557,13 +590,13 @@ export function renderOutline(file: CodeFile): void {
   })
 
   // Click en símbolo → ir a línea
-  container.querySelectorAll<HTMLElement>('[data-outline-line]').forEach(item => {
+  container.querySelectorAll<HTMLElement>('[data-outline-line]').forEach((item) => {
     item.addEventListener('click', () => {
       const line = parseInt(item.dataset['outlineLine'] ?? '1', 10)
       const goTo = (window as any)['editorGoToLine'] as ((l: number) => void) | undefined
       goTo?.(line)
       // Cambiar a tab Editor si no está activo
-      import('./app').then(m => m.switchTab?.('editor'))
+      import('./app').then((m) => m.switchTab?.('editor'))
     })
   })
 }
@@ -574,33 +607,33 @@ function _extractOutline(file: CodeFile): Array<{ kind: string; name: string; li
 
   if (file.ext === '.py') {
     lines.forEach((line, i) => {
-      const fn    = line.match(/^(\s*)(async\s+)?def\s+(\w+)\s*\(([^)]*)\)/)
-      const cls   = line.match(/^class\s+(\w+)/)
-      const imp   = line.match(/^(?:import|from)\s+(\S+)/)
+      const fn = line.match(/^(\s*)(async\s+)?def\s+(\w+)\s*\(([^)]*)\)/)
+      const cls = line.match(/^class\s+(\w+)/)
+      const imp = line.match(/^(?:import|from)\s+(\S+)/)
       const const_ = line.match(/^([A-Z_][A-Z0-9_]+)\s*=/)
 
-      if (fn)    items.push({ kind: 'function', name: fn[3], line: i+1, detail: fn[4]?.slice(0,30) })
-      if (cls)   items.push({ kind: 'class',    name: cls[1], line: i+1 })
-      if (imp)   items.push({ kind: 'import',   name: imp[1], line: i+1 })
-      if (const_) items.push({ kind: 'variable', name: const_[1], line: i+1 })
+      if (fn) items.push({ kind: 'function', name: fn[3], line: i + 1, detail: fn[4]?.slice(0, 30) })
+      if (cls) items.push({ kind: 'class', name: cls[1], line: i + 1 })
+      if (imp) items.push({ kind: 'import', name: imp[1], line: i + 1 })
+      if (const_) items.push({ kind: 'variable', name: const_[1], line: i + 1 })
     })
   } else if (['.ts', '.tsx', '.js', '.jsx'].includes(file.ext)) {
     lines.forEach((line, i) => {
-      const fn1    = line.match(/(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)/)
-      const fn2    = line.match(/(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>/)
-      const cls    = line.match(/(?:export\s+)?class\s+(\w+)/)
-      const iface  = line.match(/(?:export\s+)?interface\s+(\w+)/)
-      const type   = line.match(/(?:export\s+)?type\s+(\w+)\s*=/)
-      const imp    = line.match(/^import\s+.*from\s+['"]([^'"]+)['"]/)
+      const fn1 = line.match(/(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)/)
+      const fn2 = line.match(/(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>/)
+      const cls = line.match(/(?:export\s+)?class\s+(\w+)/)
+      const iface = line.match(/(?:export\s+)?interface\s+(\w+)/)
+      const type = line.match(/(?:export\s+)?type\s+(\w+)\s*=/)
+      const imp = line.match(/^import\s+.*from\s+['"]([^'"]+)['"]/)
       const const_ = line.match(/^(?:export\s+)?const\s+([A-Z_][A-Z0-9_]+)\s*=/)
 
-      if (fn1)   items.push({ kind: 'function',  name: fn1[1], line: i+1, detail: fn1[2]?.slice(0,20) })
-      if (fn2)   items.push({ kind: 'function',  name: fn2[1], line: i+1 })
-      if (cls)   items.push({ kind: 'class',     name: cls[1], line: i+1 })
-      if (iface) items.push({ kind: 'interface', name: iface[1], line: i+1 })
-      if (type)  items.push({ kind: 'type',      name: type[1], line: i+1 })
-      if (imp)   items.push({ kind: 'import',    name: imp[1], line: i+1 })
-      if (const_) items.push({ kind: 'variable', name: const_[1], line: i+1 })
+      if (fn1) items.push({ kind: 'function', name: fn1[1], line: i + 1, detail: fn1[2]?.slice(0, 20) })
+      if (fn2) items.push({ kind: 'function', name: fn2[1], line: i + 1 })
+      if (cls) items.push({ kind: 'class', name: cls[1], line: i + 1 })
+      if (iface) items.push({ kind: 'interface', name: iface[1], line: i + 1 })
+      if (type) items.push({ kind: 'type', name: type[1], line: i + 1 })
+      if (imp) items.push({ kind: 'import', name: imp[1], line: i + 1 })
+      if (const_) items.push({ kind: 'variable', name: const_[1], line: i + 1 })
     })
   }
 
@@ -622,7 +655,7 @@ export function explorerRemoveFile(id: string): void {
 }
 
 export function explorerSelectFile(id: string): void {
-  const f = state.files.find(x => x.id === id)
+  const f = state.files.find((x) => x.id === id)
   if (!f || !_opts) return
 
   _openTab(f)
@@ -633,12 +666,15 @@ export function explorerSelectFile(id: string): void {
   renderOutline(f)
 
   // Activar tab análisis
-  import('./app').then(m => m.rpTab?.('analysis'))
+  import('./app').then((m) => m.rpTab?.('analysis'))
 }
 
 export function explorerMarkModified(id: string, modified: boolean): void {
-  const tab = _tabs.find(t => t.id === id)
-  if (tab) { tab.modified = modified; _renderFileTabs() }
+  const tab = _tabs.find((t) => t.id === id)
+  if (tab) {
+    tab.modified = modified
+    _renderFileTabs()
+  }
 }
 
 export function explorerRefresh(): void {
@@ -675,7 +711,7 @@ function _wireGlobalShortcuts(): void {
     // Ctrl+Tab — siguiente tab
     if (e.ctrlKey && e.key === 'Tab') {
       e.preventDefault()
-      const idx = _tabs.findIndex(t => t.id === _activeTabId)
+      const idx = _tabs.findIndex((t) => t.id === _activeTabId)
       if (_tabs.length > 1) {
         const next = _tabs[(idx + 1) % _tabs.length]
         explorerSelectFile(next.id)
@@ -689,8 +725,6 @@ function _wireGlobalShortcuts(): void {
 //  ESTILOS
 // ══════════════════════════════════════════
 
-
-
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
 function _getExt(filename: string): string {
@@ -699,5 +733,5 @@ function _getExt(filename: string): string {
 }
 
 function _esc(s: string): string {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }

@@ -1,9 +1,11 @@
 # ── Stage 1: Build Vite + TypeScript ──────────────────────────────────────────
+# El build context es la raíz del repo: manifiestos ahí, código fuente en frontend/
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
-COPY . .
+COPY vite.config.ts tsconfig.json biome.json ./
+COPY frontend/ ./frontend/
 RUN npm run build
 
 # ── Stage 2: Serve con Nginx ───────────────────────────────────────────────────

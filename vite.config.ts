@@ -17,17 +17,20 @@ import { defineConfig } from 'vite'
 // ──────────────────────────────────────────────────────────────────────────────
 
 export default defineConfig({
-  root: '.',
+  // Manifiestos (package.json, tsconfig.json, etc.) viven en la raíz del repo;
+  // el código fuente del frontend vive en frontend/.
+  root: 'frontend',
+  envDir: '..',
 
   build: {
-    outDir:    'dist',
+    outDir: '../dist',
     sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks(id: string) {
-          if (id.includes('monaco-editor'))                            return 'vendor-monaco'
-          if (id.includes('chart.js'))                                 return 'vendor-charts'
-          if (id.includes('mermaid'))                                  return 'vendor-mermaid'
+          if (id.includes('monaco-editor')) return 'vendor-monaco'
+          if (id.includes('chart.js')) return 'vendor-charts'
+          if (id.includes('mermaid')) return 'vendor-mermaid'
           if (id.includes('jszip') || id.includes('node_modules/diff')) return 'vendor-misc'
         },
       },
@@ -39,14 +42,14 @@ export default defineConfig({
     proxy: {
       // ── Upload de proyectos (nuevo en v4)
       '/api/upload': {
-        target:      'http://localhost:8000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
         // Sin rewrite: /api/upload/files → localhost:8000/api/upload/files ✓
       },
 
       // ── Análisis de código, ML, diagramas, logs de análisis
       '/analyze': {
-        target:      'http://localhost:8000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
         // /analyze/code    → localhost:8000/analyze/code    ✓
         // /analyze/ml      → localhost:8000/analyze/ml      ✓
@@ -57,31 +60,31 @@ export default defineConfig({
 
       // ── Logs del servidor FastAPI
       '/logs': {
-        target:      'http://localhost:8000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
 
       // ── Historial de API checks
       '/api/history': {
-        target:      'http://localhost:8000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
 
       // ── Sistema: capabilities y health
       '/capabilities': {
-        target:      'http://localhost:8000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
       '/health': {
-        target:      'http://localhost:8000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
       '/static': {
-        target:       'http://localhost:8000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
       '/intel': {
-        target:       'http://localhost:8000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
       '/metrics': {

@@ -2,8 +2,8 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: codewatch-backend
     restart: unless-stopped
     ports:
@@ -23,8 +23,8 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile.frontend
+      context: .
+      dockerfile: frontend/Dockerfile.frontend
     container_name: codewatch-frontend
     restart: unless-stopped
     ports:

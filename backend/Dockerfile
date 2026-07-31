@@ -7,10 +7,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
+# El build context es la raíz del repo (requirements.txt vive ahí, no en backend/)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY backend/ .
 
 # Directorio para proyectos subidos
 RUN mkdir -p uploads/projects

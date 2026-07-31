@@ -3,21 +3,16 @@ Router: Upload
 Maneja subida de archivos individuales, carpetas y ZIPs.
 """
 
-import os
 import uuid
 import zipfile
-import shutil
 import logging
 from pathlib import Path
-from typing import List
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
-from fastapi.responses import JSONResponse
 
 from services.project_service import (
     build_tree,
     extract_zip,
-    save_files,
     get_project_info,
     delete_project,
     list_projects,
@@ -28,10 +23,10 @@ logger = logging.getLogger("codewatch.upload")
 
 UPLOADS_DIR = Path("uploads/projects")
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB por archivo
-MAX_ZIP_SIZE  = 200 * 1024 * 1024  # 200 MB por ZIP
+MAX_ZIP_SIZE = 200 * 1024 * 1024  # 200 MB por ZIP
 
 BLOCKED_EXTENSIONS = {".exe", ".dll", ".so", ".bin", ".sh", ".bat", ".cmd"}
-ALLOWED_ROOTS      = {"uploads"}  # Evitar path traversal
+ALLOWED_ROOTS = {"uploads"}  # Evitar path traversal
 
 
 def _safe_project_path(project_id: str) -> Path:
@@ -45,7 +40,7 @@ def _safe_project_path(project_id: str) -> Path:
 # ─── Subir archivos individuales ─────────────────────────────────────────────
 @router.post("/files")
 async def upload_files(
-    files: List[UploadFile] = File(...),
+    files: list[UploadFile] = File(...),
     project_name: str = Form(default=""),
 ):
     """
@@ -54,12 +49,12 @@ async def upload_files(
     if not files:
         raise HTTPException(status_code=400, detail="No se enviaron archivos.")
 
-    project_id   = str(uuid.uuid4())
-    project_dir  = UPLOADS_DIR / project_id
+    project_id = str(uuid.uuid4())
+    project_dir = UPLOADS_DIR / project_id
     project_dir.mkdir(parents=True, exist_ok=True)
 
-    saved: List[dict] = []
-    errors: List[dict] = []
+    saved: list[dict] = []
+    errors: list[dict] = []
 
     for file in files:
         ext = Path(file.filename or "").suffix.lower()
@@ -85,20 +80,20 @@ async def upload_files(
     logger.info(f"Upload files → project {project_id}: {len(saved)} OK, {len(errors)} errores")
 
     return {
-        "project_id":   project_id,
+        "project_id": project_id,
         "project_name": project_name or f"project-{project_id[:8]}",
-        "type":         "files",
-        "saved":        saved,
-        "errors":       errors,
-        "tree":         tree,
-        "total_files":  len(saved),
+        "type": "files",
+        "saved": saved,
+        "errors": errors,
+        "tree": tree,
+        "total_files": len(saved),
     }
 
 
 # ─── Subir carpeta (múltiples archivos con rutas relativas) ──────────────────
 @router.post("/folder")
 async def upload_folder(
-    files: List[UploadFile] = File(...),
+    files: list[UploadFile] = File(...),
     project_name: str = Form(default=""),
 ):
     """
@@ -108,12 +103,12 @@ async def upload_folder(
     if not files:
         raise HTTPException(status_code=400, detail="No se enviaron archivos.")
 
-    project_id  = str(uuid.uuid4())
+    project_id = str(uuid.uuid4())
     project_dir = UPLOADS_DIR / project_id
     project_dir.mkdir(parents=True, exist_ok=True)
 
-    saved: List[dict] = []
-    errors: List[dict] = []
+    saved: list[dict] = []
+    errors: list[dict] = []
 
     for file in files:
         filename = file.filename or "unknown"
@@ -135,24 +130,26 @@ async def upload_folder(
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(content)
 
-        saved.append({
-            "name": filename,
-            "size": len(content),
-            "path": str(Path(*safe_parts)),
-        })
+        saved.append(
+            {
+                "name": filename,
+                "size": len(content),
+                "path": str(Path(*safe_parts)),
+            }
+        )
 
     tree = build_tree(project_dir)
 
     logger.info(f"Upload folder → project {project_id}: {len(saved)} archivos")
 
     return {
-        "project_id":   project_id,
+        "project_id": project_id,
         "project_name": project_name or (Path(files[0].filename or "").parts[0] if files else "folder"),
-        "type":         "folder",
-        "saved":        saved,
-        "errors":       errors,
-        "tree":         tree,
-        "total_files":  len(saved),
+        "type": "folder",
+        "saved": saved,
+        "errors": errors,
+        "tree": tree,
+        "total_files": len(saved),
     }
 
 
@@ -176,7 +173,7 @@ async def upload_zip(
     if not zipfile.is_zipfile(__import__("io").BytesIO(content)):
         raise HTTPException(status_code=400, detail="El archivo no es un ZIP válido.")
 
-    project_id  = str(uuid.uuid4())
+    project_id = str(uuid.uuid4())
     project_dir = UPLOADS_DIR / project_id
     project_dir.mkdir(parents=True, exist_ok=True)
 
@@ -191,15 +188,15 @@ async def upload_zip(
     logger.info(f"Upload ZIP → project {project_id}: {result['extracted']} archivos extraídos")
 
     return {
-        "project_id":   project_id,
+        "project_id": project_id,
         "project_name": project_name or Path(file.filename).stem,
-        "type":         "zip",
+        "type": "zip",
         "original_zip": file.filename,
-        "extracted":    result["extracted"],
-        "skipped":      result["skipped"],
-        "errors":       result["errors"],
-        "tree":         tree,
-        "info":         info,
+        "extracted": result["extracted"],
+        "skipped": result["skipped"],
+        "errors": result["errors"],
+        "tree": tree,
+        "info": info,
     }
 
 
@@ -224,8 +221,8 @@ async def get_project_tree(project_id: str):
 
     return {
         "project_id": project_id,
-        "tree":       tree,
-        "info":       info,
+        "tree": tree,
+        "info": info,
     }
 
 
@@ -250,13 +247,13 @@ async def get_file_content(project_id: str, path: str):
     try:
         content = file_path.read_text(encoding="utf-8", errors="replace")
         return {
-            "path":      path,
-            "content":   content,
-            "size":      file_path.stat().st_size,
+            "path": path,
+            "content": content,
+            "size": file_path.stat().st_size,
             "extension": file_path.suffix,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al leer el archivo: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al leer el archivo: {str(e)}") from e
 
 
 # ─── Eliminar proyecto ────────────────────────────────────────────────────────

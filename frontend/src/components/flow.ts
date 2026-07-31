@@ -3,20 +3,23 @@
 // ══════════════════════════════════════════
 // src/components/flow.ts
 import { state } from '../store/state'
-import type { StepState } from '../types'
-import type { RunHistoryEntry } from '../types'
+import type { RunHistoryEntry, StepState } from '../types'
 
 const STEPS = [
-  { id: 'api',     name: 'APIs',        icon: '📡' },
-  { id: 'upload',  name: 'Archivos',    icon: '📤' },
-  { id: 'analyze', name: 'Análisis',    icon: '🔬' },
-  { id: 'logs',    name: 'Logs',        icon: '📋' },
-  { id: 'report',  name: 'Reporte',     icon: '📄' },
+  { id: 'api', name: 'APIs', icon: '📡' },
+  { id: 'upload', name: 'Archivos', icon: '📤' },
+  { id: 'analyze', name: 'Análisis', icon: '🔬' },
+  { id: 'logs', name: 'Logs', icon: '📋' },
+  { id: 'report', name: 'Reporte', icon: '📄' },
 ]
 
-const ICONS:  Record<StepState, string> = { idle:'·', run:'◌', ok:'✓', err:'✗', warn:'⚠' }
+const ICONS: Record<StepState, string> = { idle: '·', run: '◌', ok: '✓', err: '✗', warn: '⚠' }
 const COLORS: Record<StepState, string> = {
-  idle: 'var(--muted)', run: 'var(--warn)', ok: 'var(--ok)', err: 'var(--err)', warn: 'var(--warn)',
+  idle: 'var(--muted)',
+  run: 'var(--warn)',
+  ok: 'var(--ok)',
+  err: 'var(--err)',
+  warn: 'var(--warn)',
 }
 
 export function renderFlow(): void {
@@ -45,12 +48,12 @@ export function setStep(id: string, st: StepState): void {
 
 function getDetail(id: string, st: StepState): string {
   if (st === 'idle') return 'Esperando...'
-  if (st === 'run')  return 'Procesando...'
-  if (id === 'api')     return `${state.results.apis.filter(a => a.status === 'ok').length}/${state.urls.length} activas`
-  if (id === 'upload')  return `${state.files.length} archivos`
+  if (st === 'run') return 'Procesando...'
+  if (id === 'api') return `${state.results.apis.filter((a) => a.status === 'ok').length}/${state.urls.length} activas`
+  if (id === 'upload') return `${state.files.length} archivos`
   if (id === 'analyze') return `${state.results.issues.length} issue(s)`
-  if (id === 'logs')    return `${state.results.logErrors.length} errores`
-  if (id === 'report')  return 'Completo ✓'
+  if (id === 'logs') return `${state.results.logErrors.length} errores`
+  if (id === 'report') return 'Completo ✓'
   return ''
 }
 
@@ -61,9 +64,9 @@ export function updateRunMeta(entry: RunHistoryEntry): void {
     `<div class="metric-row"><span class="mr-k">${k}</span><span class="mr-v"${color ? ` style="color:${color}"` : ''}>${v}</span></div>`
   el.innerHTML = `
     <div style="font-size:.58rem;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);margin-bottom:9px">ÚLTIMA EJECUCIÓN</div>
-    ${mr('Hora',      entry.ts)}
-    ${mr('Duración',  entry.ms + 'ms', 'var(--info)')}
+    ${mr('Hora', entry.ts)}
+    ${mr('Duración', entry.ms + 'ms', 'var(--info)')}
     ${mr('Problemas', entry.issues, entry.issues ? 'var(--err)' : 'var(--ok)')}
-    ${mr('APIs OK',   entry.apiOk + '/' + state.urls.length, 'var(--ok)')}
+    ${mr('APIs OK', entry.apiOk + '/' + state.urls.length, 'var(--ok)')}
   `
 }

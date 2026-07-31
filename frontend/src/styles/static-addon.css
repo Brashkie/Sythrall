@@ -37,6 +37,7 @@
 .st-stat-lbl  { font-size: .62rem; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: .04em; }
 
 /* ─── Big O table ─────────────────────────── */
+.table-scroll { overflow-x: auto; }
 .bigo-table {
   width: 100%; border-collapse: collapse;
   font-family: var(--mono); font-size: .75rem;
@@ -56,6 +57,7 @@
 
 .bigo-fn     { font-weight: 600; color: var(--txt); }
 .bigo-reason { color: var(--muted); font-size: .7rem; }
+.bigo-thetaomega { color: var(--muted); font-size: .68rem; white-space: nowrap; }
 .bigo-cc     { font-weight: 700; text-align: center; }
 .bigo-loc    { color: var(--muted); text-align: center; }
 .bigo-line   { color: var(--b2); }
@@ -166,6 +168,7 @@
 @media (max-width: 680px) {
   .st-summary-row { grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .bigo-table .bigo-reason { display: none; }
+  .bigo-table .bigo-thetaomega { display: none; }
   .st-toolbar { padding: 7px 10px; }
 }
 @media (max-width: 480px) {

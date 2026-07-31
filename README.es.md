@@ -4,13 +4,14 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/versión-4.2.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/versión-4.4.0-blue?style=flat-square)
+[![CI](https://github.com/Brashkie/codewatch-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/Brashkie/codewatch-pro/actions/workflows/ci.yml)
 ![Frontend](https://img.shields.io/badge/Frontend-Vite%20%2B%20TypeScript-646cff?style=flat-square)
 ![Backend](https://img.shields.io/badge/Backend-FastAPI%20%2B%20Python-009688?style=flat-square)
 ![Deploy](https://img.shields.io/badge/Deploy-Docker%20%2B%20Nginx-2496ed?style=flat-square)
 ![Tests](https://img.shields.io/badge/Tests-316%20pasando-00f5a0?style=flat-square)
 ![Author](https://img.shields.io/badge/Autor-Hepein%20Oficial-b87dff?style=flat-square)
-![License](https://img.shields.io/badge/Licencia-Apache%202.0-orange?style=flat-square)
+![License](https://img.shields.io/badge/Licencia-GPL%203.0-orange?style=flat-square)
 
 [English](./README.md) · [Español](./README.es.md)
 
@@ -43,14 +44,27 @@ CodeWatch PRO es una plataforma profesional de inteligencia de código construid
 
 ## 📁 Estructura del proyecto
 
+Todos los manifiestos/configs viven en la raíz del repo; `backend/` y `frontend/` solo contienen código fuente. `scripts/` es el único punto de entrada para todo (ver [scripts/README.md](scripts/README.md)).
+
 ```
 codewatch-pro/
+├── package.json                   ← Manifiesto npm (deps del frontend + scripts lint/format/build)
+├── package-lock.json
+├── vite.config.ts                 ← root: 'frontend', build.outDir: '../dist'
+├── tsconfig.json                  ← include: frontend/src
+├── biome.json                     ← Config de Biome (lint/format)
+├── requirements.txt                ← Deps runtime del backend
+├── requirements-dev.txt            ← Ruff (lint/format), solo dev
+├── pyproject.toml                  ← Config de Ruff
+├── pytest.ini                      ← testpaths: backend/tests
+├── docker-compose.yml
+├── .dockerignore
+├── START.bat / STOP.bat
+├── scripts/                       ← Flujo de dev sin Docker (setup/dev/build/test/lint/format, .ps1 + .sh)
 ├── backend/
 │   ├── main.py                    ← FastAPI v4.2 (32+ rutas)
 │   ├── shared.py
-│   ├── requirements.txt
 │   ├── Dockerfile
-│   ├── pytest.ini
 │   ├── routers/
 │   │   ├── upload.py              ← POST /api/upload/{files,folder,zip} + CRUD
 │   │   ├── analysis.py            ← POST /analyze/{code,api,logs-analyze}
@@ -71,39 +85,34 @@ codewatch-pro/
 │       ├── test_graph.py          ← 46 tests (Fase 1)
 │       └── test_graph_phase2.py   ← 25 tests (Fase 2 — proyectos)
 ├── frontend/
-│   ├── src/
-│   │   ├── api/client.ts          ← API client completo v4.2
-│   │   ├── components/
-│   │   │   ├── app.ts             ← Shell de la app + manejo de archivos
-│   │   │   ├── editor.ts          ← Integración Monaco Editor
-│   │   │   ├── editor-intelligence.ts ← Linting + hover + autocompletado (Fases 1–3)
-│   │   │   ├── explorer.ts        ← Project Explorer (árbol + tabs + búsqueda + outline)
-│   │   │   ├── events.ts          ← Conexión global de eventos
-│   │   │   ├── charts.ts          ← Integración Chart.js
-│   │   │   ├── mermaid.ts         ← Mermaid + motor zoom/pan
-│   │   │   └── flow.ts            ← Diagrama de flujo de ejecución
-│   │   ├── panels/
-│   │   │   ├── analysis.ts
-│   │   │   ├── apis.ts
-│   │   │   ├── ml.ts
-│   │   │   ├── upload.ts
-│   │   │   ├── static.ts          ← Panel de Análisis Estático
-│   │   │   └── graph.ts           ← Code Graph Visual (Force Graph + Dir Tree)
-│   │   ├── store/state.ts
-│   │   ├── styles/
-│   │   │   ├── main.css
-│   │   │   ├── upload.css
-│   │   │   ├── static-addon.css
-│   │   │   └── explorer.css
-│   │   ├── types/index.ts
-│   │   └── utils/
 │   ├── index.html
-│   ├── package.json
-│   ├── vite.config.ts
-│   └── Dockerfile.frontend
-├── docker-compose.yml
-├── START.bat
-├── STOP.bat
+│   ├── Dockerfile.frontend
+│   └── src/
+│       ├── api/client.ts          ← API client completo v4.2
+│       ├── components/
+│       │   ├── app.ts             ← Shell de la app + manejo de archivos
+│       │   ├── editor.ts          ← Integración Monaco Editor
+│       │   ├── editor-intelligence.ts ← Linting + hover + autocompletado (Fases 1–3)
+│       │   ├── explorer.ts        ← Project Explorer (árbol + tabs + búsqueda + outline)
+│       │   ├── events.ts          ← Conexión global de eventos
+│       │   ├── charts.ts          ← Integración Chart.js
+│       │   ├── mermaid.ts         ← Mermaid + motor zoom/pan
+│       │   └── flow.ts            ← Diagrama de flujo de ejecución
+│       ├── panels/
+│       │   ├── analysis.ts
+│       │   ├── apis.ts
+│       │   ├── ml.ts
+│       │   ├── upload.ts
+│       │   ├── static.ts          ← Panel de Análisis Estático
+│       │   └── graph.ts           ← Code Graph Visual (Force Graph + Dir Tree)
+│       ├── store/state.ts
+│       ├── styles/
+│       │   ├── main.css
+│       │   ├── upload.css
+│       │   ├── static-addon.css
+│       │   └── explorer.css
+│       ├── types/index.ts
+│       └── utils/
 └── README.md
 ```
 
@@ -143,20 +152,40 @@ docker compose up --build
 
 ### 3 — Modo desarrollo (sin Docker)
 
-**Backend:**
+La carpeta `scripts/` envuelve todo el flujo sin Docker en un solo comando — sin tener que ir manualmente con `cd`/`pip`/`npm`:
+
+```powershell
+# Windows (PowerShell)
+.\scripts\setup.ps1   # instala venv del backend + node_modules del frontend
+.\scripts\dev.ps1     # corre backend (uvicorn --reload) + frontend (vite) juntos
+```
+
 ```bash
-cd backend
+# macOS / Linux / Git Bash / WSL
+./scripts/setup.sh
+./scripts/dev.sh
+```
+
+Ver [scripts/README.md](scripts/README.md) para la lista completa (`build`, `test`, `lint`, `format`). Por debajo, `dev` es simplemente `npm run dev` — `concurrently` corre Vite y uvicorn como un solo proceso (logs con prefijo `[web]`/`[api]`), así que `npm run dev` funciona igual directo si prefieres saltarte los scripts wrapper.
+
+<details>
+<summary>Comandos manuales (equivalentes, sin script)</summary>
+
+**Backend** (desde la raíz — ahí vive `requirements.txt`, el código está en `backend/`):
+```bash
 pip install -r requirements.txt
+cd backend
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**Frontend:**
+**Frontend** (desde la raíz — ahí viven `package.json`/`vite.config.ts`, el código fuente está en `frontend/src`):
 ```bash
-cd frontend
 npm install
 npm run dev
 # App en http://localhost:5173
 ```
+
+</details>
 
 ---
 
@@ -272,7 +301,8 @@ DELETE /api/upload/projects/{id}
 ## 🧪 Tests
 
 ```bash
-cd backend && pytest tests/ -v
+cd backend && pytest
+# pytest.ini vive en la raíz y se autodetecta; testpaths = backend/tests
 ```
 
 ```
@@ -285,6 +315,19 @@ test_graph_phase2.py      25 ✅
 ─────────────────────────────
 Total: 316 pasando
 ```
+
+---
+
+## 🧹 Herramientas (lint & format)
+
+[Biome](https://biomejs.dev) formatea y lintea el frontend TypeScript; [Ruff](https://docs.astral.sh/ruff/) hace lo mismo para el backend Python. Ambos corren vía `scripts/`:
+
+```bash
+./scripts/lint.sh      # o .\scripts\lint.ps1   — solo revisa, no escribe
+./scripts/format.sh    # o .\scripts\format.ps1 — aplica los cambios
+```
+
+Comandos directos equivalentes (desde la raíz): `npm run lint` / `npm run format`, `ruff check backend` / `ruff format backend`.
 
 ---
 
@@ -386,13 +429,33 @@ docker compose build --no-cache && docker compose up -d
 - [x] Project Explorer: árbol + tabs múltiples + búsqueda global + outline
 - [x] 316 tests automatizados
 
-### 🔜 v4.3 — Panel de Problemas + Métricas en Vivo
-- [ ] **Panel de problemas** (estilo VSCode): errores · warnings · Big-O · complejidad · hallazgos de seguridad
-- [ ] **Barra de métricas en vivo** en el editor: LOC · funciones · imports · complexity score · Big-O peor caso · parse time (ms)
-- [ ] Auto-recovery si el parser falla (safe mode + fallback regex)
-- [ ] Detección de archivos corruptos, restauración de sesión
+### ✅ v4.3 — Panel de Problemas + Métricas en Vivo
+- [x] **Panel de problemas** (estilo VSCode): errores · warnings · Big-O · complejidad · hallazgos de seguridad
+- [x] **Barra de métricas en vivo** en el editor: LOC · funciones · imports · complexity score · Big-O peor caso · parse time (ms)
+- [x] Auto-recovery si el parser falla (safe mode + fallback regex)
+- [x] Detección de archivos corruptos, restauración de sesión
 
-### 🔜 v4.4 — Expansión Multi-lenguaje
+---
+
+Los ítems de abajo están agrupados según qué tan fundamentados están, no por número de versión — la idea es ser honestos sobre el alcance antes de comprometernos a él.
+
+### 🔜 v4.4 — Computer Science Engine ⭐ *(prioridad — extensión directa del motor de análisis existente, sin arquitectura nueva)*
+
+No solo "qué" hace el código — *por qué* se comporta así. Construido enteramente sobre datos que `static_parser.py` y el motor de Big-O ya calculan:
+
+- [x] Complejidad completa por función: Θ (cota ajustada), Ω (mejor caso), O (peor caso) — no solo el O del peor caso *(solo Python por ahora; C/C++/JS/TS todavía muestran solo O)*
+- [x] Explicación del "por qué" en cada resultado de Big-O (ej. *"2 loops anidados — el loop interno corre n veces por cada iteración del externo"*)
+- [ ] Regex detectada → clasificar como Autómata Finito / Chomsky Tipo-3 (Regular)
+- [ ] Código con forma de gramática/parser detectado → Gramática Libre de Contexto / Autómata con Pila / Chomsky Tipo-2
+- [ ] Recursión detectada → detección de tail-call, estimación de profundidad de recursión, marco de "Cálculo Lambda"
+- [ ] Recorrido de grafo detectado → etiquetar como DFS/BFS/orden topológico, O(V+E)
+
+### 🔜 v4.5 — Data Structure Detector *(mismo estilo heurístico que los detectores de WASM-hints/dead-code ya existentes)*
+
+- [ ] Detectar AVL / Red-Black Tree / Trie / Heap / Segment Tree / Fenwick Tree / Bloom Filter / B-Tree / HashMap / Skip List a partir de la forma del AST
+- [ ] Por cada detección: complejidad, uso típico, ventajas/desventajas
+
+### 🔜 v4.6 — Expansión Multi-lenguaje
 - [ ] **C/C++** soporte completo (tree-sitter ya integrado — pipeline completo)
 - [ ] **Java** — AST + análisis de complejidad
 - [ ] **Go** — imports, detección de goroutines
@@ -401,7 +464,7 @@ docker compose build --no-cache && docker compose up -d
 - [ ] **SQL** — estimación de complejidad de queries
 - [ ] Reglas de lint específicas por extensión
 
-### 🔜 v4.5 — Integración Cython & WASM
+### 🔜 v4.7 — Integración Cython & WASM
 - [ ] Detección automática de candidatos Cython desde el análisis Big-O (funciones O(n²)+)
 - [ ] Generación de stubs `.pyx` desde las firmas de funciones Python
 - [ ] Compilación Cython en Docker (MSVC en Windows / GCC en Linux)
@@ -409,24 +472,50 @@ docker compose build --no-cache && docker compose up -d
 - [ ] Speedup estimado mostrado en el hover provider
 - [ ] Ruta de compilación WASM vía Emscripten
 
-### 🔜 v4.6 — Execution Path Simulator
+### 🔜 v4.8 — Execution Path Simulator
 - [ ] Diagrama de flujo de ejecución animado tipo circuito:
   `Input → Parser → AST → Dependency Resolver → Metrics → Report`
 - [ ] Traza paso a paso con timing por etapa
 - [ ] Exportable como SVG animado
+
+### 🔬 Spikes de investigación — integrar herramientas existentes, no reconstruirlas
+
+Ideas reales, pero cada una es su propio proyecto serio ya resuelto bien por herramientas open-source dedicadas — lo honesto es enlazar/integrar esas, no reinventarlas:
+
+- [ ] Visualización del pipeline del compilador (Lexer → AST → IR → Assembly) — integrar [Compiler Explorer](https://godbolt.org) (open source) en vez de construir un compilador educativo desde cero
+- [ ] Analizador de ejecutables (PE / ELF / Mach-O, secciones, imports/exports, símbolos) — envolver [Capstone](https://www.capstone-engine.org)/[LIEF](https://lief-project.github.io)/`objdump`, no escribir un disassembler a mano
+- [ ] Centralidad de grafos / detección de "hubs" (NetworkX ya es dependencia) — mostrar los archivos/funciones más conectados del Code Graph existente, la misma idea que usan las redes sociales para detectar influencers
+- [ ] Build standalone (PyInstaller/Nuitka + Tauri, o Zig para binarios estáticos chicos) — un binario portable sin depender de Docker/Node/Python, como alternativa a `scripts/` y Docker
+- [ ] Extensión en Rust (PyO3) para el hot-path del parser estático — solo si perfilar `static_parser.py` con archivos grandes reales muestra que realmente hace falta; no es una reescritura, mismo patrón que adoptar Ruff (Rust) en vez de un linter puro-Python
+
+### 🧭 Largo plazo / otra categoría de herramienta — no comprometido
+
+Estos necesitan instrumentación en runtime (ptrace/eBPF), un proceso corriendo, o captura de paquetes en vivo — arquitectónicamente son un tipo de herramienta distinto al análisis estático, así que quedan como ideas, no como compromisos de roadmap:
+
+- [ ] Visualizador de memoria (stack/heap/data/bss) — requiere un proceso corriendo para inspeccionar, no texto fuente
+- [ ] Analizador de concurrencia (race conditions, deadlocks, mal uso de mutex/atomic) — necesita ejecución real o herramientas como ThreadSanitizer, no inspección de AST
+- [ ] Motor de SO (threads, paging, scheduling, IPC) — necesita tracing a nivel de kernel
+- [ ] Analizador de redes (TCP/TLS/QUIC/WebSocket) — necesita captura de paquetes; esto es una herramienta con forma de Wireshark, no un analizador estático
+- [ ] Analizador de seguridad más allá de detección de patrones (ROP, heap spray, use-after-free) — compite directamente con herramientas SAST maduras (Semgrep, CodeQL, Bandit); la versión realista se integra al CS Engine de arriba como "detectar el patrón + explicar el CWE", no un motor de análisis de exploits completo
 
 ### 🔜 v5.0 — Persistencia Empresarial
 - [ ] PostgreSQL + Delta Lake
 - [ ] Historial de análisis, comparación de métricas entre versiones
 - [ ] WebSockets para análisis en tiempo real
 - [ ] Autenticación JWT, API pública con rate limiting
-- [ ] GitHub Action para CI/CD
+- [x] GitHub Action para CI/CD — `.github/workflows/ci.yml` (typecheck/lint/build/test en cada push/PR) + `release.yml` (tag → GitHub Release con notas del CHANGELOG + artefacto del build frontend)
 
 ### 💡 Ideas futuras
 - [ ] Extensión para VS Code
 - [ ] Análisis de Jupyter Notebooks (`.ipynb`)
 - [ ] Integración ApexVision (`/analyze/image` con OpenCV + YOLOv11)
 - [ ] Dashboard de equipo con métricas agregadas
+
+---
+
+## 📝 Changelog
+
+Ver [CHANGELOG.md](CHANGELOG.md) para el historial completo de versiones.
 
 ---
 
@@ -438,4 +527,4 @@ docker compose build --no-cache && docker compose up -d
 
 ## 📄 Licencia
 
-Apache License 2.0 — ver [LICENSE](LICENSE)
+GPL-3.0 — ver [LICENSE](LICENSE)
