@@ -14,6 +14,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from shared import add_log
+from services.static_parser import find_cycles_capped
 
 router = APIRouter()
 
@@ -398,16 +399,13 @@ def _build_circular_graph(parsed_files: list[dict]) -> dict[str, Any]:
                         all_edges.append({"from": src, "to": candidate, "via": mod})
                     break
 
-    # Detectar ciclos
+    # Detectar ciclos (capado — ver docstring de find_cycles_capped)
     cycles: list[list[str]] = []
     if HAS_NX and all_edges:
         G = nx.DiGraph()
         for e in all_edges:
             G.add_edge(e["from"], e["to"])
-        try:
-            cycles = list(nx.simple_cycles(G))
-        except Exception:
-            pass
+        cycles = find_cycles_capped(G, max_cycles=20)
 
     # Nodos en ciclos
     cycle_nodes: set[str] = set()

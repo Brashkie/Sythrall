@@ -33,9 +33,18 @@ VENV_PYTHON=".venv/bin/python"
 "$VENV_PYTHON" -m pip install -q -r requirements.txt -r requirements-dev.txt
 
 echo ""
-echo "[2/2] Frontend (npm, raiz del repo)..."
+echo "[2/3] Frontend (npm, raiz del repo)..."
 cd "$root"
 npm install
+
+echo ""
+echo "[3/3] Terminal sidecar (Rust)..."
+if command -v cargo >/dev/null 2>&1; then
+  echo "cargo $(cargo --version) encontrado."
+else
+  echo "AVISO: no se encontró 'cargo'. La terminal integrada (npm run dev) no va a" >&2
+  echo "funcionar hasta instalar el toolchain de Rust: https://rustup.rs" >&2
+fi
 
 echo ""
 echo "Listo. Usa scripts/dev.sh para iniciar el entorno de desarrollo."

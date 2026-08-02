@@ -116,8 +116,10 @@ def _parse_python(filename: str, content: str) -> dict:
             end = _end_line(node)
             loc = end - node.lineno + 1
             cc = _cyclomatic_python(node)
-            bigo, bigo_reason = _infer_big_o_python(node)
-            bigo_theta, bigo_omega = _theta_omega_python(node, bigo)
+            recursion = _recursion_info_python(node)
+            depth, has_early_exit = _loop_analysis_python(node)
+            bigo, bigo_reason = _infer_big_o_python(node, recursion["is_recursive"], depth)
+            bigo_theta, bigo_omega = _theta_omega_python(has_early_exit, bigo)
             decorators = [_decorator_name(d) for d in node.decorator_list]
 
             functions.append(
@@ -135,6 +137,9 @@ def _parse_python(filename: str, content: str) -> dict:
                     "big_o_reason": bigo_reason,
                     "big_o_theta": bigo_theta,
                     "big_o_omega": bigo_omega,
+                    "is_recursive": recursion["is_recursive"],
+                    "is_tail_recursive": recursion["is_tail_recursive"],
+                    "recursion_note": _recursion_note(recursion),
                     "calls": _extract_calls_python(node),
                     "returns_annotated": node.returns is not None,
                 }
@@ -620,19 +625,28 @@ def _dead_js_imports(imports: list[dict], content: str) -> list[dict]:
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def _count_loop_depth_python(node: ast.AST) -> int:
-    """Profundidad máxima de loops anidados en un nodo Python AST."""
+def _loop_analysis_python(node: ast.AST) -> tuple[int, bool]:
+    """Profundidad máxima de loops anidados y si hay un break/return dentro
+    de algún loop (early exit — indica que el mejor caso puede terminar
+    antes de recorrer todo, ej. una búsqueda lineal). Un solo recorrido
+    recursivo para ambas señales — antes eran dos funciones separadas, la
+    segunda con un `ast.walk` anidado extra por cada loop encontrado."""
     LOOP_TYPES = (ast.For, ast.While)
     max_depth = [0]
+    has_early_exit = [False]
 
-    def walk(n, depth):
+    def walk(n, depth, inside_loop):
         for child in ast.iter_child_nodes(n):
-            d = depth + 1 if isinstance(child, LOOP_TYPES) else depth
+            is_loop = isinstance(child, LOOP_TYPES)
+            d = depth + 1 if is_loop else depth
             max_depth[0] = max(max_depth[0], d)
-            walk(child, d)
+            child_inside_loop = inside_loop or is_loop
+            if child_inside_loop and isinstance(child, ast.Break | ast.Return):
+                has_early_exit[0] = True
+            walk(child, d, child_inside_loop)
 
-    walk(node, 0)
-    return max_depth[0]
+    walk(node, 0, False)
+    return max_depth[0], has_early_exit[0]
 
 
 def _has_binary_split_python(node: ast.AST) -> bool:
@@ -645,16 +659,65 @@ def _has_binary_split_python(node: ast.AST) -> bool:
     return False
 
 
-def _has_recursion_python(func: ast.FunctionDef) -> bool:
+def _recursion_info_python(func: ast.FunctionDef) -> dict:
+    """Detecta recursión directa (la función se llama a sí misma) y si es
+    tail-recursive: cada llamada recursiva es directamente el valor de un
+    `return`, sin ninguna operación pendiente después de que retorne
+    (ej. `return f(n-1)` es tail; `return n + f(n-1)` no lo es, porque falta
+    sumar `n` después de que la llamada vuelva). Python no optimiza
+    tail calls — aun siendo tail-recursive, sigue consumiendo stack —
+    pero es información útil: indica que se podría reescribir como loop.
+
+    Un solo recorrido del AST para ambas señales (antes eran dos `ast.walk`
+    separados) — con miles de funciones en un archivo grande, cada walk de
+    más se nota.
+    """
+    func_name = func.name
+    call_count = 0
+    tail_count = 0
     for n in ast.walk(func):
-        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == func.name:
-            return True
-    return False
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == func_name:
+            call_count += 1
+        elif (
+            isinstance(n, ast.Return)
+            and isinstance(n.value, ast.Call)
+            and isinstance(n.value.func, ast.Name)
+            and n.value.func.id == func_name
+        ):
+            tail_count += 1
+
+    if call_count == 0:
+        return {"is_recursive": False, "is_tail_recursive": False, "call_count": 0}
+
+    is_tail = tail_count == call_count
+
+    return {"is_recursive": True, "is_tail_recursive": is_tail, "call_count": call_count}
 
 
-def _infer_big_o_python(func: ast.FunctionDef) -> tuple[str, str]:
-    depth = _count_loop_depth_python(func)
-    recursive = _has_recursion_python(func)
+def _recursion_note(info: dict) -> str | None:
+    """Framing tipo Cálculo Lambda: una recursión tail-call es equivalente a
+    un loop (reducible a iteración), aunque Python no la optimiza — sigue
+    gastando stack. Una no-tail necesita que cada llamada "espere" el
+    resultado de la siguiente para terminar su propio trabajo."""
+    if not info["is_recursive"]:
+        return None
+    if info["is_tail_recursive"]:
+        return (
+            "Tail-call — cada llamada recursiva es lo último que hace la función; "
+            "equivalente a un loop (Cálculo Lambda: reducible a iteración). "
+            "Python no optimiza tail calls, así que igual consume stack."
+        )
+    return (
+        "No es tail-call — queda trabajo pendiente después de la llamada recursiva "
+        "(ej. sumar su resultado); cada nivel de recursión consume una entrada de stack."
+    )
+
+
+def _infer_big_o_python(func: ast.FunctionDef, is_recursive: bool, depth: int) -> tuple[str, str]:
+    """`is_recursive` y `depth` se reciben ya calculados (por
+    `_recursion_info_python` / `_loop_analysis_python`) en vez de volver a
+    recorrer el AST acá — evita walks duplicados."""
+    recursive = is_recursive
     binary = _has_binary_split_python(func)
 
     if depth == 0 and not recursive:
@@ -679,28 +742,18 @@ def _infer_big_o_python(func: ast.FunctionDef) -> tuple[str, str]:
     return "O(n)", "Caso base — comportamiento lineal por defecto"
 
 
-def _has_early_exit_python(func: ast.FunctionDef) -> bool:
-    """Detecta un break/return dentro de un loop — indica que el mejor caso
-    puede terminar antes de recorrer todos los elementos (ej. búsqueda lineal)."""
-    for node in ast.walk(func):
-        if isinstance(node, ast.For | ast.While):
-            for inner in ast.walk(node):
-                if isinstance(inner, ast.Break | ast.Return):
-                    return True
-    return False
-
-
-def _theta_omega_python(func: ast.FunctionDef, worst: str) -> tuple[str, str]:
+def _theta_omega_python(has_early_exit: bool, worst: str) -> tuple[str, str]:
     """Cota ajustada (Θ) y mejor caso (Ω) a partir del peor caso (O) ya inferido.
 
-    Heurística: si hay un break/return dentro de un loop, el mejor caso puede
-    terminar en la primera iteración (Ω(1)), como en una búsqueda lineal que
-    encuentra el elemento de una — en ese caso no hay una cota Θ única, varía
-    entre el mejor y el peor caso. Sin salida temprana, el loop siempre corre
-    hasta el final sin importar los datos, así que Θ = Ω = O.
+    Heurística: si hay un break/return dentro de un loop (`has_early_exit`,
+    calculado por `_loop_analysis_python`), el mejor caso puede terminar en
+    la primera iteración (Ω(1)), como en una búsqueda lineal que encuentra
+    el elemento de una — en ese caso no hay una cota Θ única, varía entre el
+    mejor y el peor caso. Sin salida temprana, el loop siempre corre hasta
+    el final sin importar los datos, así que Θ = Ω = O.
     """
     suffix = worst[1:]  # "O(n²)" -> "(n²)"
-    if _has_early_exit_python(func):
+    if has_early_exit:
         return f"varía entre Ω(1) y O{suffix}", "Ω(1)"
     return f"Θ{suffix}", f"Ω{suffix}"
 
@@ -804,6 +857,31 @@ def _extract_calls_python(func: ast.FunctionDef) -> list[str]:
 # ══════════════════════════════════════════════════════════════════════════════
 
 
+def find_cycles_capped(graph: Any, max_cycles: int = 20) -> list[list[str]]:
+    """Enumera ciclos simples de un grafo dirigido, cortando apenas se
+    encuentran `max_cycles`.
+
+    `nx.simple_cycles()` es un generador, pero convertirlo a `list()` de una
+    fuerza enumerar TODOS los ciclos posibles antes de poder usar ninguno —
+    en un grafo denso esa cantidad crece exponencial (un proyecto de ~150
+    archivos con solo 3% de densidad de imports ya puede tener cientos de
+    miles de ciclos simples). Como de cualquier forma solo se muestran los
+    primeros, cortar la iteración temprano evita colgar el servidor sin
+    perder nada útil para quien lo usa.
+    """
+    if not HAS_NX:
+        return []
+    cycles: list[list[str]] = []
+    try:
+        for cycle in nx.simple_cycles(graph):
+            cycles.append(cycle)
+            if len(cycles) >= max_cycles:
+                break
+    except Exception:
+        pass
+    return cycles
+
+
 def _detect_circular_imports(imports: list[dict]) -> list[str]:
     """Detecta posibles ciclos entre módulos importados."""
     if not HAS_NX:
@@ -814,11 +892,8 @@ def _detect_circular_imports(imports: list[dict]) -> list[str]:
         parts = mod.split(".")
         if len(parts) >= 2:
             G.add_edge(parts[0], parts[-1])
-    try:
-        cycles = list(nx.simple_cycles(G))
-        return [" → ".join(c) for c in cycles[:5]]
-    except Exception:
-        return []
+    cycles = find_cycles_capped(G, max_cycles=5)
+    return [" → ".join(c) for c in cycles]
 
 
 # ══════════════════════════════════════════════════════════════════════════════

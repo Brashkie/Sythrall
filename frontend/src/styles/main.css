@@ -34,6 +34,37 @@
   --fs-sm:  13px;
   --fs-md:  14px;
   --fs-lg:  15px;
+  /* Tints reusables (glass/ghost/hairline) — dependen del tema */
+  --glass-bg:        rgba(10,13,26,.97);
+  --glass-bg-soft:   rgba(10,13,26,.85);
+  --ghost-tint:       rgba(255,255,255,.04);
+  --ghost-tint-hover: rgba(255,255,255,.08);
+  --hairline:         rgba(255,255,255,.03);
+}
+
+/* ── Tema claro ──
+   Oscuro sigue siendo el default (:root); este bloque solo pisa lo necesario
+   cuando <html data-theme="light">. */
+[data-theme='light'] {
+  --bg:     #f4f6fb;
+  --s0:     #ffffff;
+  --s1:     #eef1f8;
+  --s2:     #e4e8f3;
+  --b0:     #d7dced;
+  --b1:     #c5cbe3;
+  --b2:     #b3bad6;
+  --ok:     #00a877;
+  --warn:   #b8790a;
+  --err:    #d61a4a;
+  --info:   #1a6fd4;
+  --purple: #8b4fd6;
+  --txt:    #1a2036;
+  --muted:  #6b7494;
+  --glass-bg:        rgba(255,255,255,.92);
+  --glass-bg-soft:   rgba(255,255,255,.85);
+  --ghost-tint:       rgba(10,20,50,.04);
+  --ghost-tint-hover: rgba(10,20,50,.08);
+  --hairline:         rgba(10,20,50,.05);
 }
 
 /* ── Reset ── */
@@ -65,7 +96,7 @@ html, body {
 .topbar {
   display: flex; align-items: center; gap: 10px;
   padding: 0 16px; height: 52px; flex-shrink: 0;
-  background: rgba(10,13,26,.97);
+  background: var(--glass-bg);
   border-bottom: 1px solid var(--b0);
   backdrop-filter: blur(14px);
   z-index: 200; overflow-x: auto;
@@ -132,8 +163,8 @@ html, body {
 .btn-run     { background: linear-gradient(135deg, var(--info), var(--purple)); color: #fff; padding: 7px 16px; }
 .btn-run:hover { opacity: .88; transform: translateY(-1px); }
 .btn-run:disabled { opacity: .35; cursor: not-allowed; transform: none; }
-.btn-ghost   { background: rgba(255,255,255,.04); color: var(--txt); border: 1px solid var(--b1); }
-.btn-ghost:hover { background: rgba(255,255,255,.08); }
+.btn-ghost   { background: var(--ghost-tint); color: var(--txt); border: 1px solid var(--b1); }
+.btn-ghost:hover { background: var(--ghost-tint-hover); }
 .btn-sm      { padding: 4px 9px; font-size: .67rem; }
 .btn-danger  { background: rgba(255,51,102,.1); color: var(--err); border: 1px solid rgba(255,51,102,.2); }
 .btn-danger:hover { background: rgba(255,51,102,.2); }
@@ -246,6 +277,44 @@ html, body {
 
 /* Sidebar: button stays visible when collapsed */
 .sidebar { overflow: visible !important; }
+
+/* ══════════════════
+   TERMINAL PANEL — estilo VSCode, anclado abajo, redimensionable
+══════════════════ */
+.terminal-panel {
+  display: flex; flex-direction: column;
+  height: 260px; min-height: 120px; max-height: 70vh;
+  background: var(--s0); border-top: 1px solid var(--b0);
+  position: relative; flex-shrink: 0;
+}
+.terminal-panel-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 10px; height: 32px; flex-shrink: 0;
+  border-bottom: 1px solid var(--b0);
+  font-family: var(--mono); font-size: .68rem; color: var(--muted);
+}
+.terminal-panel-title { color: var(--txt); font-weight: 700; }
+.terminal-panel-body { flex: 1; min-height: 0; padding: 4px 8px; }
+.terminal-panel-body .xterm { height: 100%; }
+.terminal-logs-body { overflow-y: auto; font-family: var(--mono); font-size: .68rem; }
+
+/* ── Selector Terminal / Logs (estilo tabs de VSCode) ── */
+.tp-view-tabs { display: flex; gap: 2px; }
+.tp-view-tab {
+  background: transparent; border: none; cursor: pointer;
+  padding: 5px 10px; border-radius: 5px 5px 0 0;
+  font-family: var(--mono); font-size: .66rem; color: var(--muted);
+  transition: all .15s;
+}
+.tp-view-tab:hover { color: var(--txt); background: var(--ghost-tint); }
+.tp-view-tab.active { color: var(--info); background: var(--ghost-tint); border-bottom: 2px solid var(--info); }
+.resize-handle-h {
+  position: absolute; left: 0; right: 0; top: -4px;
+  height: 8px; cursor: row-resize; z-index: 10;
+  background: transparent; transition: background .2s;
+}
+.resize-handle-h:hover,
+.resize-handle-h.resizing { background: rgba(61,158,255,.15); }
 
 /* Right panel collapse (mirrors to left side) */
 .rp .collapse-btn {
@@ -421,7 +490,7 @@ html, body {
 
 /* ── Log stream ── */
 .log-stream  { flex: 1; overflow-y: auto; padding: 8px; font-family: var(--mono); font-size: .75rem; line-height: 1.75; }
-.ls-row  { display: flex; gap: 8px; padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,.03); }
+.ls-row  { display: flex; gap: 8px; padding: 2px 0; border-bottom: 1px solid var(--hairline); }
 .ls-ts   { color: var(--muted); flex-shrink: 0; min-width: 52px; font-size: .62rem; }
 .ls-src  { flex-shrink: 0; font-size: .58rem; padding: 0 4px; border-radius: 3px; }
 .src-be  { background: rgba(184,125,255,.12); color: var(--purple); }
@@ -882,7 +951,7 @@ input[type=file] { display: none; }
   position: absolute;
   bottom: 12px;
   right: 12px;
-  background: rgba(10,13,26,.85);
+  background: var(--glass-bg-soft);
   border: 1px solid var(--b1);
   border-radius: 6px;
   padding: 4px 10px;

@@ -150,6 +150,9 @@ export interface StaticFunction {
   big_o_reason: string
   big_o_theta?: string
   big_o_omega?: string
+  is_recursive?: boolean
+  is_tail_recursive?: boolean
+  recursion_note?: string | null
   calls?: string[]
   is_async?: boolean
   args?: string[]

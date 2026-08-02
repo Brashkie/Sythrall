@@ -132,7 +132,7 @@ HAS_CYTHON = LIB_FLAGS["HAS_CYTHON"]
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     os.makedirs("uploads/projects", exist_ok=True)
-    add_log("info", "🚀 CodeWatch PRO v4.1 — FastAPI")
+    add_log("info", "🚀 CodeWatch PRO v4.5 — FastAPI")
     add_log(
         "info",
         f"   flake8={'✓' if HAS_FLAKE8 else '✗'}  pylint={'✓' if HAS_PYLINT else '✗'}  radon={'✓' if HAS_RADON else '✗'}",
@@ -154,7 +154,7 @@ async def lifespan(app: FastAPI):
     add_log("info", "🛑 CodeWatch PRO detenido.")
 
 
-app = FastAPI(title="CodeWatch PRO", version="4.2.0", lifespan=lifespan)
+app = FastAPI(title="CodeWatch PRO", version="4.5.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )
@@ -209,7 +209,7 @@ async def capabilities():
 
     caps: dict = {
         "python": sys.version,
-        "server": "CodeWatch PRO v4.2",
+        "server": "CodeWatch PRO v4.5",
         "ts": now(),
         **{k: v for k, v in LIB_FLAGS.items()},
     }

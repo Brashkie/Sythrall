@@ -40,6 +40,14 @@ jobs:
       - run: ruff check backend
       - run: cd backend && pytest
 
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+
       - name: Zip frontend build
         run: cd dist && zip -r ../codewatch-pro-frontend-dist.zip .
 

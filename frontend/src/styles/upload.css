@@ -96,6 +96,22 @@
 .up-tree .tree-size       { color: var(--muted); font-family: var(--mono); font-size: .6rem; flex-shrink: 0; }
 .up-tree .tree-truncated  { font-size: .65rem; color: var(--muted); font-family: var(--mono); padding: 3px 0; }
 
+/* Explorador de carpetas del sidebar (file-browser.ts) — mismas clases de
+   tree reusadas bajo un prefijo distinto, igual que .up-tree arriba. */
+.dz-tree { padding: 5px 0; }
+.dz-tree .tree-row {
+  display: flex; align-items: center; gap: 5px;
+  cursor: pointer; padding: 3px 8px;
+  font-size: .74rem; transition: background .1s; user-select: none;
+}
+.dz-tree .tree-row:hover  { background: var(--s1); }
+.dz-tree .tree-row.active { background: rgba(61,158,255,.1); }
+.dz-tree .tree-expand     { color: var(--muted); font-size: .58rem; width: 9px; flex-shrink: 0; }
+.dz-tree .tree-name       { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--txt); }
+.dz-tree .tree-count      { background: var(--s2); border-radius: 8px; color: var(--muted); font-size: .58rem; padding: 1px 5px; }
+.dz-tree .tree-size       { color: var(--muted); font-family: var(--mono); font-size: .6rem; flex-shrink: 0; }
+.dz-tree .tree-truncated  { font-size: .65rem; color: var(--muted); font-family: var(--mono); padding: 3px 0; }
+
 /* ─── Recent projects ───────────────────────────────── */
 .up-recent-item {
   display: flex; align-items: center; gap: 6px;

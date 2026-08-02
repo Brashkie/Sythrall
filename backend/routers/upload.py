@@ -3,19 +3,24 @@ Router: Upload
 Maneja subida de archivos individuales, carpetas y ZIPs.
 """
 
+import io
 import uuid
 import zipfile
 import logging
 from pathlib import Path
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+from starlette.concurrency import run_in_threadpool
 
 from services.project_service import (
     build_tree,
     extract_zip,
     get_project_info,
+    get_project_info_cached,
+    save_project_meta,
     delete_project,
     list_projects,
+    prune_old_projects,
 )
 
 router = APIRouter()
@@ -75,7 +80,10 @@ async def upload_files(
 
         saved.append({"name": file.filename, "size": len(content), "path": safe_name})
 
-    tree = build_tree(project_dir)
+    tree = await run_in_threadpool(build_tree, project_dir)
+    info = await run_in_threadpool(get_project_info, project_dir)
+    save_project_meta(project_dir, info)
+    await run_in_threadpool(prune_old_projects, UPLOADS_DIR)
 
     logger.info(f"Upload files → project {project_id}: {len(saved)} OK, {len(errors)} errores")
 
@@ -138,7 +146,10 @@ async def upload_folder(
             }
         )
 
-    tree = build_tree(project_dir)
+    tree = await run_in_threadpool(build_tree, project_dir)
+    info = await run_in_threadpool(get_project_info, project_dir)
+    save_project_meta(project_dir, info)
+    await run_in_threadpool(prune_old_projects, UPLOADS_DIR)
 
     logger.info(f"Upload folder → project {project_id}: {len(saved)} archivos")
 
@@ -170,20 +181,24 @@ async def upload_zip(
         raise HTTPException(status_code=413, detail="ZIP demasiado grande (máx 200 MB)")
 
     # Validar que es un ZIP real
-    if not zipfile.is_zipfile(__import__("io").BytesIO(content)):
+    if not zipfile.is_zipfile(io.BytesIO(content)):
         raise HTTPException(status_code=400, detail="El archivo no es un ZIP válido.")
 
     project_id = str(uuid.uuid4())
     project_dir = UPLOADS_DIR / project_id
     project_dir.mkdir(parents=True, exist_ok=True)
 
-    result = extract_zip(content, project_dir)
+    # ZIPs grandes (cientos de archivos, hasta 200 MB) tardan — correrlos en
+    # threadpool evita bloquear el event loop para el resto de las requests.
+    result = await run_in_threadpool(extract_zip, content, project_dir)
 
     if result["errors"]:
         logger.warning(f"ZIP {project_id}: {len(result['errors'])} errores al extraer")
 
-    tree = build_tree(project_dir)
-    info = get_project_info(project_dir)
+    tree = await run_in_threadpool(build_tree, project_dir)
+    info = await run_in_threadpool(get_project_info, project_dir)
+    save_project_meta(project_dir, info)
+    await run_in_threadpool(prune_old_projects, UPLOADS_DIR)
 
     logger.info(f"Upload ZIP → project {project_id}: {result['extracted']} archivos extraídos")
 
@@ -203,8 +218,9 @@ async def upload_zip(
 # ─── Listar proyectos subidos ─────────────────────────────────────────────────
 @router.get("/projects")
 async def get_projects():
-    """Lista todos los proyectos subidos con su metadata."""
-    projects = list_projects(UPLOADS_DIR)
+    """Lista todos los proyectos subidos con su metadata (desde cache — no
+    recorre el disco de cada proyecto acumulado)."""
+    projects = await run_in_threadpool(list_projects, UPLOADS_DIR)
     return {"projects": projects, "total": len(projects)}
 
 
@@ -216,8 +232,8 @@ async def get_project_tree(project_id: str):
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail="Proyecto no encontrado.")
 
-    tree = build_tree(project_dir)
-    info = get_project_info(project_dir)
+    tree = await run_in_threadpool(build_tree, project_dir)
+    info = await run_in_threadpool(get_project_info_cached, project_dir)
 
     return {
         "project_id": project_id,
@@ -264,6 +280,6 @@ async def remove_project(project_id: str):
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail="Proyecto no encontrado.")
 
-    delete_project(project_dir)
+    await run_in_threadpool(delete_project, project_dir)
     logger.info(f"Proyecto eliminado: {project_id}")
     return {"message": f"Proyecto {project_id} eliminado correctamente."}

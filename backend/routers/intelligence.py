@@ -27,6 +27,9 @@ from services.static_parser import (
     _infer_big_o_python,
     _cyclomatic_python,
     _theta_omega_python,
+    _recursion_info_python,
+    _recursion_note,
+    _loop_analysis_python,
 )
 
 router = APIRouter()
@@ -276,8 +279,10 @@ async def heavy_analyze(req: AnalyzeRequest) -> dict[str, Any]:
                 tree = ast.parse(req.content)
                 for node in ast.walk(tree):
                     if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                        bigo, reason = _infer_big_o_python(node)
-                        theta, omega = _theta_omega_python(node, bigo)
+                        recursion = _recursion_info_python(node)
+                        depth, has_early_exit = _loop_analysis_python(node)
+                        bigo, reason = _infer_big_o_python(node, recursion["is_recursive"], depth)
+                        theta, omega = _theta_omega_python(has_early_exit, bigo)
                         cc = _cyclomatic_python(node)
                         big_o.append(
                             {
@@ -288,6 +293,9 @@ async def heavy_analyze(req: AnalyzeRequest) -> dict[str, Any]:
                                 "big_o_omega": omega,
                                 "reason": reason,
                                 "complexity": cc,
+                                "is_recursive": recursion["is_recursive"],
+                                "is_tail_recursive": recursion["is_tail_recursive"],
+                                "recursion_note": _recursion_note(recursion),
                             }
                         )
             except Exception:
@@ -522,8 +530,11 @@ def _build_hover_python(fn: ast.FunctionDef | ast.AsyncFunctionDef, req: HoverRe
     signature = f"{prefix}{fn.name}({', '.join(arg_strs)}){ret_ann}"
 
     # Big-O
-    bigo, reason = _infer_big_o_python(fn)
-    theta, omega = _theta_omega_python(fn, bigo)
+    recursion = _recursion_info_python(fn)
+    depth, has_early_exit = _loop_analysis_python(fn)
+    bigo, reason = _infer_big_o_python(fn, recursion["is_recursive"], depth)
+    theta, omega = _theta_omega_python(has_early_exit, bigo)
+    rec_note = _recursion_note(recursion)
     cc = _cyclomatic_python(fn)
     end_line = getattr(fn, "end_lineno", fn.lineno)
     loc = end_line - fn.lineno + 1
@@ -555,6 +566,10 @@ def _build_hover_python(fn: ast.FunctionDef | ast.AsyncFunctionDef, req: HoverRe
 | **Cyclomatic CC** | `{cc}` — {_cc_label(cc)} |
 | **LOC** | `{loc}` líneas |
 | **Línea** | `{fn.lineno}` |"""
+
+    if rec_note:
+        tail_badge = "🔁 tail-call" if recursion["is_tail_recursive"] else "🔁 no tail-call"
+        md += f"\n\n**Recursión** — {tail_badge}\n\n{rec_note}"
 
     if is_async:
         md += "\n\n🟣 Función **async**"

@@ -202,7 +202,7 @@ function statChip(icon: string, label: string): string {
 
 // ─── Árbol de archivos ────────────────────────────────────────────────────────
 
-const EXT_ICONS: Record<string, string> = {
+export const EXT_ICONS: Record<string, string> = {
   '.py': '🐍',
   '.ts': '🟦',
   '.tsx': '⚛️',
@@ -235,6 +235,12 @@ const EXT_ICONS: Record<string, string> = {
 const expanded = new Set<string>()
 let selectedPath: string | null = null
 
+// Tope de hijos renderizados por carpeta — una carpeta con miles de archivos
+// (ej. node_modules sin filtrar, o un dataset) puede armar de una un innerHTML
+// gigante y trabar el navegador. El backend ya trunca por profundidad; esto
+// cubre el caso de una sola carpeta muy ancha.
+export const MAX_RENDERED_CHILDREN = 300
+
 function renderTree(node: ProjectTreeNode, depth: number): string {
   if (depth === 0) {
     // Auto-expand primer nivel
@@ -244,8 +250,11 @@ function renderTree(node: ProjectTreeNode, depth: number): string {
   if (node.type === 'directory') {
     const isOpen = expanded.has(node.path)
     const pad = depth * 14
+    const allChildren = node.children ?? []
+    const visibleChildren = allChildren.slice(0, MAX_RENDERED_CHILDREN)
+    const hiddenCount = allChildren.length - visibleChildren.length
 
-    const childrenHtml = isOpen && node.children ? node.children.map((c) => renderTree(c, depth + 1)).join('') : ''
+    const childrenHtml = isOpen ? visibleChildren.map((c) => renderTree(c, depth + 1)).join('') : ''
 
     return `
       <div class="tree-dir">
@@ -257,6 +266,7 @@ function renderTree(node: ProjectTreeNode, depth: number): string {
         </div>
         <div class="tree-children" ${isOpen ? '' : 'style="display:none"'}>
           ${childrenHtml}
+          ${isOpen && hiddenCount > 0 ? `<div class="tree-truncated" style="padding-left:${(depth + 1) * 14 + 20}px">… +${hiddenCount} más (carpeta muy grande, no se muestran todos)</div>` : ''}
           ${node.truncated ? `<div class="tree-truncated" style="padding-left:${(depth + 1) * 14 + 20}px">… árbol truncado</div>` : ''}
         </div>
       </div>`

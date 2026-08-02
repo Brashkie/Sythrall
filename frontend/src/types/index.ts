@@ -28,6 +28,8 @@ export interface CodeFile {
   issues: Issue[]
   metrics: FileMetrics
   analyzed: boolean
+  /** Ruta relativa dentro de la carpeta explorada (solo si vino del árbol de carpetas, no de "+ Código"). */
+  path?: string
 }
 
 export interface LogFile {

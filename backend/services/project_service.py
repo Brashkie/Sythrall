@@ -4,6 +4,7 @@ Lógica de negocio para manejo de proyectos subidos.
 """
 
 import io
+import json
 import zipfile
 import shutil
 import logging
@@ -12,6 +13,10 @@ from datetime import datetime
 from typing import Any
 
 logger = logging.getLogger("codewatch.project_service")
+
+# Metadata cacheada por proyecto — evita recorrer todo el disco (rglob + stat
+# de cada archivo) en cada GET /projects. Se calcula una vez al subir.
+META_FILENAME = ".codewatch-meta.json"
 
 # Extensiones bloqueadas en ZIPs
 BLOCKED_EXTENSIONS = {".exe", ".dll", ".so", ".bin", ".sh", ".bat", ".cmd", ".ps1"}
@@ -114,7 +119,7 @@ def build_tree(directory: Path, max_depth: int = 10, _depth: int = 0) -> dict:
         return node
 
     dirs = [e for e in entries if e.is_dir() and e.name not in IGNORED_DIRS]
-    files = [e for e in entries if e.is_file()]
+    files = [e for e in entries if e.is_file() and e.name != META_FILENAME]
 
     for subdir in dirs:
         child = build_tree(subdir, max_depth, _depth + 1)
@@ -233,14 +238,16 @@ def save_files(files_data: list[dict], dest_dir: Path) -> list[dict]:
 
 
 def get_project_info(project_dir: Path) -> dict:
-    """Estadísticas generales de un proyecto."""
+    """Estadísticas generales de un proyecto (recorre el disco — costoso en
+    proyectos grandes). Se llama una vez al subir; para lecturas posteriores
+    usar get_project_info_cached()."""
     total_files = 0
     total_size = 0
     by_ext: dict[str, int] = {}
     code_files = 0
 
     for path in project_dir.rglob("*"):
-        if path.is_file():
+        if path.is_file() and path.name != META_FILENAME:
             total_files += 1
             size = path.stat().st_size
             total_size += size
@@ -262,11 +269,36 @@ def get_project_info(project_dir: Path) -> dict:
     }
 
 
+def save_project_meta(project_dir: Path, info: dict) -> None:
+    """Cachea el resultado de get_project_info() en disco para no tener que
+    recalcularlo (recorrer todo el árbol) cada vez que se lista el proyecto."""
+    try:
+        (project_dir / META_FILENAME).write_text(json.dumps(info), encoding="utf-8")
+    except Exception:
+        logger.warning(f"No se pudo cachear metadata de {project_dir.name}", exc_info=True)
+
+
+def get_project_info_cached(project_dir: Path) -> dict:
+    """Lee la metadata cacheada si existe; si no (proyectos subidos antes de
+    este cache, o cache corrupto), la calcula y la guarda para la próxima."""
+    meta_file = project_dir / META_FILENAME
+    if meta_file.exists():
+        try:
+            return json.loads(meta_file.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    info = get_project_info(project_dir)
+    save_project_meta(project_dir, info)
+    return info
+
+
 # ─── Listar proyectos ─────────────────────────────────────────────────────────
 
 
 def list_projects(uploads_dir: Path) -> list[dict]:
-    """Lista todos los proyectos en uploads_dir."""
+    """Lista todos los proyectos en uploads_dir. Usa la metadata cacheada de
+    cada proyecto — NO recorre el árbol de archivos de cada uno (con muchos
+    proyectos acumulados, eso bloqueaba el servidor entero en cada llamada)."""
     if not uploads_dir.exists():
         return []
 
@@ -274,7 +306,7 @@ def list_projects(uploads_dir: Path) -> list[dict]:
     for project_dir in sorted(uploads_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
         if not project_dir.is_dir():
             continue
-        info = get_project_info(project_dir)
+        info = get_project_info_cached(project_dir)
         projects.append(
             {
                 "project_id": project_dir.name,
@@ -292,3 +324,26 @@ def list_projects(uploads_dir: Path) -> list[dict]:
 def delete_project(project_dir: Path) -> None:
     """Elimina un proyecto y todos sus archivos."""
     shutil.rmtree(project_dir, ignore_errors=True)
+
+
+# ─── Retención — no dejar que se acumulen indefinidamente ────────────────────
+
+MAX_PROJECTS = 20
+
+
+def prune_old_projects(uploads_dir: Path, keep: int = MAX_PROJECTS) -> int:
+    """Borra los proyectos más viejos cuando hay más de `keep` acumulados.
+    Se llama después de cada upload exitoso. Retorna cuántos se borraron."""
+    if not uploads_dir.exists():
+        return 0
+
+    project_dirs = [p for p in uploads_dir.iterdir() if p.is_dir()]
+    if len(project_dirs) <= keep:
+        return 0
+
+    project_dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    to_delete = project_dirs[keep:]
+    for project_dir in to_delete:
+        delete_project(project_dir)
+    logger.info(f"Retención: {len(to_delete)} proyecto(s) viejo(s) eliminado(s) (límite: {keep})")
+    return len(to_delete)

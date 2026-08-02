@@ -7,6 +7,10 @@ import './styles/main.css'
 
 import { initApp } from './components/app'
 import { wireAllEvents } from './components/events'
+import { initTheme } from './utils/theme'
+
+// Antes de DOMContentLoaded para no flashear el tema incorrecto al cargar.
+initTheme()
 
 document.addEventListener('DOMContentLoaded', () => {
   initApp()

@@ -31,6 +31,7 @@ export default defineConfig({
           if (id.includes('monaco-editor')) return 'vendor-monaco'
           if (id.includes('chart.js')) return 'vendor-charts'
           if (id.includes('mermaid')) return 'vendor-mermaid'
+          if (id.includes('@xterm')) return 'vendor-xterm'
           if (id.includes('jszip') || id.includes('node_modules/diff')) return 'vendor-misc'
         },
       },
@@ -90,6 +91,18 @@ export default defineConfig({
       '/metrics': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+      },
+
+      // ── Terminal interactiva (sidecar Rust, WebSocket con PTY real)
+      '/terminal': {
+        target: 'http://localhost:7681',
+        ws: true,
+        changeOrigin: true,
+        // xfwd: Vite estampa la IP real del socket entrante en X-Forwarded-For
+        // (no algo que el cliente pueda falsificar) — el sidecar Rust lo usa
+        // para decidir si sirve el token automáticamente (GET /terminal/token)
+        // solo a pedidos que realmente vienen de esta máquina.
+        xfwd: true,
       },
     },
   },

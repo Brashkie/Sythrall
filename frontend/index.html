@@ -23,6 +23,8 @@
       </div>
     </div>
     <div id="be-badge" class="be-badge be-loading"><span>●</span><span id="be-txt">Conectando...</span></div>
+    <button class="btn btn-ghost btn-sm" id="terminal-toggle-btn" title="Terminal">🖥 Terminal</button>
+    <button class="btn btn-ghost btn-sm" id="theme-toggle-btn" title="Cambiar tema">🌙</button>
     <div id="caps-row"></div>
     <div class="url-bar">
       <span style="color:var(--muted);font-size:.65rem;font-family:var(--mono)">GET</span>
@@ -67,10 +69,12 @@
           <span style="display:flex;gap:4px">
             <button class="btn btn-ghost btn-sm" id="btn-add-code">+ Código</button>
             <button class="btn btn-ghost btn-sm" id="btn-add-log">+ Log</button>
+            <button class="btn btn-ghost btn-sm" id="btn-add-folder" title="Explorar una carpeta, estilo VSCode">+ Carpeta</button>
           </span>
         </div>
         <input type="file" id="fi-code" multiple accept=".py,.js,.ts,.json,.yaml,.yml,.env,.sh,.txt,.html,.css,.java,.go" />
         <input type="file" id="fi-log"  multiple accept=".log,.txt" />
+        <input type="file" id="fi-folder" webkitdirectory mozdirectory multiple />
         <div class="dropzone" id="dz">
           <div class="dz-icon">📂</div>
           <div class="dz-text">Arrastra archivos aquí</div>
@@ -297,6 +301,23 @@
     </div>
 
   </div><!-- end workspace -->
+
+  <!-- ══ TERMINAL PANEL (sidecar Rust, PTY real) ══ -->
+  <div class="terminal-panel" id="terminal-panel" style="display:none">
+    <div class="resize-handle-h" id="terminal-resize"></div>
+    <div class="terminal-panel-header">
+      <div class="tp-view-tabs">
+        <button class="tp-view-tab active" id="tp-view-terminal" data-tp-view="terminal">🖥 Terminal</button>
+        <button class="tp-view-tab" id="tp-view-logs" data-tp-view="logs">📋 Logs</button>
+      </div>
+      <div style="flex:1"></div>
+      <button class="btn btn-ghost btn-sm" id="terminal-new-btn" title="Nueva terminal">+ Nueva</button>
+      <button class="btn btn-ghost btn-sm" id="terminal-close-btn" title="Cerrar">✕</button>
+    </div>
+    <div class="terminal-panel-body" id="terminal-body"></div>
+    <div class="terminal-panel-body terminal-logs-body" id="terminal-logs-body" style="display:none"></div>
+  </div>
+
 </div><!-- end app -->
 
 <!-- Bottom Navigation -->

@@ -9,13 +9,19 @@ import { existsSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { ascii, color } from 'ansimax'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const candidates = [join(root, '.venv', 'bin', 'python'), join(root, '.venv', 'Scripts', 'python.exe')]
 const python = candidates.find((p) => existsSync(p))
 
 if (!python) {
-  console.error('No se encontró .venv en la raíz del repo. Ejecuta scripts/setup.ps1 (o setup.sh) primero.')
+  console.error(
+    ascii.box(color.red('No se encontró .venv en la raíz del repo.\nEjecutá scripts/setup.ps1 (o setup.sh) primero.'), {
+      padding: 1,
+      borderStyle: 'rounded',
+    }),
+  )
   process.exit(1)
 }
 

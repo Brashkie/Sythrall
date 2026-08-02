@@ -1,15 +1,16 @@
 # 🛰 CodeWatch PRO
 
-> **Enterprise-grade code intelligence platform** — static analysis, ML/DL inspection, real-time editor intelligence, code graph visualization, and API monitoring. Built with TypeScript (no frameworks) + FastAPI + Monaco Editor.
+> **Enterprise-grade code intelligence platform** — static analysis, ML/DL inspection, real-time editor intelligence, code graph visualization, an integrated terminal, and API monitoring. Built with TypeScript (no frameworks) + FastAPI + Rust + Monaco Editor.
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-4.4.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-4.5.0-blue?style=flat-square)
 [![CI](https://github.com/Brashkie/codewatch-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/Brashkie/codewatch-pro/actions/workflows/ci.yml)
 ![Frontend](https://img.shields.io/badge/Frontend-Vite%20%2B%20TypeScript-646cff?style=flat-square)
 ![Backend](https://img.shields.io/badge/Backend-FastAPI%20%2B%20Python-009688?style=flat-square)
+![Terminal](https://img.shields.io/badge/Terminal-Rust%20%2B%20axum-dea584?style=flat-square)
 ![Deploy](https://img.shields.io/badge/Deploy-Docker%20%2B%20Nginx-2496ed?style=flat-square)
-![Tests](https://img.shields.io/badge/Tests-316%20passing-00f5a0?style=flat-square)
+![Tests](https://img.shields.io/badge/Tests-297%20passing-00f5a0?style=flat-square)
 ![Author](https://img.shields.io/badge/Author-Hepein%20Oficial-b87dff?style=flat-square)
 ![License](https://img.shields.io/badge/License-GPL%203.0-orange?style=flat-square)
 
@@ -28,6 +29,8 @@ CodeWatch PRO is a professional code intelligence platform built as both an educ
 | Module | Description |
 |---|---|
 | **📂 Project Explorer** | Expandable file tree, multi-file tabs, global search (`Ctrl+Shift+F`), symbol outline |
+| **📁 Folder Browser** | Open a real folder from disk ("+ Folder") and browse it as a VSCode-style expandable tree — works in every modern browser, no Chromium-only APIs |
+| **🖥 Integrated Terminal** | Real interactive shell (PowerShell/bash) in a resizable bottom panel, powered by a Rust sidecar (`portable-pty` + `axum`) — token-protected, zero-friction for local use |
 | **📝 Editor Intelligence** | Real-time linting, inline diagnostics, Big-O hover, Go to Definition, Find References, Rename Symbol, semantic autocomplete |
 | **🔬 Static Analysis** | AST-based multi-language parser (Python, TypeScript, C/C++) — Big-O estimation, cyclomatic complexity, WASM/Cython hints, call graph, dead code |
 | **🕸 Code Graph Visual** | Import graph, Call graph, Circular dependency detection, Complexity heatmap — Tree View + interactive Force Graph |
@@ -38,7 +41,8 @@ CodeWatch PRO is a professional code intelligence platform built as both an educ
 | **📡 APIs** | External endpoint verification with history and response metrics |
 | **📊 Dashboard** | Distribution charts, response times, execution history |
 | **🔁 Diff** | Visual file comparison with highlighted changes |
-| **🖥 Logs** | Real-time server log stream |
+| **🖥 Logs** | Real-time server log stream — also available as a switchable view inside the terminal panel |
+| **🎨 Light/Dark theme** | Toggle in the topbar, dark by default, persisted across sessions |
 
 ---
 
@@ -57,12 +61,23 @@ codewatch-pro/
 ├── requirements-dev.txt            ← Ruff (lint/format), dev-only
 ├── pyproject.toml                  ← Ruff config
 ├── pytest.ini                      ← testpaths: backend/tests
+├── Cargo.toml                       ← Rust manifest — terminal-server sidecar
+├── Cargo.lock
 ├── docker-compose.yml
 ├── .dockerignore
 ├── START.bat / STOP.bat
 ├── scripts/                       ← Dev workflow without Docker (setup/dev/build/test/lint/format, .ps1 + .sh)
+│   ├── run-backend.mjs            ← spawns uvicorn (npm run dev:api)
+│   ├── run-terminal.mjs           ← spawns the Rust terminal sidecar (npm run dev:term)
+│   └── dev-banner.mjs             ← ansimax startup banner for npm run dev
+├── terminal-server/                ← Rust sidecar: real interactive shell over WebSocket
+│   ├── Dockerfile
+│   └── src/
+│       ├── main.rs                ← axum WS handler, token auth, PTY bridging
+│       ├── pty_session.rs         ← portable-pty wrapper (ConPTY/Unix PTY, one impl)
+│       └── auth.rs                ← token generation + constant-time comparison
 ├── backend/
-│   ├── main.py                    ← FastAPI v4.2 (32+ routes)
+│   ├── main.py                    ← FastAPI v4.5 (30+ routes)
 │   ├── shared.py
 │   ├── Dockerfile
 │   ├── routers/
@@ -73,27 +88,24 @@ codewatch-pro/
 │   │   ├── logs.py                ← GET /logs + GET /api/history
 │   │   ├── static_analysis.py     ← POST /static/{parse,parse-project,bigO,wasm}
 │   │   ├── intelligence.py        ← POST /intel/{lint,analyze,hover,definition,references,completions,rename}
-│   │   └── graph.py               ← GET /analyze/graph/types, POST /analyze/graph{,/project}
+│   │   ├── graph.py               ← GET /analyze/graph/types, POST /analyze/graph{,/project}
+│   │   └── metrics_live.py        ← POST /metrics/live — instant per-keystroke metrics
 │   ├── services/
 │   │   ├── project_service.py
 │   │   └── static_parser.py       ← Multi-language parser: Python/C/C++/JS/TS
-│   └── tests/
-│       ├── test_upload.py         ← 26 tests
-│       ├── test_analysis.py       ← 57 tests
-│       ├── test_static_analysis.py← 53 tests
-│       ├── test_intelligence.py   ← 109 tests (Phases 1–3)
-│       ├── test_graph.py          ← 46 tests (Phase 1)
-│       └── test_graph_phase2.py   ← 25 tests (Phase 2 — projects)
+│   └── tests/                      ← 297 tests total (see Tests section below)
 ├── frontend/
 │   ├── index.html
 │   ├── Dockerfile.frontend
 │   └── src/
-│       ├── api/client.ts          ← Full API client v4.2
+│       ├── api/client.ts          ← Full API client
 │       ├── components/
 │       │   ├── app.ts             ← App shell + file management
 │       │   ├── editor.ts          ← Monaco Editor integration
 │       │   ├── editor-intelligence.ts ← Linting + hover + autocomplete (Phases 1–3)
 │       │   ├── explorer.ts        ← Project Explorer (tree + tabs + search + outline)
+│       │   ├── file-browser.ts    ← Folder tree from <input webkitdirectory>, cross-browser
+│       │   ├── terminal.ts        ← xterm.js client for the Rust terminal sidecar
 │       │   ├── events.ts          ← Global event wiring
 │       │   ├── charts.ts          ← Chart.js integration
 │       │   ├── mermaid.ts         ← Mermaid + zoom/pan engine
@@ -113,6 +125,8 @@ codewatch-pro/
 │       │   └── explorer.css
 │       ├── types/index.ts
 │       └── utils/
+│           ├── file-tree.ts       ← FileList → nested tree (for file-browser.ts)
+│           └── theme.ts           ← Light/dark toggle + persistence
 └── README.md
 ```
 
@@ -125,6 +139,7 @@ codewatch-pro/
 | **Docker Desktop** | 4.x | [docker.com](https://www.docker.com/products/docker-desktop) |
 | **Node.js** | 20.x | [nodejs.org](https://nodejs.org) |
 | **Python** | 3.11+ | [python.org](https://www.python.org) |
+| **Rust** | stable | [rustup.rs](https://rustup.rs) — only needed to run the integrated terminal in dev mode; the rest of the app works without it |
 | **Git** | any | [git-scm.com](https://git-scm.com) |
 
 ---
@@ -166,7 +181,9 @@ The `scripts/` folder wraps the whole no-Docker workflow in one command each —
 ./scripts/dev.sh
 ```
 
-See [scripts/README.md](scripts/README.md) for the full list (`build`, `test`, `lint`, `format`). Under the hood, `dev` is just `npm run dev` — `concurrently` runs Vite and uvicorn as one process (`[web]`/`[api]` prefixed logs), so `npm run dev` works the same directly if you'd rather skip the wrapper scripts.
+See [scripts/README.md](scripts/README.md) for the full list (`build`, `test`, `lint`, `format`). Under the hood, `dev` is just `npm run dev` — `concurrently` runs Vite, uvicorn and the Rust terminal sidecar as one process (`[web]`/`[api]`/`[term]` prefixed logs), so `npm run dev` works the same directly if you'd rather skip the wrapper scripts. If `cargo` isn't installed, everything else still runs — you just won't have the integrated terminal (`[term]` prints a warning and exits, the rest is unaffected).
+
+The `[term]` process prints a random token on startup (`🔑 Terminal token: ...`). For normal local use you don't need it — the terminal panel auto-connects. It only matters if you ever set `TERMINAL_HOST` to something other than `127.0.0.1` (see the Terminal security note below).
 
 <details>
 <summary>Manual commands (equivalent, no script)</summary>
@@ -198,6 +215,11 @@ npm run dev
 | **Backend API** | http://localhost:8000 |
 | **Swagger UI** | http://localhost:8000/docs |
 | **Health** | http://localhost:8000/health |
+| **Terminal sidecar (Rust)** | ws://127.0.0.1:7681 (proxied through `/terminal` in dev — not meant to be opened directly) |
+
+### 🔐 Terminal security note
+
+The terminal sidecar binds to `127.0.0.1` by default — unlike the rest of the app (which binds `0.0.0.0`), it deliberately does **not** accept connections from other machines out of the box, because it grants real shell access. It's also protected by a per-run random token (constant-time comparison), auto-served only to requests that verifiably originate from the same machine. If you ever set `TERMINAL_HOST=0.0.0.0` (or otherwise expose port 7681) to reach it from another device on your network, auto-connect stops working for remote requests and the token must be entered manually — copy it from the `[term]` console output. Don't expose this port over an untrusted network without a real reverse proxy + TLS in front of it.
 
 ---
 
@@ -275,6 +297,20 @@ DELETE /api/upload/projects/{id}
 | monaco-editor | 0.45.0 | Code editor |
 | mermaid | 11.4.0 | Diagrams |
 | chart.js | 4.4.3 | Charts |
+| @xterm/xterm | 6.0.0 | Terminal emulator (client side of the Rust sidecar) |
+| [ansimax](https://github.com/Brashkie/ansimax) | 1.5.0 | ANSI/CLI rendering for the `npm run dev` startup banner |
+
+## 🦀 Rust stack — `terminal-server`
+
+First use of Rust in the project: a small sidecar for the integrated terminal, not a rewrite of any existing Python code.
+
+| Crate | Use |
+|---|---|
+| axum | WebSocket server + HTTP routing |
+| tokio | Async runtime |
+| portable-pty | ConPTY (Windows) / PTY (Unix) — one implementation for both |
+| subtle | Constant-time token comparison |
+| rand | CSPRNG for the per-run token |
 
 ---
 
@@ -288,13 +324,15 @@ cd backend && pytest
 ```
 test_upload.py            26 ✅
 test_analysis.py          57 ✅
-test_static_analysis.py   53 ✅
 test_intelligence.py     109 ✅
 test_graph.py             46 ✅
 test_graph_phase2.py      25 ✅
+test_metrics_live.py      34 ✅
 ─────────────────────────────
-Total: 316 passed
+Total: 297 passed
 ```
+
+The Rust sidecar (`terminal-server`) has its own checks — `cargo build --release`, `cargo clippy -- -D warnings`, `cargo test` — run via the `terminal` job in [`ci.yml`](.github/workflows/ci.yml), separate from the Python suite above.
 
 ---
 
@@ -364,36 +402,45 @@ docker compose down -v                         # Stop + delete volumes
 - [x] Auto-recovery if parser fails (safe mode + regex fallback)
 - [x] Corrupt file detection, session restore
 
----
-
-The items below are grouped by how well-founded they are, not by version number — the goal is to be honest about scope before committing to it.
-
-### 🔜 v4.4 — Computer Science Engine ⭐ *(top priority — direct extension of the existing analysis engine, no new architecture)*
+### 🔧 v4.4 — Computer Science Engine *(shipped partial — direct extension of the existing analysis engine, no new architecture)*
 
 Not just "what" the code does — *why* it behaves that way. Built entirely on data `static_parser.py` and the Big-O engine already compute:
 
 - [x] Full complexity picture per function: Θ (tight bound), Ω (best case), O (worst case) — not just worst-case O *(Python only for now; C/C++/JS/TS still show O only)*
 - [x] "Why" explanation attached to every Big-O result (e.g. *"2 nested loops — inner loop runs n times per outer iteration"*)
+- [x] Recursion detected → tail-call detection + "Lambda Calculus" framing *(recursion-depth estimate skipped — depends on runtime input, not reliably computable statically)*
 - [ ] Regex detected → classify as Finite Automaton / Chomsky Type-3 (Regular)
 - [ ] Grammar/parser-shaped code detected → Context-Free Grammar / Pushdown Automaton / Chomsky Type-2
-- [ ] Recursion detected → tail-call detection, recursion-depth estimate, "Lambda Calculus" framing
 - [ ] Graph traversal detected → label as DFS/BFS/topological sort, O(V+E)
 
-### 🔜 v4.5 — Data Structure Detector *(same heuristic-pattern style as the existing WASM-hint/dead-code detectors)*
+### ✅ v4.5 — Integrated Terminal + Folder Explorer + Theme
+
+Not originally on this roadmap — came directly from user feedback mid-development, folded in because each piece was small and well-scoped on its own:
+
+- [x] **Integrated terminal**, real interactive shell over WebSocket — first use of **Rust** in the project (`terminal-server` sidecar: `portable-pty` + `axum`), token-protected, zero-friction auto-connect for local use, panel switcher between the shell and a live Logs view
+- [x] **Folder explorer** in the sidebar ("+ Folder") — VSCode-style expandable tree from a real disk folder, cross-browser via `webkitdirectory` (deliberately *not* the File System Access API, which is Chromium-only)
+- [x] **Light/dark theme** toggle, persisted, dark by default
+- [x] [`ansimax`](https://github.com/Brashkie/ansimax) (own library) for the `npm run dev` startup banner
+
+---
+
+The items below are grouped by how well-founded they are, not by version number — the goal is to be honest about scope before committing to it.
+
+### 🔜 v4.6 — Data Structure Detector *(same heuristic-pattern style as the existing WASM-hint/dead-code detectors)*
 
 - [ ] Detect AVL / Red-Black Tree / Trie / Heap / Segment Tree / Fenwick Tree / Bloom Filter / B-Tree / HashMap / Skip List from AST shape
 - [ ] For each match: complexity, typical use case, tradeoffs
 
-### 🔜 v4.6 — Multi-language Expansion
+### 🔜 v4.7 — Multi-language Expansion
 - [ ] **C/C++** full support (tree-sitter already integrated — complete pipeline)
 - [ ] **Java** — AST + complexity analysis
 - [ ] **Go** — imports, goroutine detection
-- [ ] **Rust** — ownership patterns, unsafe block warnings
+- [ ] **Rust** — ownership patterns, unsafe block warnings *(analysis-target Rust support — separate from the `terminal-server` sidecar shipped in v4.5, which is tooling, not a language the analyzer parses)*
 - [ ] **PHP** — deprecated function detection
 - [ ] **SQL** — query complexity estimation
 - [ ] Language-specific lint rules per extension
 
-### 🔜 v4.7 — Cython & WASM Integration
+### 🔜 v4.8 — Cython & WASM Integration
 - [ ] Auto-detect Cython candidates from Big-O analysis (O(n²)+ functions)
 - [ ] Generate `.pyx` stubs from Python function signatures
 - [ ] Compile Cython in Docker (MSVC on Windows / GCC on Linux)
@@ -401,7 +448,7 @@ Not just "what" the code does — *why* it behaves that way. Built entirely on d
 - [ ] Estimated speedup shown in hover provider
 - [ ] WASM compilation path via Emscripten
 
-### 🔜 v4.8 — Execution Path Simulator
+### 🔜 v4.9 — Execution Path Simulator
 - [ ] Animated circuit-board execution flow:
   `Input → Parser → AST → Dependency Resolver → Metrics → Report`
 - [ ] Step-by-step trace with timing per stage
@@ -415,7 +462,7 @@ Real ideas, but each is its own serious project already solved well by dedicated
 - [ ] Executable analyzer (PE / ELF / Mach-O, sections, imports/exports, symbols) — wrap [Capstone](https://www.capstone-engine.org)/[LIEF](https://lief-project.github.io)/`objdump`, don't hand-write a disassembler
 - [ ] Graph centrality / hub detection (NetworkX is already a dependency) — surface the most-connected files/functions in the existing Code Graph, the same idea social networks use to find "influencers"
 - [ ] Standalone desktop build (PyInstaller/Nuitka + Tauri, or Zig for tiny static binaries) — a portable binary with no Docker/Node/Python required, as an alternative to `scripts/` and Docker
-- [ ] Rust extension (PyO3) for the static parser's hottest path — only if profiling `static_parser.py` on large real files actually shows it's needed; not a rewrite, same pattern as adopting Ruff (Rust) over a pure-Python linter
+- [x] ~~Rust extension (PyO3) for the static parser's hottest path~~ — **investigated with real benchmarks, not adopted for this**: profiling `static_parser.py` on large real files (250+ functions, 3000+ synthetic) showed the AST-walk consolidation already done was noise-level neutral, and the parser is fast enough where it matters (~160ms for realistic file sizes). Rust *did* end up in the project (v4.5's `terminal-server`), but for a genuinely Rust-shaped problem — cross-platform PTY handling — not as a speed rewrite of working Python.
 
 ### 🧭 Long-term / different tool category — not committed
 
@@ -430,7 +477,7 @@ These need runtime instrumentation (ptrace/eBPF), a running process, or live pac
 ### 🔜 v5.0 — Enterprise Persistence
 - [ ] PostgreSQL + Delta Lake
 - [ ] Analysis history, metric comparison between versions
-- [ ] WebSockets for real-time streaming
+- [ ] WebSockets for real-time analysis streaming *(the terminal's WebSocket, shipped in v4.5, is a different thing — an interactive PTY shell, not a streaming-analysis channel)*
 - [ ] JWT authentication, public API with rate limiting
 - [x] GitHub Action for CI/CD — `.github/workflows/ci.yml` (typecheck/lint/build/test on every push/PR) + `release.yml` (tag → GitHub Release with CHANGELOG notes + frontend build artifact)
 

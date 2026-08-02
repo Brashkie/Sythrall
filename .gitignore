@@ -8,6 +8,7 @@ node_modules/
 # ── Build outputs ────────────────────────────────────────
 dist/
 .vite/
+/target/
 
 # ── Environment files — NEVER commit ─────────────────────
 .env

@@ -9,6 +9,7 @@ import { filterAPIs, filterIssues, renderIssuesList, setIssueFilter } from '../p
 import { state } from '../store/state'
 import type { TabId } from '../types'
 import { appendLog } from '../utils/helpers'
+import { toggleTheme } from '../utils/theme'
 import {
   addURL,
   analyzeCurrentFile,
@@ -57,8 +58,10 @@ export function wireAllEvents(): void {
   // ── File inputs
   const fiCode = document.getElementById('fi-code') as HTMLInputElement
   const fiLog = document.getElementById('fi-log') as HTMLInputElement
+  const fiFolder = document.getElementById('fi-folder') as HTMLInputElement
   document.getElementById('btn-add-code')?.addEventListener('click', () => fiCode.click())
   document.getElementById('btn-add-log')?.addEventListener('click', () => fiLog.click())
+  document.getElementById('btn-add-folder')?.addEventListener('click', () => fiFolder.click())
   document.getElementById('dz')?.addEventListener('click', () => fiCode.click())
   fiCode?.addEventListener('change', () => {
     handleCodeFiles(fiCode.files)
@@ -68,6 +71,11 @@ export function wireAllEvents(): void {
     handleLogFiles(fiLog.files)
     fiLog.value = ''
   })
+  fiFolder?.addEventListener('change', async () => {
+    const { handleFolderPick } = await import('./file-browser')
+    handleFolderPick(fiFolder.files)
+    fiFolder.value = ''
+  })
 
   // ── Main run buttons
   document.getElementById('run-btn')?.addEventListener('click', runAll)
@@ -75,6 +83,24 @@ export function wireAllEvents(): void {
 
   // ── Auto analysis
   document.getElementById('auto-btn')?.addEventListener('click', toggleAuto)
+
+  // ── Terminal (sidecar Rust) — import dinámico: xterm.js (~330kB) no debe
+  // sumarse al bundle inicial, solo se carga si el usuario abre la terminal.
+  document.getElementById('terminal-toggle-btn')?.addEventListener('click', async () => {
+    const { toggleTerminalPanel } = await import('./terminal')
+    toggleTerminalPanel()
+  })
+  document.getElementById('terminal-close-btn')?.addEventListener('click', async () => {
+    const { closeTerminalPanel } = await import('./terminal')
+    closeTerminalPanel()
+  })
+  document.getElementById('terminal-new-btn')?.addEventListener('click', async () => {
+    const { newTerminalSession } = await import('./terminal')
+    newTerminalSession()
+  })
+
+  // ── Tema
+  document.getElementById('theme-toggle-btn')?.addEventListener('click', toggleTheme)
 
   // ── Export
   document.getElementById('btn-export')?.addEventListener('click', exportZip)

@@ -14,11 +14,16 @@ if (-not (Test-Path (Join-Path $root "node_modules"))) {
     Write-Host "No se encontro node_modules en la raiz - ejecuta scripts\setup.ps1 primero." -ForegroundColor Red
     exit 1
 }
+if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+    Write-Host "AVISO: no se encontro 'cargo' - la terminal integrada no va a arrancar" -ForegroundColor DarkYellow
+    Write-Host "(el resto de la app funciona igual). Instala Rust: https://rustup.rs" -ForegroundColor DarkYellow
+}
 
 Write-Host "== CodeWatch PRO - Dev (sin Docker) ==" -ForegroundColor Cyan
 Write-Host "  Backend:  http://localhost:8000  (Swagger: /docs)"
 Write-Host "  Frontend: http://localhost:5173"
-Write-Host "  Ctrl+C detiene ambos procesos."
+Write-Host "  Terminal: sidecar Rust en :7681 (token impreso en la consola [term])"
+Write-Host "  Ctrl+C detiene los tres procesos."
 Write-Host ""
 
 Push-Location $root

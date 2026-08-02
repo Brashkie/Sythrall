@@ -17,12 +17,20 @@ try {
     Pop-Location
 }
 
-Write-Host "`n[2/2] Frontend (npm, raiz del repo)..." -ForegroundColor Yellow
+Write-Host "`n[2/3] Frontend (npm, raiz del repo)..." -ForegroundColor Yellow
 Push-Location $root
 try {
     npm install
 } finally {
     Pop-Location
+}
+
+Write-Host "`n[3/3] Terminal sidecar (Rust)..." -ForegroundColor Yellow
+if (Get-Command cargo -ErrorAction SilentlyContinue) {
+    Write-Host "cargo $(cargo --version) encontrado." -ForegroundColor Green
+} else {
+    Write-Host "AVISO: no se encontro 'cargo'. La terminal integrada (npm run dev) no va a" -ForegroundColor Red
+    Write-Host "funcionar hasta instalar el toolchain de Rust: https://rustup.rs" -ForegroundColor Red
 }
 
 Write-Host "`nListo. Usa scripts\dev.ps1 para iniciar el entorno de desarrollo." -ForegroundColor Green

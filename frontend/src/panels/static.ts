@@ -21,6 +21,9 @@ interface ParsedFunction {
   big_o_reason: string
   big_o_theta?: string
   big_o_omega?: string
+  is_recursive?: boolean
+  is_tail_recursive?: boolean
+  recursion_note?: string | null
   calls?: string[]
   is_async?: boolean
   args?: string[]
@@ -266,6 +269,11 @@ function _renderBigOTable(functions: ParsedFunction[]): string {
       return `<tr class="${isHot ? 'bigo-hot' : ''}">
       <td class="bigo-fn">${esc(f.name)}
         ${f.is_async ? '<span class="bigo-async">async</span>' : ''}
+        ${
+          f.is_recursive
+            ? `<span class="bigo-recursion ${f.is_tail_recursive ? 'bigo-recursion-tail' : 'bigo-recursion-notail'}" title="${esc(f.recursion_note ?? '')}">🔁 ${f.is_tail_recursive ? 'tail-call' : 'recursión'}</span>`
+            : ''
+        }
       </td>
       <td><span class="bigo-badge" style="color:${color};border-color:${color}">${esc(f.big_o)}</span></td>
       <td class="bigo-thetaomega">${f.big_o_theta ? esc(f.big_o_theta) : '—'} / ${f.big_o_omega ? esc(f.big_o_omega) : '—'}</td>

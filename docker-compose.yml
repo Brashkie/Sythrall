@@ -35,6 +35,22 @@ services:
     networks:
       - codewatch-net
 
+  terminal:
+    build:
+      context: .
+      dockerfile: terminal-server/Dockerfile
+    container_name: codewatch-terminal
+    restart: unless-stopped
+    ports:
+      - "7681:7681"
+    environment:
+      # Dentro del contenedor 127.0.0.1 no es alcanzable vía el mapeo de puertos
+      # de Docker — el aislamiento real ya lo da la red del contenedor/el mapeo
+      # de puertos explícito, no el bind interno.
+      - TERMINAL_HOST=0.0.0.0
+    networks:
+      - codewatch-net
+
 volumes:
   uploads_data:    # proyectos subidos persisten entre reinicios
 
