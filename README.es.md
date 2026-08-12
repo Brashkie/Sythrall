@@ -507,18 +507,13 @@ No estaba originalmente en este roadmap — salió directo de feedback del usuar
 - [x] Toggle de **tema claro/oscuro**, persistido, oscuro por defecto
 - [x] [`ansimax`](https://github.com/Brashkie/ansimax) (librería propia) para el banner de arranque de `npm run dev`
 
-### ✅ Sin versión — Renombrado a Sythrall + reestructuración a `apps/` + escalado a proyectos gigantes
+### 🔧 v4.6.0 — Rebrand + reestructuración a `apps/` + escalado a proyectos gigantes + shell estilo enterprise *(shippeado parcial — ubicación del panel de problemas todavía abierta)*
 
-Tampoco estaba originalmente en este roadmap — salió de querer que el proyecto aguante código real a gran escala, no de un plan de versiones:
+No estaba originalmente en este roadmap — salió de querer que el proyecto aguante código real a gran escala y se vea/comporte como las herramientas de referencia mostradas durante el desarrollo (Aikido, Datadog, DeepSource), no de un plan de versiones:
 
 - [x] Renombrado **CodeWatch PRO → Sythrall** en todo el proyecto (nombre del paquete, servicios Docker, identificadores internos, remote de git)
 - [x] Reestructurado a `apps/api` · `apps/web` · `apps/terminal` — un directorio por servicio, los manifiestos de cada herramienta se quedan en la raíz (layout estilo Turborepo/Nx)
-- [x] **Benchmark de proyectos gigantes**: se armó un harness reproducible con proyectos sintéticos (hasta 4003 archivos, hasta 1600 funciones por archivo) en vez de asumir que hacía falta una reescritura. Encontró y arregló tres bugs reales O(n²) — dos escondidos dentro de comprehensions de una línea, uno un cálculo muerto que el frontend nunca leía. La generación del Import Graph con 4003 archivos pasó de 3.9s a 0.128s (30×) sin agregar ningún lenguaje nuevo. Detalle en [`CHANGELOG.md`](CHANGELOG.md#unreleased). El parser propio (`static_parser.py`) ya era lineal y no necesitó cambios — el hallazgo anterior sobre PyO3 sigue vigente.
-
-### ✅ Sin versión — Shell estilo enterprise + un solo proyecto, no cuatro entradas separadas
-
-Salió de querer que Sythrall se vea y se comporte como las herramientas de referencia mostradas durante el desarrollo (Aikido, Datadog, DeepSource), en vez de una colección de paneles que casualmente comparten layout:
-
+- [x] **Benchmark de proyectos gigantes**: se armó un harness reproducible con proyectos sintéticos (hasta 4003 archivos, hasta 1600 funciones por archivo) en vez de asumir que hacía falta una reescritura. Encontró y arregló tres bugs reales O(n²) — dos escondidos dentro de comprehensions de una línea, uno un cálculo muerto que el frontend nunca leía. La generación del Import Graph con 4003 archivos pasó de 3.9s a 0.128s (30×) sin agregar ningún lenguaje nuevo. Detalle en [`CHANGELOG.md`](CHANGELOG.md#460). El parser propio (`static_parser.py`) ya era lineal y no necesitó cambios — el hallazgo anterior sobre PyO3 sigue vigente.
 - [x] **Nav vertical reemplaza la tabbar horizontal** — nav de iconos persistente (`apps/web/src/utils/icons.ts`, SVGs inline, `stroke="currentColor"` para seguir el tema activo sin código extra), mismo patrón que usan las herramientas de referencia. `switchTab()` no cambió — los items del nav nuevo mantuvieron la convención `class="tab"`/`data-tab`/`id="t-*"`, así que fue un cambio puramente de HTML/CSS.
 - [x] **Un solo proyecto activo, no cuatro entradas separadas.** Antes: "+ Código"/"+ Carpeta"/"+ Log" del sidebar eran efímeros (se perdían al refrescar, nunca tocaban el backend) mientras que Proyectos era el único camino persistente — dos modelos mentales para la misma idea. Ahora "+ Código"/"+ Carpeta" crean o suman al **proyecto activo** (mismos endpoints del backend que ya usaba Proyectos, `project_id` ahora opcional en `/api/upload/{files,folder}` para soportar el append), y Editor · Issues · Diagrama · Static · Métricas leen todos del proyecto que esté activo — elegís un proyecto una vez, trabajás en todos los paneles.
 - [x] **Arreglos encontrados por audit**, con el mismo método de "¿esto tiene algún caller de verdad?" que encontró el hueco del Force Graph arriba: se reconectaron la Live Metrics Bar y Session Restore (`panels/problems.ts`, escrito para v4.3, nunca llamado desde `editor.ts`); el proyecto activo ahora persiste en `localStorage` así que ambos se restauran solos al recargar; se arregló el badge de la pestaña APIs (nunca se actualizaba); el panel de Métricas ganó un modo de proyecto activo igual que Issues/Diagrama/Static.
@@ -528,12 +523,12 @@ Salió de querer que Sythrall se vea y se comporte como las herramientas de refe
 
 Los ítems de abajo están agrupados según qué tan fundamentados están, no por número de versión — la idea es ser honestos sobre el alcance antes de comprometernos a él.
 
-### 🔜 v4.6 — Data Structure Detector *(mismo estilo heurístico que los detectores de WASM-hints/dead-code ya existentes)*
+### 🔜 v4.7 — Data Structure Detector *(mismo estilo heurístico que los detectores de WASM-hints/dead-code ya existentes)*
 
 - [ ] Detectar AVL / Red-Black Tree / Trie / Heap / Segment Tree / Fenwick Tree / Bloom Filter / B-Tree / HashMap / Skip List a partir de la forma del AST
 - [ ] Por cada detección: complejidad, uso típico, ventajas/desventajas
 
-### 🔜 v4.7 — Expansión Multi-lenguaje
+### 🔜 v4.8 — Expansión Multi-lenguaje
 
 Mismo patrón en todos: son lenguajes que Sythrall *lee y analiza* — una gramática tree-sitter más reglas, igual que el pipeline existente de Python/TS/C/C++. Ninguno de estos requiere que el motor propio de Sythrall esté escrito en ese lenguaje; eso es una apuesta aparte, sin probar todavía (ver Spikes de investigación más abajo).
 
@@ -547,7 +542,7 @@ Mismo patrón en todos: son lenguajes que Sythrall *lee y analiza* — una gram�
 - [ ] **Assembly (x86-64)** — desglose de instrucciones/registros/control-flow a partir de snippets `.s`/asm inline pegados por el usuario *(pattern-matching sobre texto, no un disassembler — el caso de binarios PE/ELF/Mach-O de abajo ya envuelve Capstone/LIEF en vez de escribir uno a mano)*
 - [ ] Reglas de lint específicas por extensión
 
-### 🔜 v4.8 — Integración Cython & WASM
+### 🔜 v4.9 — Integración Cython & WASM
 - [ ] Detección automática de candidatos Cython desde el análisis Big-O (funciones O(n²)+)
 - [ ] Generación de stubs `.pyx` desde las firmas de funciones Python
 - [ ] Compilación Cython en Docker (MSVC en Windows / GCC en Linux)
@@ -555,7 +550,7 @@ Mismo patrón en todos: son lenguajes que Sythrall *lee y analiza* — una gram�
 - [ ] Speedup estimado mostrado en el hover provider
 - [ ] Ruta de compilación WASM vía Emscripten
 
-### 🔜 v4.9 — Execution Path Simulator
+### 🔜 v4.10 — Execution Path Simulator
 - [ ] Diagrama de flujo de ejecución animado tipo circuito:
   `Input → Parser → AST → Dependency Resolver → Metrics → Report`
 - [ ] Traza paso a paso con timing por etapa

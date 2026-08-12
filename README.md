@@ -4,7 +4,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-4.5.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-4.6.0-blue?style=flat-square)
 [![CI](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml/badge.svg)](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml)
 ![Frontend](https://img.shields.io/badge/Frontend-Vite%20%2B%20TypeScript-646cff?style=flat-square)
 ![Backend](https://img.shields.io/badge/Backend-FastAPI%20%2B%20Python-009688?style=flat-square)
@@ -426,18 +426,13 @@ Not originally on this roadmap — came directly from user feedback mid-developm
 - [x] **Light/dark theme** toggle, persisted, dark by default
 - [x] [`ansimax`](https://github.com/Brashkie/ansimax) (own library) for the `npm run dev` startup banner
 
-### ✅ Unreleased — Rename to Sythrall + `apps/` restructure + large-project scaling
+### 🔧 v4.6.0 — Rebrand + `apps/` restructure + large-project scaling + enterprise-style shell *(shipped partial — Problems panel placement still open)*
 
-Also not originally on this roadmap — triggered by wanting the project to scale to real large codebases, not by a version-number plan:
+Not originally on this roadmap — triggered by wanting the project to scale to real large codebases and to look/behave like the reference tools used during development (Aikido, Datadog, DeepSource), not by a version-number plan:
 
 - [x] Renamed **CodeWatch PRO → Sythrall** across the project (package name, Docker services, internal identifiers, git remote)
 - [x] Restructured into `apps/api` · `apps/web` · `apps/terminal` — one directory per service, tool manifests stay at repo root (Turborepo/Nx-style layout)
-- [x] **Large-project benchmark**: built a reproducible synthetic-project harness (up to 4003 files, up to 1600 functions/file) instead of assuming a rewrite was needed. Found and fixed three real O(n²) bugs — two hidden inside one-line comprehensions, one a dead computation the frontend never read. Import Graph generation on the 4003-file case went from 3.9s to 0.128s (30×) with zero new languages. Details in [`CHANGELOG.md`](CHANGELOG.md#unreleased). The parser itself (`static_parser.py`) was already linear and needed no changes — the earlier PyO3 finding below still holds.
-
-### ✅ Unreleased — Enterprise-style shell + one project, not four disconnected entry points
-
-Triggered by wanting Sythrall to look and behave like the reference tools shown during development (Aikido, Datadog, DeepSource) instead of a collection of panels that happen to share a layout:
-
+- [x] **Large-project benchmark**: built a reproducible synthetic-project harness (up to 4003 files, up to 1600 functions/file) instead of assuming a rewrite was needed. Found and fixed three real O(n²) bugs — two hidden inside one-line comprehensions, one a dead computation the frontend never read. Import Graph generation on the 4003-file case went from 3.9s to 0.128s (30×) with zero new languages. Details in [`CHANGELOG.md`](CHANGELOG.md#460). The parser itself (`static_parser.py`) was already linear and needed no changes — the earlier PyO3 finding below still holds.
 - [x] **Nav rail replaces the horizontal tabbar** — persistent vertical icon nav (`apps/web/src/utils/icons.ts`, inline SVGs, `stroke="currentColor"` so they follow the active theme with zero extra code), same pattern the reference tools use. `switchTab()` didn't change — the new nav items kept the same `class="tab"`/`data-tab`/`id="t-*"` convention, so this was purely a markup/CSS change.
 - [x] **One active project, not four disconnected upload paths.** Before: "+ Code"/"+ Folder"/"+ Log" in the sidebar were ephemeral (lost on refresh, never touched the backend) while Projects was the only persisted path — two mental models for the same idea. Now "+ Code"/"+ Folder" create or append to the **active project** (same backend endpoints Projects already used, `project_id` now optional on `/api/upload/{files,folder}` to support appending), and Editor · Issues · Diagram · Static · Metrics all read from whichever project is active — pick a project once, work across every panel.
 - [x] **Audit-driven fixes**, found using the same "does this actually have a caller" method that caught the Force Graph gap above: reconnected the Live Metrics Bar and Session Restore (`panels/problems.ts`, written for v4.3, never called from `editor.ts`); active project now persists to `localStorage` so both restore automatically on reload; fixed the APIs tab badge (never updated); Metrics panel gained an active-project mode matching Issues/Diagram/Static.
@@ -447,12 +442,12 @@ Triggered by wanting Sythrall to look and behave like the reference tools shown 
 
 The items below are grouped by how well-founded they are, not by version number — the goal is to be honest about scope before committing to it.
 
-### 🔜 v4.6 — Data Structure Detector *(same heuristic-pattern style as the existing WASM-hint/dead-code detectors)*
+### 🔜 v4.7 — Data Structure Detector *(same heuristic-pattern style as the existing WASM-hint/dead-code detectors)*
 
 - [ ] Detect AVL / Red-Black Tree / Trie / Heap / Segment Tree / Fenwick Tree / Bloom Filter / B-Tree / HashMap / Skip List from AST shape
 - [ ] For each match: complexity, typical use case, tradeoffs
 
-### 🔜 v4.7 — Multi-language Expansion
+### 🔜 v4.8 — Multi-language Expansion
 
 Same pattern throughout: these are languages Sythrall can *read and analyze* — a tree-sitter grammar plus rules, same as the existing Python/TS/C/C++ pipeline. None of these require Sythrall's own engine to be written in that language; that's a separate, unproven bet (see Research spikes below).
 
@@ -466,7 +461,7 @@ Same pattern throughout: these are languages Sythrall can *read and analyze* —
 - [ ] **Assembly (x86-64)** — instruction/register/control-flow breakdown from raw `.s`/inline-asm snippets *(pattern-matching on text the user pastes, not a disassembler — the PE/ELF/Mach-O binary case below already wraps Capstone/LIEF instead of hand-rolling one)*
 - [ ] Language-specific lint rules per extension
 
-### 🔜 v4.8 — Cython & WASM Integration
+### 🔜 v4.9 — Cython & WASM Integration
 - [ ] Auto-detect Cython candidates from Big-O analysis (O(n²)+ functions)
 - [ ] Generate `.pyx` stubs from Python function signatures
 - [ ] Compile Cython in Docker (MSVC on Windows / GCC on Linux)
@@ -474,7 +469,7 @@ Same pattern throughout: these are languages Sythrall can *read and analyze* —
 - [ ] Estimated speedup shown in hover provider
 - [ ] WASM compilation path via Emscripten
 
-### 🔜 v4.9 — Execution Path Simulator
+### 🔜 v4.10 — Execution Path Simulator
 - [ ] Animated circuit-board execution flow:
   `Input → Parser → AST → Dependency Resolver → Metrics → Report`
 - [ ] Step-by-step trace with timing per stage

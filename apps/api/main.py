@@ -154,7 +154,7 @@ async def lifespan(app: FastAPI):
     add_log("info", "🛑 Sythrall detenido.")
 
 
-app = FastAPI(title="Sythrall", version="4.5.0", lifespan=lifespan)
+app = FastAPI(title="Sythrall", version="4.6.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )

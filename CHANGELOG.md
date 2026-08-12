@@ -5,6 +5,8 @@ Todos los cambios notables de Sythrall se documentan acá. Formato basado en
 
 ## [Unreleased]
 
+## [4.6.0] — 2026-08-11
+
 ### Added
 - **Un solo punto de entrada — Proyectos como hub**: "+ Código"/"+ Carpeta" del sidebar dejaron de crear archivos efímeros que se perdían al refrescar — ahora suman al proyecto activo (o crean uno nuevo, pidiendo nombre) usando el mismo backend que ya usaba el panel Proyectos. Antes había 4 entradas de archivos con 2 modelos mentales distintos (efímero vs persistido); ahora todo confluye en un proyecto real. `apps/api/routers/upload.py` gana `project_id` opcional en `/files` y `/folder` para hacer *append* a un proyecto existente en vez de crear uno nuevo cada vez. "+ Log" queda asociado al proyecto activo (`LogFile.projectId`).
 - **Session Restore reconectado**: `panels/problems.ts` tenía `saveSession`/`restoreSession`/`clearSession` completos desde v4.3 pero sin un solo caller — no tenía sentido real hasta que hubo un proyecto persistido del cual recuperar contenido real, no solo un nombre de archivo. Ahora el proyecto activo se persiste en localStorage y, al volver a abrir la app, se restaura junto con el último archivo activo.
