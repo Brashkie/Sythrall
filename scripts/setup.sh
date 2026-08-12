@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CodeWatch PRO - Setup (sin Docker)
+# Sythrall - Setup (sin Docker)
 # Manifiestos y paquetes viven en la raiz del repo (package.json, requirements.txt, .venv/, node_modules/).
 set -e
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -19,7 +19,7 @@ if [ -z "$PYTHON" ]; then
   exit 1
 fi
 
-echo "== CodeWatch PRO - Setup =="
+echo "== Sythrall - Setup =="
 
 echo ""
 echo "[1/2] Backend (Python venv, raiz del repo)..."

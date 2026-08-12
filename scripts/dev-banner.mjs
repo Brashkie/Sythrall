@@ -4,7 +4,7 @@
 import { ascii, gradient } from 'ansimax'
 
 console.log(
-  ascii.banner('CodeWatch PRO', {
+  ascii.banner('Sythrall', {
     font: 'small',
     colorFn: (t) => gradient(t, ['#3d9eff', '#b87dff', '#00f5a0']),
   }),

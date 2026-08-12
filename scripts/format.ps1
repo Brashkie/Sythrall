@@ -1,9 +1,9 @@
-# CodeWatch PRO - Format
+# Sythrall - Format
 # Biome --write (frontend) + Ruff format (backend). Escribe cambios en disco.
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 
-Write-Host "== CodeWatch PRO - Format ==" -ForegroundColor Cyan
+Write-Host "== Sythrall - Format ==" -ForegroundColor Cyan
 
 Write-Host "`n[1/2] Frontend (biome format --write)..." -ForegroundColor Yellow
 Push-Location $root
@@ -17,7 +17,7 @@ $venvRuff = Join-Path $root ".venv\Scripts\ruff.exe"
 Write-Host "`n[2/2] Backend (ruff format)..." -ForegroundColor Yellow
 Push-Location $root
 try {
-    if (Test-Path $venvRuff) { & $venvRuff format backend } else { ruff format backend }
+    if (Test-Path $venvRuff) { & $venvRuff format apps/api } else { ruff format apps/api }
 } finally {
     Pop-Location
 }

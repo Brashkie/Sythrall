@@ -1,10 +1,10 @@
-# CodeWatch PRO - Tests
+# Sythrall - Tests
 # Corre pytest (backend) y typecheck (frontend).
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $failed = $false
 
-Write-Host "== CodeWatch PRO - Tests ==" -ForegroundColor Cyan
+Write-Host "== Sythrall - Tests ==" -ForegroundColor Cyan
 
 $venvPython = Join-Path $root ".venv\Scripts\python.exe"
 if (-not (Test-Path $venvPython)) {
@@ -13,7 +13,7 @@ if (-not (Test-Path $venvPython)) {
 }
 
 Write-Host "`n[1/2] Backend (pytest)..." -ForegroundColor Yellow
-Push-Location (Join-Path $root "backend")
+Push-Location (Join-Path $root "apps\api")
 try {
     & $venvPython -m pytest
     if ($LASTEXITCODE -ne 0) { $failed = $true }

@@ -1,4 +1,4 @@
-# Keeps the build context small now that both backend/ and frontend/
+# Keeps the build context small now that both apps/api/ and apps/web/
 # Dockerfiles share the repo root as their context.
 
 node_modules
@@ -10,7 +10,7 @@ __pycache__
 **/__pycache__
 *.pyc
 .pytest_cache
-backend/uploads
+apps/api/uploads
 .git
 .github
 scripts

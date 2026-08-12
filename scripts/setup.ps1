@@ -1,9 +1,9 @@
-# CodeWatch PRO - Setup (sin Docker)
+# Sythrall - Setup (sin Docker)
 # Manifiestos y paquetes viven en la raiz del repo (package.json, requirements.txt, .venv/, node_modules/).
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 
-Write-Host "== CodeWatch PRO - Setup ==" -ForegroundColor Cyan
+Write-Host "== Sythrall - Setup ==" -ForegroundColor Cyan
 
 Write-Host "`n[1/2] Backend (Python venv, raiz del repo)..." -ForegroundColor Yellow
 Push-Location $root

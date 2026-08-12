@@ -1,8 +1,8 @@
 [tool.ruff]
 target-version = "py311"
 line-length = 120
-# Config vive en la raíz del repo; el código Python vive en backend/.
-exclude = ["backend/uploads", ".venv", "node_modules", "dist", "frontend"]
+# Config vive en la raíz del repo; el código Python vive en apps/api/.
+exclude = ["apps/api/uploads", ".venv", "node_modules", "dist", "apps/web"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "UP", "B"]
@@ -14,5 +14,5 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"backend/tests/*" = ["F401", "F811", "E402"]  # sys.path.insert() before imports is intentional in these test files
-"backend/main.py" = ["E402"]  # router imports are placed after `app = FastAPI(...)` deliberately, grouped by section
+"apps/api/tests/*" = ["F401", "F811", "E402"]  # sys.path.insert() before imports is intentional in these test files
+"apps/api/main.py" = ["E402"]  # router imports are placed after `app = FastAPI(...)` deliberately, grouped by section

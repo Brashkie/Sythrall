@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Lanza uvicorn usando el Python del venv de la raíz (.venv), con cwd=backend/
+// Lanza uvicorn usando el Python del venv de la raíz (.venv), con cwd=apps/api/
 // (rutas relativas como "uploads/projects" en main.py dependen de ese cwd).
 // Resuelve la ruta del intérprete según el SO en vez de depender de un
 // comando de shell distinto por plataforma — así `npm run dev` funciona
@@ -26,7 +26,7 @@ if (!python) {
 }
 
 const child = spawn(python, ['-m', 'uvicorn', 'main:app', '--host', '0.0.0.0', '--port', '8000', '--reload'], {
-  cwd: join(root, 'backend'),
+  cwd: join(root, 'apps', 'api'),
   stdio: 'inherit',
 })
 

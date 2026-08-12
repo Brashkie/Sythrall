@@ -16,8 +16,8 @@
     "allowSyntheticDefaultImports": true,
     "types": ["vite/client"],
     "outDir": "dist",
-    "rootDir": "frontend/src"
+    "rootDir": "apps/web/src"
   },
-  "include": ["frontend/src"],
+  "include": ["apps/web/src"],
   "exclude": ["node_modules", "dist"]
 }

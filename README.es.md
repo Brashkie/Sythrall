@@ -1,16 +1,16 @@
-# 🛰 CodeWatch PRO
+# 🛰 Sythrall
 
 > **Plataforma de inteligencia de código empresarial** — análisis estático, inspección ML/DL, inteligencia de editor en tiempo real, visualización de grafos de código, terminal integrada y monitoreo de APIs. Construida con TypeScript (sin frameworks) + FastAPI + Rust + Monaco Editor.
 
 <div align="center">
 
 ![Version](https://img.shields.io/badge/versión-4.5.0-blue?style=flat-square)
-[![CI](https://github.com/Brashkie/codewatch-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/Brashkie/codewatch-pro/actions/workflows/ci.yml)
+[![CI](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml/badge.svg)](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml)
 ![Frontend](https://img.shields.io/badge/Frontend-Vite%20%2B%20TypeScript-646cff?style=flat-square)
 ![Backend](https://img.shields.io/badge/Backend-FastAPI%20%2B%20Python-009688?style=flat-square)
 ![Terminal](https://img.shields.io/badge/Terminal-Rust%20%2B%20axum-dea584?style=flat-square)
 ![Deploy](https://img.shields.io/badge/Deploy-Docker%20%2B%20Nginx-2496ed?style=flat-square)
-![Tests](https://img.shields.io/badge/Tests-297%20pasando-00f5a0?style=flat-square)
+![Tests](https://img.shields.io/badge/Tests-311%20pasando-00f5a0?style=flat-square)
 ![Author](https://img.shields.io/badge/Autor-Hepein%20Oficial-b87dff?style=flat-square)
 ![License](https://img.shields.io/badge/Licencia-GPL%203.0-orange?style=flat-square)
 
@@ -20,21 +20,21 @@
 
 ---
 
-## ✨ ¿Qué es CodeWatch PRO?
+## ✨ ¿Qué es Sythrall?
 
-CodeWatch PRO es una plataforma profesional de inteligencia de código construida como proyecto educativo y de demostración empresarial. Combina un frontend moderno en TypeScript puro (sin frameworks en runtime), un backend Python/FastAPI con soporte completo de ML/DL, un motor de análisis estático multi-lenguaje, y una integración con Monaco Editor que rivaliza con la experiencia de desarrollo de VS Code.
+Sythrall es una plataforma profesional de inteligencia de código construida como proyecto educativo y de demostración empresarial. Combina un frontend moderno en TypeScript puro (sin frameworks en runtime), un backend Python/FastAPI con soporte completo de ML/DL, un motor de análisis estático multi-lenguaje, y una integración con Monaco Editor que rivaliza con la experiencia de desarrollo de VS Code.
 
 ### Capacidades principales
 
 | Módulo | Descripción |
 |---|---|
 | **📂 Project Explorer** | Árbol de archivos expandible, pestañas multi-archivo, búsqueda global (`Ctrl+Shift+F`), outline de símbolos |
-| **📁 Explorador de carpetas** | Abrí una carpeta real del disco ("+ Carpeta") y navegala como árbol expandible estilo VSCode — funciona en cualquier navegador moderno, sin APIs exclusivas de Chromium |
+| **📁 Explorador de carpetas** | Abrí una carpeta real del disco ("+ Carpeta") y navegala como árbol expandible estilo VSCode — funciona en cualquier navegador moderno, sin APIs exclusivas de Chromium. Crea o suma al proyecto activo, no es una vista local aislada |
 | **🖥 Terminal integrada** | Shell interactiva real (PowerShell/bash) en un panel inferior redimensionable, con un sidecar en Rust (`portable-pty` + `axum`) — protegida por token, sin fricción para uso local |
 | **📝 Editor Intelligence** | Linting en tiempo real, diagnósticos inline, hover con Big-O, Go to Definition, Find References, Rename Symbol, autocompletado semántico |
 | **🔬 Análisis Estático** | Parser AST multi-lenguaje (Python, TypeScript, C/C++) — estimación Big-O, complejidad ciclomática, hints WASM/Cython, call graph, dead code |
-| **🕸 Code Graph Visual** | Import Graph, Call Graph, detección de dependencias circulares, Complexity Heatmap — Tree View + Force Graph interactivo |
-| **📂 Proyectos** | Subida de archivos, carpetas y ZIPs con árbol interactivo y visor Monaco |
+| **🕸 Code Graph Visual** | Import Graph, Call Graph, detección de dependencias circulares, Complexity Heatmap — Tree View con Mermaid, sobre archivos sueltos o un proyecto completo *(el Force Graph interactivo existe y está testeado, pero todavía no tiene un control de UI que lo dispare)* |
+| **📂 Proyectos** | Subí archivos, una carpeta o un ZIP — el resultado puede quedar como **proyecto activo**, que Editor · Issues · Diagrama · Static · Métricas leen directo, sin volver a subir nada por panel |
 | **🔍 Análisis** | pylint · flake8 · radon · AST — issues, complejidad, maintainability index |
 | **🤖 ML/DL** | Detección de 23 librerías, 23 patrones de pipeline, 25 modelos, 20+ reglas |
 | **🔀 Diagramas** | Flowchart · Callgraph · Clases · Secuencia — Mermaid.js con zoom/pan |
@@ -48,85 +48,88 @@ CodeWatch PRO es una plataforma profesional de inteligencia de código construid
 
 ## 📁 Estructura del proyecto
 
-Todos los manifiestos/configs viven en la raíz del repo; `backend/` y `frontend/` solo contienen código fuente. `scripts/` es el único punto de entrada para todo (ver [scripts/README.md](scripts/README.md)).
+Todos los manifiestos/configs viven en la raíz del repo; `apps/` solo contiene código fuente, un directorio por app/servicio (`apps/api`, `apps/web`, `apps/terminal`). `scripts/` es el único punto de entrada para todo (ver [scripts/README.md](scripts/README.md)).
 
 ```
-codewatch-pro/
-├── package.json                   ← Manifiesto npm (deps del frontend + scripts lint/format/build)
+sythrall/
+├── package.json                    ← Manifiesto npm (deps del frontend + scripts lint/format/build)
 ├── package-lock.json
-├── vite.config.ts                 ← root: 'frontend', build.outDir: '../dist'
-├── tsconfig.json                  ← include: frontend/src
-├── biome.json                     ← Config de Biome (lint/format)
+├── vite.config.ts                  ← root: 'apps/web', build.outDir: '../../dist'
+├── tsconfig.json                   ← include: apps/web/src
+├── biome.json                      ← Config de Biome (lint/format)
 ├── requirements.txt                ← Deps runtime del backend
 ├── requirements-dev.txt            ← Ruff (lint/format), solo dev
 ├── pyproject.toml                  ← Config de Ruff
-├── pytest.ini                      ← testpaths: backend/tests
-├── Cargo.toml                       ← Manifiesto Rust — sidecar terminal-server
+├── pytest.ini                      ← testpaths: apps/api/tests
+├── Cargo.toml                      ← Manifiesto Rust — sidecar apps/terminal
 ├── Cargo.lock
 ├── docker-compose.yml
 ├── .dockerignore
 ├── START.bat / STOP.bat
-├── scripts/                       ← Flujo de dev sin Docker (setup/dev/build/test/lint/format, .ps1 + .sh)
-│   ├── run-backend.mjs            ← levanta uvicorn (npm run dev:api)
-│   ├── run-terminal.mjs           ← levanta el sidecar de terminal en Rust (npm run dev:term)
-│   └── dev-banner.mjs             ← banner de arranque con ansimax para npm run dev
-├── terminal-server/                ← Sidecar en Rust: shell interactiva real sobre WebSocket
-│   ├── Dockerfile
-│   └── src/
-│       ├── main.rs                ← handler WS de axum, auth por token, bridging del PTY
-│       ├── pty_session.rs         ← wrapper de portable-pty (ConPTY/PTY Unix, una sola implementación)
-│       └── auth.rs                ← generación de token + comparación en tiempo constante
-├── backend/
-│   ├── main.py                    ← FastAPI v4.5 (30+ rutas)
-│   ├── shared.py
-│   ├── Dockerfile
-│   ├── routers/
-│   │   ├── upload.py              ← POST /api/upload/{files,folder,zip} + CRUD
-│   │   ├── analysis.py            ← POST /analyze/{code,api,logs-analyze}
-│   │   ├── ml.py                  ← POST /analyze/ml
-│   │   ├── diagram.py             ← POST /analyze/diagram
-│   │   ├── logs.py                ← GET /logs + GET /api/history
-│   │   ├── static_analysis.py     ← POST /static/{parse,parse-project,bigO,wasm}
-│   │   ├── intelligence.py        ← POST /intel/{lint,analyze,hover,definition,references,completions,rename}
-│   │   ├── graph.py               ← GET /analyze/graph/types, POST /analyze/graph{,/project}
-│   │   └── metrics_live.py        ← POST /metrics/live — métricas instantáneas por tecla
-│   ├── services/
-│   │   ├── project_service.py
-│   │   └── static_parser.py       ← Parser multi-lenguaje: Python/C/C++/JS/TS
-│   └── tests/                      ← 297 tests en total (ver sección Tests más abajo)
-├── frontend/
-│   ├── index.html
-│   ├── Dockerfile.frontend
-│   └── src/
-│       ├── api/client.ts          ← API client completo
-│       ├── components/
-│       │   ├── app.ts             ← Shell de la app + manejo de archivos
-│       │   ├── editor.ts          ← Integración Monaco Editor
-│       │   ├── editor-intelligence.ts ← Linting + hover + autocompletado (Fases 1–3)
-│       │   ├── explorer.ts        ← Project Explorer (árbol + tabs + búsqueda + outline)
-│       │   ├── file-browser.ts    ← Árbol de carpetas desde <input webkitdirectory>, cross-browser
-│       │   ├── terminal.ts        ← Cliente xterm.js para el sidecar de terminal en Rust
-│       │   ├── events.ts          ← Conexión global de eventos
-│       │   ├── charts.ts          ← Integración Chart.js
-│       │   ├── mermaid.ts         ← Mermaid + motor zoom/pan
-│       │   └── flow.ts            ← Diagrama de flujo de ejecución
-│       ├── panels/
-│       │   ├── analysis.ts
-│       │   ├── apis.ts
-│       │   ├── ml.ts
-│       │   ├── upload.ts
-│       │   ├── static.ts          ← Panel de Análisis Estático
-│       │   └── graph.ts           ← Code Graph Visual (Force Graph + Dir Tree)
-│       ├── store/state.ts
-│       ├── styles/
-│       │   ├── main.css
-│       │   ├── upload.css
-│       │   ├── static-addon.css
-│       │   └── explorer.css
-│       ├── types/index.ts
-│       └── utils/
-│           ├── file-tree.ts       ← FileList → árbol anidado (para file-browser.ts)
-│           └── theme.ts           ← Toggle de tema claro/oscuro + persistencia
+├── scripts/                        ← Flujo de dev sin Docker (setup/dev/build/test/lint/format, .ps1 + .sh)
+│   ├── run-backend.mjs             ← levanta uvicorn (npm run dev:api)
+│   ├── run-terminal.mjs            ← levanta el sidecar de terminal en Rust (npm run dev:term)
+│   └── dev-banner.mjs              ← banner de arranque con ansimax para npm run dev
+├── apps/                           ← cada app/servicio que ofrece el repo, un directorio cada uno
+│   ├── terminal/                   ← Sidecar en Rust: shell interactiva real sobre WebSocket
+│   │   ├── Dockerfile
+│   │   └── src/
+│   │       ├── main.rs             ← handler WS de axum, auth por token, bridging del PTY
+│   │       ├── pty_session.rs      ← wrapper de portable-pty (ConPTY/PTY Unix, una sola implementación)
+│   │       └── auth.rs             ← generación de token + comparación en tiempo constante
+│   ├── api/                        ← Backend FastAPI
+│   │   ├── main.py                 ← FastAPI v4.5 (30+ rutas)
+│   │   ├── shared.py
+│   │   ├── Dockerfile
+│   │   ├── routers/
+│   │   │   ├── upload.py           ← POST /api/upload/{files,folder,zip} + CRUD
+│   │   │   ├── analysis.py         ← POST /analyze/{code,api,logs-analyze}
+│   │   │   ├── ml.py               ← POST /analyze/ml
+│   │   │   ├── diagram.py          ← POST /analyze/diagram
+│   │   │   ├── logs.py             ← GET /logs + GET /api/history
+│   │   │   ├── static_analysis.py  ← POST /static/{parse,parse-project,bigO,wasm}
+│   │   │   ├── intelligence.py     ← POST /intel/{lint,analyze,hover,definition,references,completions,rename}
+│   │   │   ├── graph.py            ← GET /analyze/graph/types, POST /analyze/graph{,/project}
+│   │   │   └── metrics_live.py     ← POST /metrics/live — métricas instantáneas por tecla
+│   │   ├── services/
+│   │   │   ├── project_service.py
+│   │   │   └── static_parser.py    ← Parser multi-lenguaje: Python/C/C++/JS/TS
+│   │   └── tests/                  ← 311 tests en total (ver sección Tests más abajo)
+│   └── web/                        ← Frontend TypeScript (Vite, sin frameworks)
+│       ├── index.html
+│       ├── Dockerfile.frontend
+│       └── src/
+│           ├── api/client.ts          ← API client completo
+│           ├── components/
+│           │   ├── app.ts             ← Shell de la app + manejo de archivos
+│           │   ├── editor.ts          ← Integración Monaco Editor
+│           │   ├── editor-intelligence.ts ← Linting + hover + autocompletado (Fases 1–3)
+│           │   ├── explorer.ts        ← Project Explorer (árbol + tabs + búsqueda + outline)
+│           │   ├── file-browser.ts    ← Árbol de carpetas desde <input webkitdirectory>, cross-browser
+│           │   ├── terminal.ts        ← Cliente xterm.js para el sidecar de terminal en Rust
+│           │   ├── events.ts          ← Conexión global de eventos
+│           │   ├── charts.ts          ← Integración Chart.js
+│           │   ├── mermaid.ts         ← Mermaid + motor zoom/pan
+│           │   └── flow.ts            ← Diagrama de flujo de ejecución
+│           ├── panels/
+│           │   ├── analysis.ts        ← Render de Issues/Métricas (+ modo proyecto activo)
+│           │   ├── apis.ts
+│           │   ├── ml.ts
+│           │   ├── upload.ts          ← Hub de Proyectos: subida, recientes, proyecto activo
+│           │   ├── static.ts          ← Panel de Análisis Estático (+ modo proyecto activo)
+│           │   ├── problems.ts        ← Live Metrics Bar (session restore implementado, sin wirear — ver Roadmap)
+│           │   └── graph.ts           ← Code Graph Visual — Tree View con Mermaid conectado; Force Graph/Dir Tree implementados, sin UI todavía
+│           ├── store/state.ts         ← activeProjectId persiste entre refrescos (localStorage)
+│           ├── styles/
+│           │   ├── main.css
+│           │   ├── upload.css
+│           │   ├── static-addon.css
+│           │   └── explorer.css
+│           ├── types/index.ts
+│           └── utils/
+│               ├── icons.ts           ← Set de iconos SVG inline + badges de lenguaje — sin emoji, sin librería
+│               ├── file-tree.ts       ← FileList → árbol anidado (para file-browser.ts)
+│               └── theme.ts           ← Toggle de tema claro/oscuro + persistencia
 └── README.md
 ```
 
@@ -149,8 +152,8 @@ codewatch-pro/
 ### 1 — Clonar el repositorio
 
 ```bash
-git clone https://github.com/Brashkie/codewatch-pro.git
-cd codewatch-pro
+git clone https://github.com/Brashkie/Sythrall.git
+cd Sythrall
 ```
 
 ### 2 — Iniciar con Docker (recomendado)
@@ -188,14 +191,14 @@ El proceso `[term]` imprime un token aleatorio al arrancar (`🔑 Terminal token
 <details>
 <summary>Comandos manuales (equivalentes, sin script)</summary>
 
-**Backend** (desde la raíz — ahí vive `requirements.txt`, el código está en `backend/`):
+**Backend** (desde la raíz — ahí vive `requirements.txt`, el código está en `apps/api/`):
 ```bash
 pip install -r requirements.txt
-cd backend
+cd apps/api
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**Frontend** (desde la raíz — ahí viven `package.json`/`vite.config.ts`, el código fuente está en `frontend/src`):
+**Frontend** (desde la raíz — ahí viven `package.json`/`vite.config.ts`, el código fuente está en `apps/web/src`):
 ```bash
 npm install
 npm run dev
@@ -337,19 +340,19 @@ Primer uso de Rust en el proyecto: un sidecar chico para la terminal integrada, 
 ## 🧪 Tests
 
 ```bash
-cd backend && pytest
-# pytest.ini vive en la raíz y se autodetecta; testpaths = backend/tests
+cd apps/api && pytest
+# pytest.ini vive en la raíz y se autodetecta; testpaths = apps/api/tests
 ```
 
 ```
-test_upload.py            26 ✅
-test_analysis.py          57 ✅
+test_upload.py            29 ✅
+test_analysis.py          62 ✅
 test_intelligence.py     109 ✅
 test_graph.py             46 ✅
-test_graph_phase2.py      25 ✅
+test_graph_phase2.py      31 ✅
 test_metrics_live.py      34 ✅
 ─────────────────────────────
-Total: 297 pasando
+Total: 311 pasando
 ```
 
 El sidecar en Rust (`terminal-server`) tiene sus propios checks — `cargo build --release`, `cargo clippy -- -D warnings`, `cargo test` — corridos vía el job `terminal` en [`ci.yml`](.github/workflows/ci.yml), aparte del suite de Python de arriba.
@@ -365,7 +368,7 @@ El sidecar en Rust (`terminal-server`) tiene sus propios checks — `cargo build
 ./scripts/format.sh    # o .\scripts\format.ps1 — aplica los cambios
 ```
 
-Comandos directos equivalentes (desde la raíz): `npm run lint` / `npm run format`, `ruff check backend` / `ruff format backend`.
+Comandos directos equivalentes (desde la raíz): `npm run lint` / `npm run format`, `ruff check apps/api` / `ruff format apps/api`.
 
 ---
 
@@ -375,7 +378,7 @@ Comandos directos equivalentes (desde la raíz): `npm run lint` / `npm run forma
 docker compose logs -f                                   # Logs en vivo
 docker compose build --no-cache && docker compose up -d  # Rebuild completo
 docker compose ps                                        # Contenedores activos
-docker exec -it codewatch-backend bash                   # Shell del backend
+docker exec -it sythrall-backend bash                    # Shell del backend
 docker compose down                                      # Detener (conserva volúmenes)
 docker compose down -v                                   # Detener + borrar volúmenes
 ```
@@ -384,12 +387,12 @@ docker compose down -v                                   # Detener + borrar vol�
 
 ## ⚙️ Configuración
 
-`backend/.env`:
+`apps/api/.env`:
 ```env
 PYTHONUNBUFFERED=1
 ```
 
-`frontend/.env`:
+`apps/web/.env`:
 ```env
 VITE_SILENCE_SOURCEMAP_WARNINGS=true
 ```
@@ -473,15 +476,16 @@ docker compose build --no-cache && docker compose up -d
 - [x] Import Graph · Call Graph · Dependencias Circulares · Complexity Heatmap
 - [x] Fase 1: grafos desde sidebar; Fase 2: desde proyectos ZIP completos
 - [x] Resolución cross-folder, detección circular con NetworkX
-- [x] Force Graph interactivo (motor de física propio, sin D3)
+- [x] Force Graph interactivo (motor de física propio, sin D3) *(implementado y testeado — ningún control de UI lo llamaba hasta que un audit posterior encontró que todo el módulo de grafos no tenía ni un caller en la app; el Tree View con Mermaid quedó conectado en Sin versión más abajo, el Force Graph todavía espera su UI)*
 - [x] Project Explorer: árbol + tabs múltiples + búsqueda global + outline
 - [x] 316 tests automatizados
 
-### ✅ v4.3 — Panel de Problemas + Métricas en Vivo
-- [x] **Panel de problemas** (estilo VSCode): errores · warnings · Big-O · complejidad · hallazgos de seguridad
-- [x] **Barra de métricas en vivo** en el editor: LOC · funciones · imports · complexity score · Big-O peor caso · parse time (ms)
+### 🔧 v4.3 — Panel de Problemas + Métricas en Vivo *(código shippeado, wiring incompleto encontrado después — ver Sin versión)*
+- [ ] **Panel de problemas** (estilo VSCode): errores · warnings · Big-O · complejidad · hallazgos de seguridad — *implementado en `panels/problems.ts`, pero escribe al mismo contenedor DOM que la vista de análisis de archivo ya existente, y pisaría contenido que esa vista tiene y Problems no (Pylint score, Maintainability Index, complejidad por función); falta decidir dónde vive antes de conectarlo*
+- [x] **Barra de métricas en vivo** en el editor: LOC · funciones · imports · complexity score · Big-O peor caso · parse time (ms) *(conectado en Sin versión más abajo — el módulo existía desde esta versión pero `editor.ts` nunca lo llamaba)*
 - [x] Auto-recovery si el parser falla (safe mode + fallback regex)
-- [x] Detección de archivos corruptos, restauración de sesión
+- [x] Detección de archivos corruptos
+- [x] Restauración de sesión *(conectado en Sin versión más abajo, junto con persistir el proyecto activo — restaurar "qué archivo estaba abierto" recién tuvo sentido real cuando hubo un proyecto de verdad del cual recuperar el contenido)*
 
 ### 🔧 v4.4 — Computer Science Engine *(shippeado parcial — extensión directa del motor de análisis existente, sin arquitectura nueva)*
 
@@ -503,6 +507,23 @@ No estaba originalmente en este roadmap — salió directo de feedback del usuar
 - [x] Toggle de **tema claro/oscuro**, persistido, oscuro por defecto
 - [x] [`ansimax`](https://github.com/Brashkie/ansimax) (librería propia) para el banner de arranque de `npm run dev`
 
+### ✅ Sin versión — Renombrado a Sythrall + reestructuración a `apps/` + escalado a proyectos gigantes
+
+Tampoco estaba originalmente en este roadmap — salió de querer que el proyecto aguante código real a gran escala, no de un plan de versiones:
+
+- [x] Renombrado **CodeWatch PRO → Sythrall** en todo el proyecto (nombre del paquete, servicios Docker, identificadores internos, remote de git)
+- [x] Reestructurado a `apps/api` · `apps/web` · `apps/terminal` — un directorio por servicio, los manifiestos de cada herramienta se quedan en la raíz (layout estilo Turborepo/Nx)
+- [x] **Benchmark de proyectos gigantes**: se armó un harness reproducible con proyectos sintéticos (hasta 4003 archivos, hasta 1600 funciones por archivo) en vez de asumir que hacía falta una reescritura. Encontró y arregló tres bugs reales O(n²) — dos escondidos dentro de comprehensions de una línea, uno un cálculo muerto que el frontend nunca leía. La generación del Import Graph con 4003 archivos pasó de 3.9s a 0.128s (30×) sin agregar ningún lenguaje nuevo. Detalle en [`CHANGELOG.md`](CHANGELOG.md#unreleased). El parser propio (`static_parser.py`) ya era lineal y no necesitó cambios — el hallazgo anterior sobre PyO3 sigue vigente.
+
+### ✅ Sin versión — Shell estilo enterprise + un solo proyecto, no cuatro entradas separadas
+
+Salió de querer que Sythrall se vea y se comporte como las herramientas de referencia mostradas durante el desarrollo (Aikido, Datadog, DeepSource), en vez de una colección de paneles que casualmente comparten layout:
+
+- [x] **Nav vertical reemplaza la tabbar horizontal** — nav de iconos persistente (`apps/web/src/utils/icons.ts`, SVGs inline, `stroke="currentColor"` para seguir el tema activo sin código extra), mismo patrón que usan las herramientas de referencia. `switchTab()` no cambió — los items del nav nuevo mantuvieron la convención `class="tab"`/`data-tab`/`id="t-*"`, así que fue un cambio puramente de HTML/CSS.
+- [x] **Un solo proyecto activo, no cuatro entradas separadas.** Antes: "+ Código"/"+ Carpeta"/"+ Log" del sidebar eran efímeros (se perdían al refrescar, nunca tocaban el backend) mientras que Proyectos era el único camino persistente — dos modelos mentales para la misma idea. Ahora "+ Código"/"+ Carpeta" crean o suman al **proyecto activo** (mismos endpoints del backend que ya usaba Proyectos, `project_id` ahora opcional en `/api/upload/{files,folder}` para soportar el append), y Editor · Issues · Diagrama · Static · Métricas leen todos del proyecto que esté activo — elegís un proyecto una vez, trabajás en todos los paneles.
+- [x] **Arreglos encontrados por audit**, con el mismo método de "¿esto tiene algún caller de verdad?" que encontró el hueco del Force Graph arriba: se reconectaron la Live Metrics Bar y Session Restore (`panels/problems.ts`, escrito para v4.3, nunca llamado desde `editor.ts`); el proyecto activo ahora persiste en `localStorage` así que ambos se restauran solos al recargar; se arregló el badge de la pestaña APIs (nunca se actualizaba); el panel de Métricas ganó un modo de proyecto activo igual que Issues/Diagrama/Static.
+- [ ] Ubicación del **panel de problemas** — todavía necesita una decisión (ver nota de v4.3 arriba) antes de poder conectarse sin pisar la vista de análisis de archivo existente.
+
 ---
 
 Los ítems de abajo están agrupados según qué tan fundamentados están, no por número de versión — la idea es ser honestos sobre el alcance antes de comprometernos a él.
@@ -513,12 +534,17 @@ Los ítems de abajo están agrupados según qué tan fundamentados están, no po
 - [ ] Por cada detección: complejidad, uso típico, ventajas/desventajas
 
 ### 🔜 v4.7 — Expansión Multi-lenguaje
+
+Mismo patrón en todos: son lenguajes que Sythrall *lee y analiza* — una gramática tree-sitter más reglas, igual que el pipeline existente de Python/TS/C/C++. Ninguno de estos requiere que el motor propio de Sythrall esté escrito en ese lenguaje; eso es una apuesta aparte, sin probar todavía (ver Spikes de investigación más abajo).
+
 - [ ] **C/C++** soporte completo (tree-sitter ya integrado — pipeline completo)
 - [ ] **Java** — AST + análisis de complejidad
 - [ ] **Go** — imports, detección de goroutines
 - [ ] **Rust** — patrones de ownership, bloques unsafe *(Rust como lenguaje-objetivo del analizador — distinto del sidecar `terminal-server` shippeado en v4.5, que es tooling, no un lenguaje que el analizador parsea)*
 - [ ] **PHP** — detección de funciones deprecated
 - [ ] **SQL** — estimación de complejidad de queries
+- [ ] **Fortran** — detección de loops `DO`/operaciones con arrays, candidatos a vectorización/SIMD, hints de dominio científico *(solo como lenguaje-objetivo — Sythrall ya tiene rendimiento numérico nivel Fortran gratis vía los backends LAPACK/BLAS compilados de numpy/scipy, no hay razón para escribir Fortran propio)*
+- [ ] **Assembly (x86-64)** — desglose de instrucciones/registros/control-flow a partir de snippets `.s`/asm inline pegados por el usuario *(pattern-matching sobre texto, no un disassembler — el caso de binarios PE/ELF/Mach-O de abajo ya envuelve Capstone/LIEF en vez de escribir uno a mano)*
 - [ ] Reglas de lint específicas por extensión
 
 ### 🔜 v4.8 — Integración Cython & WASM
@@ -543,7 +569,7 @@ Ideas reales, pero cada una es su propio proyecto serio ya resuelto bien por her
 - [ ] Analizador de ejecutables (PE / ELF / Mach-O, secciones, imports/exports, símbolos) — envolver [Capstone](https://www.capstone-engine.org)/[LIEF](https://lief-project.github.io)/`objdump`, no escribir un disassembler a mano
 - [ ] Centralidad de grafos / detección de "hubs" (NetworkX ya es dependencia) — mostrar los archivos/funciones más conectados del Code Graph existente, la misma idea que usan las redes sociales para detectar influencers
 - [ ] Build standalone (PyInstaller/Nuitka + Tauri, o Zig para binarios estáticos chicos) — un binario portable sin depender de Docker/Node/Python, como alternativa a `scripts/` y Docker
-- [x] ~~Extensión en Rust (PyO3) para el hot-path del parser estático~~ — **investigado con benchmarks reales, no adoptado para esto**: perfilar `static_parser.py` con archivos grandes reales (250+ funciones, 3000+ sintéticas) mostró que la consolidación de recorridos AST ya hecha fue neutra (dentro del ruido de medición), y el parser ya es suficientemente rápido donde importa (~160ms para tamaños de archivo realistas). Rust *sí* terminó entrando al proyecto (`terminal-server` de v4.5), pero para un problema genuinamente pensado para Rust — manejo de PTY cross-platform — no como reescritura de Python que ya funcionaba bien.
+- [x] ~~Extensión en Rust (PyO3) para el hot-path del parser estático~~ — **investigado dos veces con benchmarks reales, no adoptado ninguna de las dos**: la primera pasada perfiló `static_parser.py` con archivos *individuales* grandes (250+ funciones, 3000+ sintéticas) y encontró que la consolidación de recorridos AST ya hecha fue neutra (dentro del ruido de medición), con el parser ya rápido donde importa (~160ms para tamaños realistas). La segunda pasada (Sin versión, arriba) probó el otro eje — miles de *archivos* en un proyecto, no un archivo gigante — y encontró que el parser en sí seguía escalando lineal; el costo O(n²) real eran tres bugs de Python comunes en el código *alrededor* del parser, arreglados sin ningún lenguaje nuevo. Rust *sí* terminó entrando al proyecto (`terminal-server` de v4.5), pero para un problema genuinamente pensado para Rust — manejo de PTY cross-platform — no como reescritura de Python que ya funcionaba bien. Si algún día aparece un cuello de botella real en `parse_file` mismo, el modelo de integración sería un sidecar Axum (mismo patrón que `terminal-server`) hablando HTTP con FastAPI, no embeber vía PyO3 — más simple de mantener en solitario, sin matriz de builds de bindings nativos.
 
 ### 🧭 Largo plazo / otra categoría de herramienta — no comprometido
 

@@ -1,10 +1,10 @@
 @echo off
-title CodeWatch PRO - Iniciando...
+title Sythrall - Iniciando...
 color 0A
 
 echo.
 echo  ===========================================
-echo   CodeWatch PRO  v4.0  -  Hepein Oficial
+echo   Sythrall  v4.0  -  Hepein Oficial
 echo   FastAPI + flake8 + pylint + radon + ML/DL
 echo  ===========================================
 echo.

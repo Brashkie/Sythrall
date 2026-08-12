@@ -1,9 +1,9 @@
-# CodeWatch PRO - Build
+# Sythrall - Build
 # Compila el frontend (Vite) y valida la sintaxis del backend.
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 
-Write-Host "== CodeWatch PRO - Build ==" -ForegroundColor Cyan
+Write-Host "== Sythrall - Build ==" -ForegroundColor Cyan
 
 Write-Host "`n[1/3] Frontend (typecheck + build)..." -ForegroundColor Yellow
 Push-Location $root
@@ -19,7 +19,7 @@ if (Test-Path $venvPython) {
     Write-Host "`n[2/3] Backend (sanity check)..." -ForegroundColor Yellow
     Push-Location $root
     try {
-        & $venvPython -m compileall -q backend\main.py backend\shared.py backend\routers backend\services
+        & $venvPython -m compileall -q apps\api\main.py apps\api\shared.py apps\api\routers apps\api\services
     } finally {
         Pop-Location
     }

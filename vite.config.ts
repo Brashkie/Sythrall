@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 
 // ──────────────────────────────────────────────────────────────────────────────
-//  CodeWatch PRO — Vite Config v4.0
+//  Sythrall — Vite Config v4.0
 //  Migrado de Flask (:5000) a FastAPI (:8000)
 //
 //  Mapa de rutas FastAPI:
@@ -18,12 +18,12 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   // Manifiestos (package.json, tsconfig.json, etc.) viven en la raíz del repo;
-  // el código fuente del frontend vive en frontend/.
-  root: 'frontend',
-  envDir: '..',
+  // el código fuente del frontend vive en apps/web/.
+  root: 'apps/web',
+  envDir: '../..',
 
   build: {
-    outDir: '../dist',
+    outDir: '../../dist',
     sourcemap: false,
     rollupOptions: {
       output: {

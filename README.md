@@ -1,16 +1,16 @@
-# 🛰 CodeWatch PRO
+# 🛰 Sythrall
 
 > **Enterprise-grade code intelligence platform** — static analysis, ML/DL inspection, real-time editor intelligence, code graph visualization, an integrated terminal, and API monitoring. Built with TypeScript (no frameworks) + FastAPI + Rust + Monaco Editor.
 
 <div align="center">
 
 ![Version](https://img.shields.io/badge/version-4.5.0-blue?style=flat-square)
-[![CI](https://github.com/Brashkie/codewatch-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/Brashkie/codewatch-pro/actions/workflows/ci.yml)
+[![CI](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml/badge.svg)](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml)
 ![Frontend](https://img.shields.io/badge/Frontend-Vite%20%2B%20TypeScript-646cff?style=flat-square)
 ![Backend](https://img.shields.io/badge/Backend-FastAPI%20%2B%20Python-009688?style=flat-square)
 ![Terminal](https://img.shields.io/badge/Terminal-Rust%20%2B%20axum-dea584?style=flat-square)
 ![Deploy](https://img.shields.io/badge/Deploy-Docker%20%2B%20Nginx-2496ed?style=flat-square)
-![Tests](https://img.shields.io/badge/Tests-297%20passing-00f5a0?style=flat-square)
+![Tests](https://img.shields.io/badge/Tests-311%20passing-00f5a0?style=flat-square)
 ![Author](https://img.shields.io/badge/Author-Hepein%20Oficial-b87dff?style=flat-square)
 ![License](https://img.shields.io/badge/License-GPL%203.0-orange?style=flat-square)
 
@@ -20,21 +20,21 @@
 
 ---
 
-## ✨ What is CodeWatch PRO?
+## ✨ What is Sythrall?
 
-CodeWatch PRO is a professional code intelligence platform built as both an educational project and a production-grade demonstration. It combines a modern TypeScript frontend (zero runtime frameworks), a Python/FastAPI backend with full ML/DL support, a multi-language static analysis engine, and a Monaco Editor integration that rivals VS Code's developer experience.
+Sythrall is a professional code intelligence platform built as both an educational project and a production-grade demonstration. It combines a modern TypeScript frontend (zero runtime frameworks), a Python/FastAPI backend with full ML/DL support, a multi-language static analysis engine, and a Monaco Editor integration that rivals VS Code's developer experience.
 
 ### Core capabilities
 
 | Module | Description |
 |---|---|
 | **📂 Project Explorer** | Expandable file tree, multi-file tabs, global search (`Ctrl+Shift+F`), symbol outline |
-| **📁 Folder Browser** | Open a real folder from disk ("+ Folder") and browse it as a VSCode-style expandable tree — works in every modern browser, no Chromium-only APIs |
+| **📁 Folder Browser** | Open a real folder from disk ("+ Folder") and browse it as a VSCode-style expandable tree — works in every modern browser, no Chromium-only APIs. Creates or appends to the active project, so it's not a one-off local-only view |
 | **🖥 Integrated Terminal** | Real interactive shell (PowerShell/bash) in a resizable bottom panel, powered by a Rust sidecar (`portable-pty` + `axum`) — token-protected, zero-friction for local use |
 | **📝 Editor Intelligence** | Real-time linting, inline diagnostics, Big-O hover, Go to Definition, Find References, Rename Symbol, semantic autocomplete |
 | **🔬 Static Analysis** | AST-based multi-language parser (Python, TypeScript, C/C++) — Big-O estimation, cyclomatic complexity, WASM/Cython hints, call graph, dead code |
-| **🕸 Code Graph Visual** | Import graph, Call graph, Circular dependency detection, Complexity heatmap — Tree View + interactive Force Graph |
-| **📂 Projects** | Upload files, folders and ZIPs with interactive tree and Monaco-powered file viewer |
+| **🕸 Code Graph Visual** | Import graph, Call graph, Circular dependency detection, Complexity heatmap — Mermaid Tree View, scoped to loose files or a whole uploaded project *(the interactive Force Graph renderer exists and is tested but isn't wired to a UI control yet)* |
+| **📂 Projects** | Upload files, a folder or a ZIP — the result can become the **active project**, which Editor · Issues · Diagram · Static · Metrics then read directly, without re-uploading anything per panel |
 | **🔍 Analysis** | pylint · flake8 · radon · AST — issues, complexity, maintainability index |
 | **🤖 ML/DL** | Detection of 23 libraries, 23 pipeline patterns, 25 models, 20+ issue rules |
 | **🔀 Diagrams** | Flowchart · Callgraph · Classes · Sequence — generated with Mermaid.js + zoom/pan |
@@ -48,85 +48,88 @@ CodeWatch PRO is a professional code intelligence platform built as both an educ
 
 ## 📁 Project structure
 
-All manifests/configs live at the repo root; `backend/` and `frontend/` hold source code only. `scripts/` is the single entry point for everything (see [scripts/README.md](scripts/README.md)).
+All manifests/configs live at the repo root; `apps/` holds source code only, one directory per app/service (`apps/api`, `apps/web`, `apps/terminal`). `scripts/` is the single entry point for everything (see [scripts/README.md](scripts/README.md)).
 
 ```
-codewatch-pro/
-├── package.json                   ← npm manifest (frontend deps + lint/format/build scripts)
+sythrall/
+├── package.json                    ← npm manifest (frontend deps + lint/format/build scripts)
 ├── package-lock.json
-├── vite.config.ts                 ← root: 'frontend', build.outDir: '../dist'
-├── tsconfig.json                  ← include: frontend/src
-├── biome.json                     ← Biome (lint/format) config
+├── vite.config.ts                  ← root: 'apps/web', build.outDir: '../../dist'
+├── tsconfig.json                   ← include: apps/web/src
+├── biome.json                      ← Biome (lint/format) config
 ├── requirements.txt                ← backend runtime deps
 ├── requirements-dev.txt            ← Ruff (lint/format), dev-only
 ├── pyproject.toml                  ← Ruff config
-├── pytest.ini                      ← testpaths: backend/tests
-├── Cargo.toml                       ← Rust manifest — terminal-server sidecar
+├── pytest.ini                      ← testpaths: apps/api/tests
+├── Cargo.toml                      ← Rust manifest — apps/terminal sidecar
 ├── Cargo.lock
 ├── docker-compose.yml
 ├── .dockerignore
 ├── START.bat / STOP.bat
-├── scripts/                       ← Dev workflow without Docker (setup/dev/build/test/lint/format, .ps1 + .sh)
-│   ├── run-backend.mjs            ← spawns uvicorn (npm run dev:api)
-│   ├── run-terminal.mjs           ← spawns the Rust terminal sidecar (npm run dev:term)
-│   └── dev-banner.mjs             ← ansimax startup banner for npm run dev
-├── terminal-server/                ← Rust sidecar: real interactive shell over WebSocket
-│   ├── Dockerfile
-│   └── src/
-│       ├── main.rs                ← axum WS handler, token auth, PTY bridging
-│       ├── pty_session.rs         ← portable-pty wrapper (ConPTY/Unix PTY, one impl)
-│       └── auth.rs                ← token generation + constant-time comparison
-├── backend/
-│   ├── main.py                    ← FastAPI v4.5 (30+ routes)
-│   ├── shared.py
-│   ├── Dockerfile
-│   ├── routers/
-│   │   ├── upload.py              ← POST /api/upload/{files,folder,zip} + CRUD
-│   │   ├── analysis.py            ← POST /analyze/{code,api,logs-analyze}
-│   │   ├── ml.py                  ← POST /analyze/ml
-│   │   ├── diagram.py             ← POST /analyze/diagram
-│   │   ├── logs.py                ← GET /logs + GET /api/history
-│   │   ├── static_analysis.py     ← POST /static/{parse,parse-project,bigO,wasm}
-│   │   ├── intelligence.py        ← POST /intel/{lint,analyze,hover,definition,references,completions,rename}
-│   │   ├── graph.py               ← GET /analyze/graph/types, POST /analyze/graph{,/project}
-│   │   └── metrics_live.py        ← POST /metrics/live — instant per-keystroke metrics
-│   ├── services/
-│   │   ├── project_service.py
-│   │   └── static_parser.py       ← Multi-language parser: Python/C/C++/JS/TS
-│   └── tests/                      ← 297 tests total (see Tests section below)
-├── frontend/
-│   ├── index.html
-│   ├── Dockerfile.frontend
-│   └── src/
-│       ├── api/client.ts          ← Full API client
-│       ├── components/
-│       │   ├── app.ts             ← App shell + file management
-│       │   ├── editor.ts          ← Monaco Editor integration
-│       │   ├── editor-intelligence.ts ← Linting + hover + autocomplete (Phases 1–3)
-│       │   ├── explorer.ts        ← Project Explorer (tree + tabs + search + outline)
-│       │   ├── file-browser.ts    ← Folder tree from <input webkitdirectory>, cross-browser
-│       │   ├── terminal.ts        ← xterm.js client for the Rust terminal sidecar
-│       │   ├── events.ts          ← Global event wiring
-│       │   ├── charts.ts          ← Chart.js integration
-│       │   ├── mermaid.ts         ← Mermaid + zoom/pan engine
-│       │   └── flow.ts            ← Execution flow diagram
-│       ├── panels/
-│       │   ├── analysis.ts
-│       │   ├── apis.ts
-│       │   ├── ml.ts
-│       │   ├── upload.ts
-│       │   ├── static.ts          ← Static Analysis panel
-│       │   └── graph.ts           ← Code Graph Visual (Force Graph + Dir Tree)
-│       ├── store/state.ts
-│       ├── styles/
-│       │   ├── main.css
-│       │   ├── upload.css
-│       │   ├── static-addon.css
-│       │   └── explorer.css
-│       ├── types/index.ts
-│       └── utils/
-│           ├── file-tree.ts       ← FileList → nested tree (for file-browser.ts)
-│           └── theme.ts           ← Light/dark toggle + persistence
+├── scripts/                        ← Dev workflow without Docker (setup/dev/build/test/lint/format, .ps1 + .sh)
+│   ├── run-backend.mjs             ← spawns uvicorn (npm run dev:api)
+│   ├── run-terminal.mjs            ← spawns the Rust terminal sidecar (npm run dev:term)
+│   └── dev-banner.mjs              ← ansimax startup banner for npm run dev
+├── apps/                           ← every app/service the repo ships, one dir each
+│   ├── terminal/                   ← Rust sidecar: real interactive shell over WebSocket
+│   │   ├── Dockerfile
+│   │   └── src/
+│   │       ├── main.rs             ← axum WS handler, token auth, PTY bridging
+│   │       ├── pty_session.rs      ← portable-pty wrapper (ConPTY/Unix PTY, one impl)
+│   │       └── auth.rs             ← token generation + constant-time comparison
+│   ├── api/                        ← FastAPI backend
+│   │   ├── main.py                 ← FastAPI v4.5 (30+ routes)
+│   │   ├── shared.py
+│   │   ├── Dockerfile
+│   │   ├── routers/
+│   │   │   ├── upload.py           ← POST /api/upload/{files,folder,zip} + CRUD
+│   │   │   ├── analysis.py         ← POST /analyze/{code,api,logs-analyze}
+│   │   │   ├── ml.py               ← POST /analyze/ml
+│   │   │   ├── diagram.py          ← POST /analyze/diagram
+│   │   │   ├── logs.py             ← GET /logs + GET /api/history
+│   │   │   ├── static_analysis.py  ← POST /static/{parse,parse-project,bigO,wasm}
+│   │   │   ├── intelligence.py     ← POST /intel/{lint,analyze,hover,definition,references,completions,rename}
+│   │   │   ├── graph.py            ← GET /analyze/graph/types, POST /analyze/graph{,/project}
+│   │   │   └── metrics_live.py     ← POST /metrics/live — instant per-keystroke metrics
+│   │   ├── services/
+│   │   │   ├── project_service.py
+│   │   │   └── static_parser.py    ← Multi-language parser: Python/C/C++/JS/TS
+│   │   └── tests/                  ← 311 tests total (see Tests section below)
+│   └── web/                        ← TypeScript frontend (Vite, zero frameworks)
+│       ├── index.html
+│       ├── Dockerfile.frontend
+│       └── src/
+│           ├── api/client.ts          ← Full API client
+│           ├── components/
+│           │   ├── app.ts             ← App shell + file management
+│           │   ├── editor.ts          ← Monaco Editor integration
+│           │   ├── editor-intelligence.ts ← Linting + hover + autocomplete (Phases 1–3)
+│           │   ├── explorer.ts        ← Project Explorer (tree + tabs + search + outline)
+│           │   ├── file-browser.ts    ← Folder tree from <input webkitdirectory>, cross-browser
+│           │   ├── terminal.ts        ← xterm.js client for the Rust terminal sidecar
+│           │   ├── events.ts          ← Global event wiring
+│           │   ├── charts.ts          ← Chart.js integration
+│           │   ├── mermaid.ts         ← Mermaid + zoom/pan engine
+│           │   └── flow.ts            ← Execution flow diagram
+│           ├── panels/
+│           │   ├── analysis.ts        ← Issues/Metrics rendering (+ active-project mode)
+│           │   ├── apis.ts
+│           │   ├── ml.ts
+│           │   ├── upload.ts          ← Projects hub: upload, recent list, active project
+│           │   ├── static.ts          ← Static Analysis panel (+ active-project mode)
+│           │   ├── problems.ts        ← Live Metrics Bar (session restore implemented, not yet wired — see Roadmap)
+│           │   └── graph.ts           ← Code Graph Visual — Mermaid Tree View wired; Force Graph/Dir Tree implemented, not yet wired to UI
+│           ├── store/state.ts         ← activeProjectId persists across reloads (localStorage)
+│           ├── styles/
+│           │   ├── main.css
+│           │   ├── upload.css
+│           │   ├── static-addon.css
+│           │   └── explorer.css
+│           ├── types/index.ts
+│           └── utils/
+│               ├── icons.ts           ← Inline SVG icon set + language badges — no emoji, no icon library
+│               ├── file-tree.ts       ← FileList → nested tree (for file-browser.ts)
+│               └── theme.ts           ← Light/dark toggle + persistence
 └── README.md
 ```
 
@@ -149,8 +152,8 @@ codewatch-pro/
 ### 1 — Clone
 
 ```bash
-git clone https://github.com/Brashkie/codewatch-pro.git
-cd codewatch-pro
+git clone https://github.com/Brashkie/Sythrall.git
+cd Sythrall
 ```
 
 ### 2 — Start with Docker (recommended)
@@ -188,14 +191,14 @@ The `[term]` process prints a random token on startup (`🔑 Terminal token: ...
 <details>
 <summary>Manual commands (equivalent, no script)</summary>
 
-**Backend** (from repo root — `requirements.txt` lives there, app code is in `backend/`):
+**Backend** (from repo root — `requirements.txt` lives there, app code is in `apps/api/`):
 ```bash
 pip install -r requirements.txt
-cd backend
+cd apps/api
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**Frontend** (from repo root — `package.json`/`vite.config.ts` live there, source is in `frontend/src`):
+**Frontend** (from repo root — `package.json`/`vite.config.ts` live there, source is in `apps/web/src`):
 ```bash
 npm install
 npm run dev
@@ -317,19 +320,19 @@ First use of Rust in the project: a small sidecar for the integrated terminal, n
 ## 🧪 Tests
 
 ```bash
-cd backend && pytest
-# pytest.ini lives at the repo root and is auto-discovered; testpaths = backend/tests
+cd apps/api && pytest
+# pytest.ini lives at the repo root and is auto-discovered; testpaths = apps/api/tests
 ```
 
 ```
-test_upload.py            26 ✅
-test_analysis.py          57 ✅
+test_upload.py            29 ✅
+test_analysis.py          62 ✅
 test_intelligence.py     109 ✅
 test_graph.py             46 ✅
-test_graph_phase2.py      25 ✅
+test_graph_phase2.py      31 ✅
 test_metrics_live.py      34 ✅
 ─────────────────────────────
-Total: 297 passed
+Total: 311 passed
 ```
 
 The Rust sidecar (`terminal-server`) has its own checks — `cargo build --release`, `cargo clippy -- -D warnings`, `cargo test` — run via the `terminal` job in [`ci.yml`](.github/workflows/ci.yml), separate from the Python suite above.
@@ -345,7 +348,7 @@ The Rust sidecar (`terminal-server`) has its own checks — `cargo build --relea
 ./scripts/format.sh    # or .\scripts\format.ps1 — writes fixes
 ```
 
-Equivalent direct commands (from repo root): `npm run lint` / `npm run format`, `ruff check backend` / `ruff format backend`.
+Equivalent direct commands (from repo root): `npm run lint` / `npm run format`, `ruff check apps/api` / `ruff format apps/api`.
 
 ---
 
@@ -355,7 +358,7 @@ Equivalent direct commands (from repo root): `npm run lint` / `npm run format`, 
 docker compose logs -f                         # Live logs
 docker compose build --no-cache && docker compose up -d  # Full rebuild
 docker compose ps                              # Active containers
-docker exec -it codewatch-backend bash         # Backend shell
+docker exec -it sythrall-backend bash          # Backend shell
 docker compose down                            # Stop (keep volumes)
 docker compose down -v                         # Stop + delete volumes
 ```
@@ -392,15 +395,16 @@ docker compose down -v                         # Stop + delete volumes
 - [x] Import Graph · Call Graph · Circular Dependencies · Complexity Heatmap
 - [x] Phase 1: graphs from sidebar; Phase 2: graphs from uploaded ZIP projects
 - [x] Cross-folder dependency resolution, NetworkX circular detection
-- [x] Interactive Force Graph (custom physics engine, no D3)
+- [x] Interactive Force Graph (custom physics engine, no D3) *(implemented and tested — a later audit found the whole graph module had zero callers anywhere in the app; Mermaid Tree View got wired in Unreleased below, Force Graph is still waiting on its UI)*
 - [x] Project Explorer: file tree + multi-file tabs + global search + outline
 - [x] 316 automated tests
 
-### ✅ v4.3 — Problems Panel + Live Metrics
-- [x] **Problems panel** (VSCode-style): errors · warnings · Big-O · complexity · security findings
-- [x] **Live metrics bar** in editor: LOC · functions · imports · complexity score · Big-O worst · parse time (ms)
+### 🔧 v4.3 — Problems Panel + Live Metrics *(shipped code, wiring found incomplete years later — see Unreleased)*
+- [ ] **Problems panel** (VSCode-style): errors · warnings · Big-O · complexity · security findings — *implemented in `panels/problems.ts`, but it targets the same DOM container as the existing file-analysis view and would clobber content that view has and Problems doesn't (Pylint score, Maintainability Index, per-function complexity); needs a placement decision before wiring it in*
+- [x] **Live metrics bar** in editor: LOC · functions · imports · complexity score · Big-O worst · parse time (ms) *(connected in Unreleased below — the module existed since this version but `editor.ts` never called it)*
 - [x] Auto-recovery if parser fails (safe mode + regex fallback)
-- [x] Corrupt file detection, session restore
+- [x] Corrupt file detection
+- [x] Session restore *(connected in Unreleased below, alongside persisting the active project — restoring "which file was open" only became meaningful once there was a real project to restore its content from)*
 
 ### 🔧 v4.4 — Computer Science Engine *(shipped partial — direct extension of the existing analysis engine, no new architecture)*
 
@@ -422,6 +426,23 @@ Not originally on this roadmap — came directly from user feedback mid-developm
 - [x] **Light/dark theme** toggle, persisted, dark by default
 - [x] [`ansimax`](https://github.com/Brashkie/ansimax) (own library) for the `npm run dev` startup banner
 
+### ✅ Unreleased — Rename to Sythrall + `apps/` restructure + large-project scaling
+
+Also not originally on this roadmap — triggered by wanting the project to scale to real large codebases, not by a version-number plan:
+
+- [x] Renamed **CodeWatch PRO → Sythrall** across the project (package name, Docker services, internal identifiers, git remote)
+- [x] Restructured into `apps/api` · `apps/web` · `apps/terminal` — one directory per service, tool manifests stay at repo root (Turborepo/Nx-style layout)
+- [x] **Large-project benchmark**: built a reproducible synthetic-project harness (up to 4003 files, up to 1600 functions/file) instead of assuming a rewrite was needed. Found and fixed three real O(n²) bugs — two hidden inside one-line comprehensions, one a dead computation the frontend never read. Import Graph generation on the 4003-file case went from 3.9s to 0.128s (30×) with zero new languages. Details in [`CHANGELOG.md`](CHANGELOG.md#unreleased). The parser itself (`static_parser.py`) was already linear and needed no changes — the earlier PyO3 finding below still holds.
+
+### ✅ Unreleased — Enterprise-style shell + one project, not four disconnected entry points
+
+Triggered by wanting Sythrall to look and behave like the reference tools shown during development (Aikido, Datadog, DeepSource) instead of a collection of panels that happen to share a layout:
+
+- [x] **Nav rail replaces the horizontal tabbar** — persistent vertical icon nav (`apps/web/src/utils/icons.ts`, inline SVGs, `stroke="currentColor"` so they follow the active theme with zero extra code), same pattern the reference tools use. `switchTab()` didn't change — the new nav items kept the same `class="tab"`/`data-tab`/`id="t-*"` convention, so this was purely a markup/CSS change.
+- [x] **One active project, not four disconnected upload paths.** Before: "+ Code"/"+ Folder"/"+ Log" in the sidebar were ephemeral (lost on refresh, never touched the backend) while Projects was the only persisted path — two mental models for the same idea. Now "+ Code"/"+ Folder" create or append to the **active project** (same backend endpoints Projects already used, `project_id` now optional on `/api/upload/{files,folder}` to support appending), and Editor · Issues · Diagram · Static · Metrics all read from whichever project is active — pick a project once, work across every panel.
+- [x] **Audit-driven fixes**, found using the same "does this actually have a caller" method that caught the Force Graph gap above: reconnected the Live Metrics Bar and Session Restore (`panels/problems.ts`, written for v4.3, never called from `editor.ts`); active project now persists to `localStorage` so both restore automatically on reload; fixed the APIs tab badge (never updated); Metrics panel gained an active-project mode matching Issues/Diagram/Static.
+- [ ] **Problems panel** placement — still needs a decision (see v4.3 note above) before it can be wired in without clobbering the existing file-analysis view.
+
 ---
 
 The items below are grouped by how well-founded they are, not by version number — the goal is to be honest about scope before committing to it.
@@ -432,12 +453,17 @@ The items below are grouped by how well-founded they are, not by version number 
 - [ ] For each match: complexity, typical use case, tradeoffs
 
 ### 🔜 v4.7 — Multi-language Expansion
+
+Same pattern throughout: these are languages Sythrall can *read and analyze* — a tree-sitter grammar plus rules, same as the existing Python/TS/C/C++ pipeline. None of these require Sythrall's own engine to be written in that language; that's a separate, unproven bet (see Research spikes below).
+
 - [ ] **C/C++** full support (tree-sitter already integrated — complete pipeline)
 - [ ] **Java** — AST + complexity analysis
 - [ ] **Go** — imports, goroutine detection
 - [ ] **Rust** — ownership patterns, unsafe block warnings *(analysis-target Rust support — separate from the `terminal-server` sidecar shipped in v4.5, which is tooling, not a language the analyzer parses)*
 - [ ] **PHP** — deprecated function detection
 - [ ] **SQL** — query complexity estimation
+- [ ] **Fortran** — DO-loop / array-op detection, vectorization/SIMD candidates, scientific-computing domain hints *(analysis target only — Sythrall already gets Fortran-level numerical performance for free via numpy/scipy's compiled LAPACK/BLAS backends, no reason to write Fortran itself)*
+- [ ] **Assembly (x86-64)** — instruction/register/control-flow breakdown from raw `.s`/inline-asm snippets *(pattern-matching on text the user pastes, not a disassembler — the PE/ELF/Mach-O binary case below already wraps Capstone/LIEF instead of hand-rolling one)*
 - [ ] Language-specific lint rules per extension
 
 ### 🔜 v4.8 — Cython & WASM Integration
@@ -462,7 +488,7 @@ Real ideas, but each is its own serious project already solved well by dedicated
 - [ ] Executable analyzer (PE / ELF / Mach-O, sections, imports/exports, symbols) — wrap [Capstone](https://www.capstone-engine.org)/[LIEF](https://lief-project.github.io)/`objdump`, don't hand-write a disassembler
 - [ ] Graph centrality / hub detection (NetworkX is already a dependency) — surface the most-connected files/functions in the existing Code Graph, the same idea social networks use to find "influencers"
 - [ ] Standalone desktop build (PyInstaller/Nuitka + Tauri, or Zig for tiny static binaries) — a portable binary with no Docker/Node/Python required, as an alternative to `scripts/` and Docker
-- [x] ~~Rust extension (PyO3) for the static parser's hottest path~~ — **investigated with real benchmarks, not adopted for this**: profiling `static_parser.py` on large real files (250+ functions, 3000+ synthetic) showed the AST-walk consolidation already done was noise-level neutral, and the parser is fast enough where it matters (~160ms for realistic file sizes). Rust *did* end up in the project (v4.5's `terminal-server`), but for a genuinely Rust-shaped problem — cross-platform PTY handling — not as a speed rewrite of working Python.
+- [x] ~~Rust extension (PyO3) for the static parser's hottest path~~ — **investigated twice with real benchmarks, not adopted either time**: first pass profiled `static_parser.py` on large *individual* files (250+ functions, 3000+ synthetic) and found the AST-walk consolidation already done was noise-level neutral (~160ms for realistic file sizes). Second pass (Unreleased, above) tested the other axis — thousands of *files* in one project, not one huge file — and found the parser itself still scaled linearly; the actual O(n²) cost was three ordinary Python bugs in the code *around* the parser, fixed without any new language. Rust *did* end up in the project (v4.5's `terminal-server`), but for a genuinely Rust-shaped problem — cross-platform PTY handling — not as a speed rewrite of working Python. If a real bottleneck ever shows up in `parse_file` itself, the integration model would be an Axum sidecar (same pattern as `terminal-server`) talking HTTP to FastAPI, not PyO3 embedding — simpler to maintain solo, no native-binding build matrix.
 
 ### 🧭 Long-term / different tool category — not committed
 

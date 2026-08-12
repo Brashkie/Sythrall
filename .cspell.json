@@ -10,7 +10,7 @@
     "pylint",
     "radon",
     "mermaid",
-    "codewatch",
+    "sythrall",
     "lightgbm",
     "icecream",
     "polars",

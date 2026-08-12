@@ -1,11 +1,11 @@
 [package]
-name = "codewatch-terminal"
+name = "sythrall-terminal"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
 name = "terminal-server"
-path = "terminal-server/src/main.rs"
+path = "apps/terminal/src/main.rs"
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "sync", "signal"] }

@@ -1,0 +1,181 @@
+/* ══════════════════════════════════════════
+   Sythrall — Static Analysis Panel CSS
+   Agregar al final de main.css
+   ══════════════════════════════════════════ */
+
+/* ─── Toolbar ─────────────────────────────── */
+.st-toolbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 14px; border-bottom: 1px solid var(--b1);
+  background: var(--s0); flex-shrink: 0; flex-wrap: wrap;
+}
+
+/* ─── Body scroll ─────────────────────────── */
+.st-body {
+  overflow-y: auto; flex: 1; padding: 14px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+/* ─── Error ───────────────────────────────── */
+.st-error {
+  background: rgba(255,51,102,.08); border: 1px solid rgba(255,51,102,.3);
+  border-radius: 8px; color: var(--err); font-size: .82rem; padding: .7rem 1rem;
+}
+
+/* ─── Summary cards ───────────────────────── */
+.st-summary-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 8px;
+}
+.st-stat {
+  background: var(--s1); border: 1px solid var(--b0);
+  border-radius: 8px; padding: 10px 8px; text-align: center;
+}
+.st-stat-icon { font-size: 1.1rem; margin-bottom: 3px; }
+.st-stat-val  { font-family: var(--mono); font-size: 1.3rem; font-weight: 600; color: var(--info); line-height: 1; }
+.st-stat-lbl  { font-size: .62rem; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: .04em; }
+
+/* ─── Big O table ─────────────────────────── */
+.table-scroll { overflow-x: auto; }
+.bigo-table {
+  width: 100%; border-collapse: collapse;
+  font-family: var(--mono); font-size: .75rem;
+}
+.bigo-table thead tr {
+  border-bottom: 1px solid var(--b1);
+}
+.bigo-table th {
+  text-align: left; padding: 5px 8px;
+  font-size: .62rem; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.bigo-table td { padding: 5px 8px; border-bottom: 1px solid var(--b0); }
+.bigo-table tr:last-child td { border-bottom: none; }
+.bigo-table tr.bigo-hot td   { background: rgba(255,138,0,.04); }
+.bigo-table tr:hover td      { background: var(--s1); }
+
+.bigo-fn     { font-weight: 600; color: var(--txt); }
+.bigo-reason { color: var(--muted); font-size: .7rem; }
+.bigo-thetaomega { color: var(--muted); font-size: .68rem; white-space: nowrap; }
+.bigo-cc     { font-weight: 700; text-align: center; }
+.bigo-loc    { color: var(--muted); text-align: center; }
+.bigo-line   { color: var(--b2); }
+.bigo-async  { font-size: .58rem; background: rgba(184,125,255,.15); color: var(--purple); padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
+.bigo-recursion { font-size: .58rem; padding: 1px 5px; border-radius: 3px; margin-left: 4px; cursor: help; white-space: nowrap; }
+.bigo-recursion-tail   { background: rgba(0,245,160,.12);  color: var(--ok); }
+.bigo-recursion-notail { background: rgba(255,182,39,.12); color: var(--warn); }
+
+.bigo-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  border: 1px solid; font-size: .7rem; font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Distribución Big O (proyecto) */
+.bigo-dist-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 5px;
+}
+.bigo-dist-bar-wrap {
+  flex: 1; height: 8px; background: var(--b0); border-radius: 4px; overflow: hidden;
+}
+.bigo-dist-bar {
+  height: 100%; border-radius: 4px; transition: width .4s ease; opacity: .75;
+}
+
+/* ─── Funciones ───────────────────────────── */
+.st-fn-item, .st-class-item, .st-wasm-item {
+  background: var(--s2); border: 1px solid var(--b0);
+  border-radius: 7px; padding: 8px 10px; margin-bottom: 6px;
+}
+.st-fn-item:last-child, .st-class-item:last-child, .st-wasm-item:last-child {
+  margin-bottom: 0;
+}
+.st-fn-head {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px;
+}
+.st-fn-name { font-family: var(--mono); font-size: .82rem; font-weight: 700; color: var(--txt); }
+.st-fn-args { font-family: var(--mono); font-size: .72rem; color: var(--muted); }
+.st-fn-line { font-family: var(--mono); font-size: .62rem; color: var(--b2); }
+.st-fn-meta {
+  display: flex; gap: 10px; flex-wrap: wrap;
+  font-size: .7rem; color: var(--muted); font-family: var(--mono);
+}
+.st-fn-meta span { display: flex; align-items: center; gap: 3px; }
+.st-async-badge {
+  font-size: .58rem; background: rgba(184,125,255,.15); color: var(--purple);
+  padding: 1px 5px; border-radius: 3px;
+}
+.st-method-chip {
+  display: inline-block; background: var(--s1); border: 1px solid var(--b1);
+  border-radius: 4px; padding: 1px 6px; font-family: var(--mono);
+  font-size: .65rem; color: var(--info); margin: 1px 2px;
+}
+
+/* ─── Imports ─────────────────────────────── */
+.st-import-grid {
+  display: flex; flex-wrap: wrap; gap: 5px; padding: 4px 0;
+}
+.st-import-chip {
+  display: flex; align-items: center; gap: 5px;
+  background: var(--s2); border: 1px solid var(--b0);
+  border-radius: 5px; padding: 4px 8px;
+  font-family: var(--mono); font-size: .68rem;
+  transition: border-color .12s;
+}
+.st-import-chip:hover   { border-color: var(--info); }
+.st-import-dead         { border-color: rgba(255,182,39,.3); background: rgba(255,182,39,.04); }
+.st-import-type {
+  font-size: .58rem; padding: 1px 5px; border-radius: 3px;
+  background: var(--s1); color: var(--muted); text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.st-import-name { color: var(--info); }
+.st-import-line { color: var(--b2); }
+.st-unused-badge {
+  font-size: .58rem; background: rgba(255,182,39,.15); color: var(--warn);
+  padding: 1px 5px; border-radius: 3px;
+}
+
+/* ─── Call graph ──────────────────────────── */
+.st-callgraph {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0;
+}
+.st-cg-edge {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--s2); border: 1px solid var(--b0);
+  border-radius: 5px; padding: 4px 8px;
+  font-family: var(--mono); font-size: .68rem;
+}
+.st-cg-caller { color: var(--info); font-weight: 700; }
+.st-cg-arrow  { color: var(--muted); }
+.st-cg-callee { color: var(--ok); }
+
+/* ─── WASM hints ──────────────────────────── */
+.st-wasm-reasons {
+  margin: 5px 0 5px 12px; padding: 0;
+  list-style: none;
+}
+.st-wasm-reasons li {
+  font-size: .72rem; color: var(--muted); padding: 2px 0;
+}
+.st-wasm-reasons li::before { content: '• '; color: var(--warn); }
+.st-wasm-rec {
+  font-size: .7rem; color: var(--ok);
+  background: rgba(0,245,160,.05); border-left: 2px solid var(--ok);
+  padding: 5px 8px; border-radius: 0 4px 4px 0; margin-top: 5px;
+  white-space: pre-line; font-family: var(--mono);
+}
+
+/* ─── Responsive ──────────────────────────── */
+@media (max-width: 680px) {
+  .st-summary-row { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .bigo-table .bigo-reason { display: none; }
+  .bigo-table .bigo-thetaomega { display: none; }
+  .st-toolbar { padding: 7px 10px; }
+}
+@media (max-width: 480px) {
+  .st-summary-row { grid-template-columns: repeat(2, 1fr); }
+  .bigo-table     { font-size: .68rem; }
+  .bigo-table th, .bigo-table td { padding: 4px 5px; }
+}

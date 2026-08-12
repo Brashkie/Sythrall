@@ -3,8 +3,8 @@ services:
   backend:
     build:
       context: .
-      dockerfile: backend/Dockerfile
-    container_name: codewatch-backend
+      dockerfile: apps/api/Dockerfile
+    container_name: sythrall-backend
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -19,13 +19,13 @@ services:
       retries: 3
       start_period: 25s
     networks:
-      - codewatch-net
+      - sythrall-net
 
   frontend:
     build:
       context: .
-      dockerfile: frontend/Dockerfile.frontend
-    container_name: codewatch-frontend
+      dockerfile: apps/web/Dockerfile.frontend
+    container_name: sythrall-frontend
     restart: unless-stopped
     ports:
       - "8080:80"
@@ -33,13 +33,13 @@ services:
       backend:
         condition: service_healthy
     networks:
-      - codewatch-net
+      - sythrall-net
 
   terminal:
     build:
       context: .
-      dockerfile: terminal-server/Dockerfile
-    container_name: codewatch-terminal
+      dockerfile: apps/terminal/Dockerfile
+    container_name: sythrall-terminal
     restart: unless-stopped
     ports:
       - "7681:7681"
@@ -49,11 +49,11 @@ services:
       # de puertos explícito, no el bind interno.
       - TERMINAL_HOST=0.0.0.0
     networks:
-      - codewatch-net
+      - sythrall-net
 
 volumes:
   uploads_data:    # proyectos subidos persisten entre reinicios
 
 networks:
-  codewatch-net:
+  sythrall-net:
     driver: bridge

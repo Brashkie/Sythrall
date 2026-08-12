@@ -1,10 +1,10 @@
-# CodeWatch PRO - Lint
+# Sythrall - Lint
 # Biome (frontend) + Ruff (backend), sin escribir cambios.
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $failed = $false
 
-Write-Host "== CodeWatch PRO - Lint ==" -ForegroundColor Cyan
+Write-Host "== Sythrall - Lint ==" -ForegroundColor Cyan
 
 Write-Host "`n[1/2] Frontend (biome check)..." -ForegroundColor Yellow
 Push-Location $root
@@ -19,7 +19,7 @@ $venvRuff = Join-Path $root ".venv\Scripts\ruff.exe"
 Write-Host "`n[2/2] Backend (ruff check)..." -ForegroundColor Yellow
 Push-Location $root
 try {
-    if (Test-Path $venvRuff) { & $venvRuff check backend } else { ruff check backend }
+    if (Test-Path $venvRuff) { & $venvRuff check apps/api } else { ruff check apps/api }
     if ($LASTEXITCODE -ne 0) { $failed = $true }
 } finally {
     Pop-Location

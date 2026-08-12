@@ -1,7 +1,7 @@
 {
-  "name": "codewatch-pro",
+  "name": "sythrall",
   "version": "4.5.0",
-  "description": "CodeWatch PRO — Monitor de API y código ML/DL · FastAPI backend",
+  "description": "Sythrall — Monitor de API y código ML/DL · FastAPI backend",
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev-banner.mjs && concurrently -n web,api,term -c blue,green,magenta \"npm:dev:web\" \"npm:dev:api\" \"npm:dev:term\"",

@@ -1,4 +1,4 @@
-# CodeWatch PRO - Dev (sin Docker)
+# Sythrall - Dev (sin Docker)
 # Wrapper fino: la orquestacion real vive en "npm run dev" (package.json),
 # que usa concurrently para levantar frontend (vite) y backend (uvicorn) juntos
 # en una sola consola, con logs [web]/[api].
@@ -19,7 +19,7 @@ if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
     Write-Host "(el resto de la app funciona igual). Instala Rust: https://rustup.rs" -ForegroundColor DarkYellow
 }
 
-Write-Host "== CodeWatch PRO - Dev (sin Docker) ==" -ForegroundColor Cyan
+Write-Host "== Sythrall - Dev (sin Docker) ==" -ForegroundColor Cyan
 Write-Host "  Backend:  http://localhost:8000  (Swagger: /docs)"
 Write-Host "  Frontend: http://localhost:5173"
 Write-Host "  Terminal: sidecar Rust en :7681 (token impreso en la consola [term])"

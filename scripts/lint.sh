@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# CodeWatch PRO — Lint
+# Sythrall — Lint
 # Biome (frontend) + Ruff (backend), sin escribir cambios.
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 failed=0
 
-echo "== CodeWatch PRO — Lint =="
+echo "== Sythrall — Lint =="
 
 echo ""
 echo "[1/2] Frontend (biome check)..."
@@ -16,7 +16,7 @@ VENV_RUFF="$root/.venv/bin/ruff"
 echo ""
 echo "[2/2] Backend (ruff check)..."
 cd "$root"
-if [ -f "$VENV_RUFF" ]; then "$VENV_RUFF" check backend; else ruff check backend; fi || failed=1
+if [ -f "$VENV_RUFF" ]; then "$VENV_RUFF" check apps/api; else ruff check apps/api; fi || failed=1
 
 if [ "$failed" -ne 0 ]; then
   echo ""

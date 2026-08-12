@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# CodeWatch PRO — Build
+# Sythrall — Build
 # Compila el frontend (Vite) y valida la sintaxis del backend.
 set -e
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-echo "== CodeWatch PRO — Build =="
+echo "== Sythrall — Build =="
 
 echo ""
 echo "[1/3] Frontend (typecheck + build)..."
@@ -18,7 +18,7 @@ if [ -f "$VENV_PYTHON" ]; then
   echo ""
   echo "[2/3] Backend (sanity check)..."
   cd "$root"
-  "$VENV_PYTHON" -m compileall -q backend/main.py backend/shared.py backend/routers backend/services
+  "$VENV_PYTHON" -m compileall -q apps/api/main.py apps/api/shared.py apps/api/routers apps/api/services
 else
   echo ""
   echo "[2/3] Backend — omitido (ejecuta scripts/setup.sh para validar también el backend)."

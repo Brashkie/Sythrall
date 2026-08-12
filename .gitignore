@@ -1,5 +1,5 @@
 # ================================
-# CODEWATCH-PRO — .gitignore v4.2
+# SYTHRALL — .gitignore v4.2
 # ================================
 
 # ── Dependencies ────────────────────────────────────────
@@ -68,8 +68,8 @@ htmlcov/
 *.c
 *.cpp
 # Except tracked source files — override below if needed
-!backend/services/*.c
-!backend/services/*.cpp
+!apps/api/services/*.c
+!apps/api/services/*.cpp
 
 # mypy / pyright
 .mypy_cache/
@@ -78,7 +78,7 @@ htmlcov/
 # ── Uploads / Project data ───────────────────────────────
 # Proyectos subidos por usuarios — no subir al repo
 # (genérico: el backend crea uploads/ relativo a su cwd, que normalmente es
-# backend/, pero cualquier invocación con otro cwd también debe quedar afuera)
+# apps/api/, pero cualquier invocación con otro cwd también debe quedar afuera)
 uploads/
 
 # ── Docker ───────────────────────────────────────────────
@@ -87,7 +87,7 @@ uploads/
 
 # ── TypeScript / Vite ────────────────────────────────────
 *.tsbuildinfo
-frontend/src/**/*.js.map
+apps/web/src/**/*.js.map
 
 # ── Misc ─────────────────────────────────────────────────
 *.zip

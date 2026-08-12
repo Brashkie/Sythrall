@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# CodeWatch PRO — Tests
+# Sythrall — Tests
 # Corre pytest (backend) y typecheck (frontend).
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 failed=0
 
-echo "== CodeWatch PRO — Tests =="
+echo "== Sythrall — Tests =="
 
 VENV_PYTHON="$root/.venv/bin/python"
 [ -f "$VENV_PYTHON" ] || VENV_PYTHON="$root/.venv/Scripts/python.exe"
@@ -15,7 +15,7 @@ fi
 
 echo ""
 echo "[1/2] Backend (pytest)..."
-cd "$root/backend"
+cd "$root/apps/api"
 "$VENV_PYTHON" -m pytest || failed=1
 
 echo ""

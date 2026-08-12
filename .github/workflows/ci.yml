@@ -39,9 +39,9 @@ jobs:
           cache: "pip"
 
       - run: pip install -r requirements.txt -r requirements-dev.txt
-      - run: ruff check backend
-      - run: ruff format --check backend
-      - run: cd backend && pytest
+      - run: ruff check apps/api
+      - run: ruff format --check apps/api
+      - run: cd apps/api && pytest
 
   terminal:
     name: Terminal sidecar (cargo build · clippy · test)
