@@ -444,7 +444,9 @@ def _run_flake8_batch(filepaths: list[str]) -> dict[str, list[dict]]:
                     pass
     except Exception as e:
         for fp in filepaths:
-            by_path[fp].append({"tool": "flake8", "line": 0, "col": 0, "severity": "info", "code": "ERR", "message": str(e)})
+            by_path[fp].append(
+                {"tool": "flake8", "line": 0, "col": 0, "severity": "info", "code": "ERR", "message": str(e)}
+            )
     return by_path
 
 
@@ -489,7 +491,9 @@ def _run_pylint_batch(filepaths: list[str]) -> dict[str, list[dict]]:
                 pass
     except Exception as e:
         for fp in filepaths:
-            by_path[fp].append({"tool": "pylint", "line": 0, "col": 0, "severity": "info", "code": "ERR", "message": str(e)})
+            by_path[fp].append(
+                {"tool": "pylint", "line": 0, "col": 0, "severity": "info", "code": "ERR", "message": str(e)}
+            )
     return by_path
 
 
