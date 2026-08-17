@@ -122,6 +122,10 @@ def _parse_python(filename: str, content: str) -> dict:
             bigo_theta, bigo_omega = _theta_omega_python(has_early_exit, bigo)
             decorators = [_decorator_name(d) for d in node.decorator_list]
 
+            regex_info = _regex_info_python(node)
+            grammar_info = _grammar_info_python(node, recursion["is_recursive"])
+            graph_info = _graph_traversal_info_python(node, recursion["is_recursive"])
+
             functions.append(
                 {
                     "name": node.name,
@@ -140,6 +144,12 @@ def _parse_python(filename: str, content: str) -> dict:
                     "is_recursive": recursion["is_recursive"],
                     "is_tail_recursive": recursion["is_tail_recursive"],
                     "recursion_note": _recursion_note(recursion),
+                    "regex_class": "Type-3 (Regular)" if regex_info["uses_regex"] else None,
+                    "regex_note": _regex_note(regex_info),
+                    "grammar_class": "Type-2 (Context-Free)" if grammar_info["is_grammar_shaped"] else None,
+                    "grammar_note": _grammar_note(grammar_info),
+                    "graph_traversal": graph_info["traversal_kind"],
+                    "graph_traversal_note": _graph_traversal_note(graph_info),
                     "calls": _extract_calls_python(node),
                     "returns_annotated": node.returns is not None,
                 }
@@ -711,6 +721,128 @@ def _recursion_note(info: dict) -> str | None:
         "No es tail-call — queda trabajo pendiente después de la llamada recursiva "
         "(ej. sumar su resultado); cada nivel de recursión consume una entrada de stack."
     )
+
+
+_REGEX_METHODS = {"compile", "match", "fullmatch", "search", "findall", "finditer", "sub", "subn", "split"}
+
+
+def _regex_info_python(func: ast.FunctionDef) -> dict:
+    """Detecta llamadas directas a `re.XXX(...)` — no sigue un `re.Pattern`
+    guardado en variable (`p = re.compile(...); p.match(x)`), esa parte
+    necesitaría rastrear asignaciones, no vale la pena para una heurística."""
+    call_count = 0
+    for n in ast.walk(func):
+        if (
+            isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Attribute)
+            and n.func.attr in _REGEX_METHODS
+            and isinstance(n.func.value, ast.Name)
+            and n.func.value.id == "re"
+        ):
+            call_count += 1
+    return {"uses_regex": call_count > 0, "regex_call_count": call_count}
+
+
+def _regex_note(info: dict) -> str | None:
+    """Chomsky Tipo-3 (lenguaje regular, reconocido por un autómata finito).
+    Aclaración honesta: el motor `re` de Python es backtracking, no un DFA
+    puro — la mayoría de patrones son lineales, pero patrones ambiguos o muy
+    anidados pueden degradar a O(2^n) (catastrophic backtracking)."""
+    if not info["uses_regex"]:
+        return None
+    return (
+        "Regex detectado — Chomsky Tipo-3 (lenguaje regular), reconocido por un "
+        "autómata finito. El motor `re` de Python es backtracking, no un DFA puro: "
+        "la mayoría de patrones son lineales, pero patrones ambiguos/anidados pueden "
+        "degradar a O(2^n) en el peor caso (catastrophic backtracking)."
+    )
+
+
+def _names_with_calls_python(func: ast.FunctionDef, method_names: set[str]) -> set[str]:
+    """Nombres de variable local sobre los que se llamó alguno de
+    `method_names` (ej. {"append","pop"} para detectar un patrón de pila
+    explícita, {"popleft"} para detectar una cola). Un solo walk, reusado por
+    el clasificador de grammar/parser y el de graph traversal."""
+    names: set[str] = set()
+    for n in ast.walk(func):
+        if (
+            isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Attribute)
+            and n.func.attr in method_names
+            and isinstance(n.func.value, ast.Name)
+        ):
+            names.add(n.func.value.id)
+    return names
+
+
+_GRAMMAR_NAME_KEYWORDS = ("parse", "parser", "grammar", "tokenize", "lexer", "lex_", "ast_")
+
+
+def _grammar_info_python(func: ast.FunctionDef, is_recursive: bool) -> dict:
+    """Heurística de dos señales: nombre sugiere parsing Y (recursión O pila
+    explícita — ambas formas típicas de recursive-descent / shift-reduce
+    parsing). Ninguna señal sola alcanza, para no generar demasiados falsos
+    positivos (`is_recursive` se recibe ya calculado, mismo patrón que
+    `_infer_big_o_python`)."""
+    name_match = any(kw in func.name.lower() for kw in _GRAMMAR_NAME_KEYWORDS)
+    if not name_match:
+        return {"is_grammar_shaped": False, "signal": None}
+
+    stack_names = _names_with_calls_python(func, {"append", "pop"})
+    has_stack = bool(stack_names)
+
+    if is_recursive and has_stack:
+        return {"is_grammar_shaped": True, "signal": "name+recursion+stack"}
+    if is_recursive:
+        return {"is_grammar_shaped": True, "signal": "name+recursion"}
+    if has_stack:
+        return {"is_grammar_shaped": True, "signal": "name+stack"}
+    return {"is_grammar_shaped": False, "signal": None}
+
+
+def _grammar_note(info: dict) -> str | None:
+    if not info["is_grammar_shaped"]:
+        return None
+    return (
+        "Nombre + patrón de recursión/pila sugieren código de parsing — Chomsky "
+        "Tipo-2 (gramática libre de contexto), reconocido por un autómata de pila "
+        "(pushdown automaton). Heurística por nombre y forma del código, no un "
+        "análisis semántico — puede haber falsos positivos/negativos."
+    )
+
+
+def _graph_traversal_info_python(func: ast.FunctionDef, is_recursive: bool) -> dict:
+    """`visited`/`seen`/`explored` + señal de cola (`popleft`, BFS) o pila/
+    recursión (DFS); `in_degree`/`indegree` → Kahn's algorithm (topological
+    sort). Mismo criterio heurístico que el resto del engine — nombres de
+    variable, no un análisis de flujo de datos real."""
+    assigned = {
+        t.id for n in ast.walk(func) if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)
+    } | {n.target.id for n in ast.walk(func) if isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name)}
+    assigned = {name.lower() for name in assigned}
+
+    has_indegree = bool(assigned & {"in_degree", "indegree", "in_deg"})
+    has_visited = bool(assigned & {"visited", "seen", "explored"})
+
+    if has_indegree:
+        return {"traversal_kind": "Topological Sort (Kahn's algorithm)"}
+
+    if has_visited:
+        queue_names = _names_with_calls_python(func, {"popleft"})
+        if queue_names:
+            return {"traversal_kind": "BFS"}
+        stack_names = _names_with_calls_python(func, {"append", "pop"})
+        if is_recursive or stack_names:
+            return {"traversal_kind": "DFS"}
+
+    return {"traversal_kind": None}
+
+
+def _graph_traversal_note(info: dict) -> str | None:
+    kind = info["traversal_kind"]
+    if not kind:
+        return None
+    return f"{kind} detectado (heurística por nombres de variable) — O(V+E): cada nodo y arista se visita una cantidad constante de veces."
 
 
 def _infer_big_o_python(func: ast.FunctionDef, is_recursive: bool, depth: int) -> tuple[str, str]:

@@ -19,6 +19,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from services.static_parser import _cyclomatic_python
+from services.complexity_client import check_complexity_engine
 
 router = APIRouter()
 
@@ -385,12 +386,7 @@ async def metrics_health() -> dict[str, Any]:
     except ImportError:
         caps["tree_sitter"] = False
 
-    try:
-        import radon  # noqa: F401
-
-        caps["radon"] = True
-    except ImportError:
-        caps["radon"] = False
+    caps["complexity"] = await check_complexity_engine()
 
     try:
         import pylint  # noqa: F401

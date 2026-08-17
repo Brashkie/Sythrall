@@ -26,12 +26,12 @@ fi
 
 if command -v cargo >/dev/null 2>&1; then
   echo ""
-  echo "[3/3] Terminal sidecar (cargo build --release)..."
+  echo "[3/3] Rust sidecars (terminal + complexity) (cargo build --release)..."
   cd "$root"
   cargo build --release
 else
   echo ""
-  echo "[3/3] Terminal sidecar — omitido (instala Rust: https://rustup.rs)."
+  echo "[3/3] Rust sidecars (terminal + complexity) — omitido (instala Rust: https://rustup.rs)."
 fi
 
 echo ""

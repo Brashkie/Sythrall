@@ -9,4 +9,4 @@ console.log(
     colorFn: (t) => gradient(t, ['#3d9eff', '#b87dff', '#00f5a0']),
   }),
 )
-console.log(ascii.box('web :5173   api :8000   term :7681', { padding: 1, borderStyle: 'rounded' }))
+console.log(ascii.box('web :5173   api :8000   term :7681   cx :7682', { padding: 1, borderStyle: 'rounded' }))

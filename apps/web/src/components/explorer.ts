@@ -642,19 +642,6 @@ export function explorerSelectFile(id: string): void {
   import('./app').then((m) => m.rpTab?.('analysis'))
 }
 
-export function explorerMarkModified(id: string, modified: boolean): void {
-  const tab = _tabs.find((t) => t.id === id)
-  if (tab) {
-    tab.modified = modified
-    _renderFileTabs()
-  }
-}
-
-export function explorerRefresh(): void {
-  _renderFileTree()
-  _renderFileTabs()
-}
-
 // ══════════════════════════════════════════
 //  KEYBOARD SHORTCUTS
 // ══════════════════════════════════════════

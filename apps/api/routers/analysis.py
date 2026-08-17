@@ -1,7 +1,7 @@
 """
 Router: Analysis
 Migración exacta de /analyze/code, /check/api, /analyze/logs del app.py Flask v3.0.
-Preserva toda la lógica: _run_ast, _run_flake8, _run_pylint, _run_radon.
+Preserva toda la lógica: _run_ast, _run_flake8, _run_pylint, _run_complexity.
 """
 
 import ast
@@ -14,16 +14,9 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from shared import add_log, now, save_temp, safe_remove, LIB_FLAGS, API_HISTORY
+from shared import add_log, now, save_temp, safe_remove, API_HISTORY
 from services.project_service import read_project_files
-
-# radon imports (opcionales)
-try:
-    from radon.complexity import cc_visit, cc_rank
-    from radon.metrics import mi_visit
-    from radon.raw import analyze as radon_raw
-except ImportError:
-    pass
+from services.complexity_client import analyze_complexity
 
 router = APIRouter()
 
@@ -34,7 +27,7 @@ router = APIRouter()
 class AnalyzeCodeRequest(BaseModel):
     filename: str = "script.py"
     content: str = ""
-    tools: list[str] = ["ast", "flake8", "pylint", "radon"]
+    tools: list[str] = ["ast", "flake8", "pylint", "complexity"]
 
 
 class CheckApiRequest(BaseModel):
@@ -50,7 +43,7 @@ class AnalyzeLogsRequest(BaseModel):
 class AnalyzeProjectRequest(BaseModel):
     files: list[dict] = []  # [{"filename": "...", "content": "..."}] — ignorado si viene project_id
     project_id: str | None = None  # si viene, se lee del disco en vez de usar `files`
-    tools: list[str] = ["ast", "flake8", "pylint", "radon"]
+    tools: list[str] = ["ast", "flake8", "pylint", "complexity"]
 
 
 # ── /analyze/code ─────────────────────────────────────────────────────────────
@@ -92,12 +85,12 @@ async def analyze_code(req: AnalyzeCodeRequest):
             result["metrics"]["pylint_score"] = score
             result["tools_used"].append("pylint")
 
-        if ext == ".py" and "radon" in tools and LIB_FLAGS["HAS_RADON"]:
-            cx, mi, raw = _run_radon(content, filename)
+        if ext == ".py" and "complexity" in tools:
+            cx, mi, raw = await _run_complexity(content, filename)
             result["complexity"] = cx
             result["maintainability"] = mi
             result["raw_stats"] = raw
-            result["tools_used"].append("radon")
+            result["tools_used"].append("complexity")
 
         if ext == ".json":
             try:
@@ -180,14 +173,14 @@ async def analyze_project(req: AnalyzeProjectRequest) -> dict[str, Any]:
             results[fname]["issues"].extend(_run_ast(f.get("content", ""), fname))
             results[fname]["tools_used"].append("ast")
 
-    if "radon" in req.tools and LIB_FLAGS["HAS_RADON"]:
+    if "complexity" in req.tools:
         for f in py_files:
             fname = f.get("filename", "unknown")
-            cx, mi, raw = _run_radon(f.get("content", ""), fname)
+            cx, mi, raw = await _run_complexity(f.get("content", ""), fname)
             results[fname]["complexity"] = cx
             results[fname]["maintainability"] = mi
             results[fname]["raw_stats"] = raw
-            results[fname]["tools_used"].append("radon")
+            results[fname]["tools_used"].append("complexity")
 
     tmp_by_filename: dict[str, str] = {}
     try:
@@ -497,35 +490,12 @@ def _run_pylint_batch(filepaths: list[str]) -> dict[str, list[dict]]:
     return by_path
 
 
-def _run_radon(content: str, filename: str) -> tuple[list, float | None, dict]:
-    cx_list: list = []
-    mi_score: float | None = None
-    raw_stats: dict = {}
-    try:
-        for block in cc_visit(content):
-            cx_list.append(
-                {
-                    "name": block.name,
-                    "type": getattr(block, "type", "function"),
-                    "line": block.lineno,
-                    "complexity": block.complexity,
-                    "rank": cc_rank(block.complexity),
-                }
-            )
-        mi_raw = mi_visit(content, multi=True)
-        mi_score = round(mi_raw, 2) if isinstance(mi_raw, float) else None
-        raw = radon_raw(content)
-        raw_stats = {
-            "loc": raw.loc,
-            "lloc": raw.lloc,
-            "sloc": raw.sloc,
-            "comments": raw.comments,
-            "blank": raw.blank,
-            "multi": raw.multi,
-        }
-    except Exception as e:
-        raw_stats["error"] = str(e)
-    return cx_list, mi_score, raw_stats
+async def _run_complexity(content: str, filename: str) -> tuple[list, float | None, dict]:
+    data = await analyze_complexity(filename, content)
+    raw_stats = data.get("raw") or {}
+    if data.get("error"):
+        raw_stats["error"] = data["error"]
+    return data.get("functions") or [], data.get("mi"), raw_stats
 
 
 # ── /check/api ────────────────────────────────────────────────────────────────

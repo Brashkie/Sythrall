@@ -1,13 +1,14 @@
 {
   "name": "sythrall",
-  "version": "4.6.0",
+  "version": "4.7.0",
   "description": "Sythrall — Monitor de API y código ML/DL · FastAPI backend",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/dev-banner.mjs && concurrently -n web,api,term -c blue,green,magenta \"npm:dev:web\" \"npm:dev:api\" \"npm:dev:term\"",
+    "dev": "node scripts/dev-banner.mjs && concurrently -n web,api,term,cx -c blue,green,magenta,cyan \"npm:dev:web\" \"npm:dev:api\" \"npm:dev:term\" \"npm:dev:cx\"",
     "dev:web": "vite",
     "dev:api": "node scripts/run-backend.mjs",
     "dev:term": "node scripts/run-terminal.mjs",
+    "dev:cx": "node scripts/run-complexity.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",

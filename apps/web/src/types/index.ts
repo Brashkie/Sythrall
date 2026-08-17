@@ -203,7 +203,7 @@ export interface Capabilities {
   ts: string
   flake8: boolean
   pylint: boolean
-  radon: boolean
+  complexity: boolean
   numpy: boolean
   pandas: boolean
   polars: boolean

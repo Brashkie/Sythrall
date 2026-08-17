@@ -147,7 +147,7 @@ async function _runHeavyAnalyze(): Promise<void> {
     const res = await fetch(getApiBase() + '/intel/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename: _currentFile, content, tools: ['ast', 'flake8', 'radon'] }),
+      body: JSON.stringify({ filename: _currentFile, content, tools: ['ast', 'flake8', 'complexity'] }),
       signal: ctrl.signal,
     })
     clearTimeout(tid)

@@ -7,7 +7,9 @@ httpx==0.27.2                  # Reemplaza requests (async-native)
 # ─── Análisis de código ───────────────────────────────────────────────────────
 flake8==7.1.0
 pylint==3.2.6
-radon==6.0.1
+# La complejidad ciclomática/Maintainability Index/métricas raw las calcula
+# ahora el sidecar Rust apps/complexity (complexity-engine), no una librería
+# Python — ver services/complexity_client.py y CHANGELOG.md.
 
 # ─── Data / ML ────────────────────────────────────────────────────────────────
 numpy==1.26.4

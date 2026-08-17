@@ -385,7 +385,7 @@ export const api = {
     post<AnalysisResult>('/analyze/code', {
       filename,
       content,
-      tools: ['ast', 'flake8', 'pylint', 'radon'],
+      tools: ['ast', 'flake8', 'pylint', 'complexity'],
     }),
 
   // ── Análisis de proyecto completo — flake8/pylint corren UNA vez para todos
@@ -394,7 +394,7 @@ export const api = {
   analyzeProject: (files: { filename: string; content: string }[]) =>
     post<AnalyzeProjectResult>('/analyze/project', {
       files,
-      tools: ['ast', 'flake8', 'pylint', 'radon'],
+      tools: ['ast', 'flake8', 'pylint', 'complexity'],
     }),
 
   /** Igual que analyzeProject, pero para un proyecto ya subido (Proyectos) —
@@ -402,7 +402,7 @@ export const api = {
   analyzeProjectById: (projectId: string) =>
     post<AnalyzeProjectResult>('/analyze/project', {
       project_id: projectId,
-      tools: ['ast', 'flake8', 'pylint', 'radon'],
+      tools: ['ast', 'flake8', 'pylint', 'complexity'],
     }),
 
   // ── ML/DL
@@ -535,7 +535,7 @@ export const api = {
 
   intelLint: (filename: string, content: string) => post<IntelLintResult>('/intel/lint', { filename, content }),
 
-  intelAnalyze: (filename: string, content: string, tools = ['ast', 'flake8', 'radon']) =>
+  intelAnalyze: (filename: string, content: string, tools = ['ast', 'flake8', 'complexity']) =>
     post<IntelAnalyzeResult>('/intel/analyze', { filename, content, tools }),
 
   intelHover: (filename: string, content: string, line: number, column: number, symbol_name: string) =>

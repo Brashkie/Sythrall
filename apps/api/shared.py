@@ -24,7 +24,7 @@ API_HISTORY: dict[str, list] = {}
 LIB_FLAGS: dict[str, bool] = {
     "HAS_FLAKE8": False,
     "HAS_PYLINT": False,
-    "HAS_RADON": False,
+    "HAS_COMPLEXITY_ENGINE": False,
     "HAS_NUMPY": False,
     "HAS_PANDAS": False,
     "HAS_SKLEARN": False,

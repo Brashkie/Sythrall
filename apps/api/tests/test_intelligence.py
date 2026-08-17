@@ -215,12 +215,14 @@ class TestFastLintTypeScript:
 
 class TestHeavyAnalyze:
     def test_analyze_ok(self):
-        r = client.post("/intel/analyze", json={"filename": "test.py", "content": PY_ISSUES, "tools": ["ast", "radon"]})
+        r = client.post(
+            "/intel/analyze", json={"filename": "test.py", "content": PY_ISSUES, "tools": ["ast", "complexity"]}
+        )
         assert r.status_code == 200
 
     def test_analyze_returns_big_o(self):
         data = client.post(
-            "/intel/analyze", json={"filename": "test.py", "content": PY_ISSUES, "tools": ["ast", "radon"]}
+            "/intel/analyze", json={"filename": "test.py", "content": PY_ISSUES, "tools": ["ast", "complexity"]}
         ).json()
         assert "big_o" in data
         assert len(data["big_o"]) >= 2
@@ -279,13 +281,17 @@ class TestHeavyAnalyze:
         assert r.status_code == 200
         assert r.json()["big_o"] == []
 
-    def test_analyze_radon_metrics(self):
+    def test_analyze_complexity_metrics(self):
+        # El sidecar Rust (apps/complexity) es una capacidad opcional — en CI
+        # no está corriendo, así que esto ejercita el wiring (request → shape
+        # de respuesta) y la degradación con gracia, no los valores en sí
+        # (eso lo cubre `cargo test` sobre apps/complexity/src/*.rs).
         data = client.post(
             "/intel/analyze",
             json={
                 "filename": "test.py",
                 "content": PY_ISSUES,
-                "tools": ["radon"],
+                "tools": ["complexity"],
             },
         ).json()
         assert "metrics" in data
@@ -294,6 +300,91 @@ class TestHeavyAnalyze:
                 assert "name" in fn
                 assert "complexity" in fn
                 assert "rank" in fn
+
+
+# ─── /intel/analyze — clasificadores CS Engine (regex/grammar/graph) ────────
+
+
+CS_CLASSIFIERS_PY = """
+import re
+from collections import deque
+
+def has_email(s):
+    return re.search(r"[\\w.]+@[\\w.]+", s) is not None
+
+def parse_expr(tokens, pos):
+    stack = []
+    stack.append(tokens[pos])
+    if pos < len(tokens):
+        return parse_expr(tokens, pos + 1)
+    return stack.pop()
+
+def factorial(n):
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)
+
+def bfs(graph, start):
+    visited = set([start])
+    queue = deque([start])
+    while queue:
+        node = queue.popleft()
+        for n in graph[node]:
+            if n not in visited:
+                visited.add(n)
+                queue.append(n)
+    return visited
+
+def topo_sort(graph):
+    in_degree = {}
+    for node in graph:
+        in_degree[node] = 0
+    return in_degree
+
+def plain(x):
+    return x + 1
+"""
+
+
+class TestCsEngineClassifiers:
+    def _functions(self):
+        data = client.post(
+            "/intel/analyze", json={"filename": "cs.py", "content": CS_CLASSIFIERS_PY, "tools": ["ast"]}
+        ).json()
+        return {f["name"]: f for f in data["big_o"]}
+
+    def test_regex_classified_as_type3(self):
+        fn = self._functions()["has_email"]
+        assert fn["regex_class"] == "Type-3 (Regular)"
+        assert fn["regex_note"]
+
+    def test_regex_not_classified_without_re_call(self):
+        fn = self._functions()["plain"]
+        assert fn["regex_class"] is None
+        assert fn["regex_note"] is None
+
+    def test_grammar_classified_by_name_and_shape(self):
+        fn = self._functions()["parse_expr"]
+        assert fn["grammar_class"] == "Type-2 (Context-Free)"
+        assert fn["grammar_note"]
+
+    def test_grammar_requires_name_signal_not_just_recursion(self):
+        # Recursiva pero sin nombre de parser — la señal de nombre es obligatoria.
+        fn = self._functions()["factorial"]
+        assert fn["grammar_class"] is None
+
+    def test_graph_traversal_bfs(self):
+        fn = self._functions()["bfs"]
+        assert fn["graph_traversal"] == "BFS"
+        assert fn["graph_traversal_note"]
+
+    def test_graph_traversal_topological_sort(self):
+        fn = self._functions()["topo_sort"]
+        assert fn["graph_traversal"] == "Topological Sort (Kahn's algorithm)"
+
+    def test_graph_traversal_none_for_plain_function(self):
+        fn = self._functions()["plain"]
+        assert fn["graph_traversal"] is None
 
 
 # ─── /intel/hover — Python ───────────────────────────────────────────────────

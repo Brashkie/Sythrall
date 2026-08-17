@@ -7,12 +7,12 @@ COPY Cargo.toml Cargo.lock ./
 # existan para poder resolverlo, aunque acá solo se compile uno.
 COPY apps/terminal/ apps/terminal/
 COPY apps/complexity/ apps/complexity/
-RUN cargo build --release --bin terminal-server
+RUN cargo build --release --bin complexity-engine
 
 # Runtime stage — solo el binario, imagen chica
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends bash ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/target/release/terminal-server /usr/local/bin/terminal-server
-EXPOSE 7681
-CMD ["terminal-server"]
+COPY --from=builder /app/target/release/complexity-engine /usr/local/bin/complexity-engine
+EXPOSE 7682
+CMD ["complexity-engine"]

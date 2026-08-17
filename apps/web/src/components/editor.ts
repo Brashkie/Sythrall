@@ -11,7 +11,7 @@ import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
 import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
 import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 
-import { initLiveMetrics, updateLiveMetricsContent } from '../panels/problems'
+import { initLiveMetrics, updateLiveMetricsContent, updateProblems } from '../panels/problems'
 import type { CodeFile } from '../types'
 import { debounce } from '../utils/helpers'
 import { initEditorIntelligence, notifyFileChanged } from './editor-intelligence'
@@ -153,13 +153,9 @@ export function applyMarkers(file: CodeFile): void {
     el.textContent = markers.length ? `⚠ ${markers.length} error(es)` : ''
     el.style.color = markers.length ? 'var(--err)' : 'var(--ok)'
   }
+  updateProblems(file)
 }
 
 export function getEditorValue(): string | null {
   return editorInstance?.getValue() ?? null
-}
-
-export function copyEditorContent(): void {
-  const val = getEditorValue()
-  if (val) navigator.clipboard.writeText(val)
 }

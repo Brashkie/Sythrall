@@ -10,6 +10,9 @@ services:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
+      # Nombre del servicio Docker, no 127.0.0.1 — dentro de la red de
+      # docker-compose cada contenedor se resuelve por su nombre de servicio.
+      - COMPLEXITY_ENGINE_URL=http://complexity:7682
     volumes:
       - uploads_data:/app/uploads
     healthcheck:
@@ -48,6 +51,19 @@ services:
       # de Docker — el aislamiento real ya lo da la red del contenedor/el mapeo
       # de puertos explícito, no el bind interno.
       - TERMINAL_HOST=0.0.0.0
+    networks:
+      - sythrall-net
+
+  complexity:
+    build:
+      context: .
+      dockerfile: apps/complexity/Dockerfile
+    container_name: sythrall-complexity
+    restart: unless-stopped
+    ports:
+      - "7682:7682"
+    environment:
+      - COMPLEXITY_HOST=0.0.0.0
     networks:
       - sythrall-net
 

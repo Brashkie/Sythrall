@@ -7,6 +7,14 @@ edition = "2021"
 name = "terminal-server"
 path = "apps/terminal/src/main.rs"
 
+[[bin]]
+name = "complexity-engine"
+path = "apps/complexity/src/main.rs"
+
+[lib]
+name = "complexity_core"
+path = "apps/complexity/src/lib.rs"
+
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "sync", "signal"] }
 axum = { version = "0.7", features = ["ws"] }
@@ -20,6 +28,15 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+rustpython-parser = "0.4"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "complexity_bench"
+path = "apps/complexity/benches/complexity_bench.rs"
+harness = false
 
 [profile.release]
 opt-level = 2

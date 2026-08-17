@@ -1,11 +1,10 @@
 // ══════════════════════════════════════════
 //  Sythrall — Problems Panel + Live Metrics Bar
 //  v4.3: VSCode-style problems + editor metrics
-//
-//  INTEGRACIÓN en editor.ts — 2 líneas:
-//    import { initLiveMetrics, updateProblems } from '../panels/problems'
-//    // en loadFileInEditor(): initLiveMetrics(file.name, file.content)
-//    // en applyMarkers(): updateProblems(file)
+//  Wireado en editor.ts (loadFileInEditor → initLiveMetrics, applyMarkers →
+//  updateProblems). Renderiza en su propio sub-tab del panel derecho
+//  (#problems-content, rp-tab "problems") — no comparte contenedor con el
+//  sub-tab "Análisis" (#analysis-content, panels/analysis.ts).
 // ══════════════════════════════════════════
 
 import { getApiBase } from '../store/state'
@@ -145,7 +144,7 @@ function _setMetric(id: string, text: string, color?: string): void {
 // ══════════════════════════════════════════
 
 export function updateProblems(file: CodeFile, liveMetrics?: LiveMetricsData): void {
-  const container = document.getElementById('analysis-content')
+  const container = document.getElementById('problems-content')
   if (!container) return
 
   const errors = file.issues.filter((i) => i.severity === 'error')

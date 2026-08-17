@@ -1,5 +1,5 @@
 """
-Sythrall — Backend FastAPI v4.1
+Sythrall — Backend FastAPI v4.7
 Migración completa de Flask → FastAPI. Hepein Oficial
 """
 
@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from shared import add_log, now, LIB_FLAGS
+from services.complexity_client import check_complexity_engine_sync
 
 # ── Imports condicionales ────────────────────────────────────────────────────
 try:
@@ -23,14 +24,11 @@ try:
     LIB_FLAGS["HAS_PYLINT"] = True
 except ImportError:
     pass
-try:
-    from radon.complexity import cc_visit, cc_rank  # noqa: F401
-    from radon.metrics import mi_visit  # noqa: F401
-    from radon.raw import analyze as radon_raw  # noqa: F401
 
-    LIB_FLAGS["HAS_RADON"] = True
-except ImportError:
-    pass
+# A diferencia del resto (import-based: la lib está instalada o no), esto es
+# un chequeo de red — el sidecar Rust `complexity-engine` es un proceso
+# aparte (ver apps/complexity), puede estar simplemente no-levantado todavía.
+LIB_FLAGS["HAS_COMPLEXITY_ENGINE"] = check_complexity_engine_sync()
 try:
     import numpy as np
 
@@ -113,7 +111,7 @@ except ImportError:
 # Shorthand booleans para /health y /capabilities
 HAS_FLAKE8 = LIB_FLAGS["HAS_FLAKE8"]
 HAS_PYLINT = LIB_FLAGS["HAS_PYLINT"]
-HAS_RADON = LIB_FLAGS["HAS_RADON"]
+HAS_COMPLEXITY_ENGINE = LIB_FLAGS["HAS_COMPLEXITY_ENGINE"]
 HAS_NUMPY = LIB_FLAGS["HAS_NUMPY"]
 HAS_PANDAS = LIB_FLAGS["HAS_PANDAS"]
 HAS_SKLEARN = LIB_FLAGS["HAS_SKLEARN"]
@@ -132,10 +130,11 @@ HAS_CYTHON = LIB_FLAGS["HAS_CYTHON"]
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     os.makedirs("uploads/projects", exist_ok=True)
-    add_log("info", "🚀 Sythrall v4.5 — FastAPI")
+    add_log("info", "🚀 Sythrall v4.7 — FastAPI")
     add_log(
         "info",
-        f"   flake8={'✓' if HAS_FLAKE8 else '✗'}  pylint={'✓' if HAS_PYLINT else '✗'}  radon={'✓' if HAS_RADON else '✗'}",
+        f"   flake8={'✓' if HAS_FLAKE8 else '✗'}  pylint={'✓' if HAS_PYLINT else '✗'}  "
+        f"complexity={'✓' if HAS_COMPLEXITY_ENGINE else '✗'}",
     )
     add_log(
         "info",
@@ -154,7 +153,7 @@ async def lifespan(app: FastAPI):
     add_log("info", "🛑 Sythrall detenido.")
 
 
-app = FastAPI(title="Sythrall", version="4.6.0", lifespan=lifespan)
+app = FastAPI(title="Sythrall", version="4.7.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )
@@ -192,7 +191,7 @@ async def health():
         "capabilities": {
             "flake8": HAS_FLAKE8,
             "pylint": HAS_PYLINT,
-            "radon": HAS_RADON,
+            "complexity": HAS_COMPLEXITY_ENGINE,
             "numpy": HAS_NUMPY,
             "pandas": HAS_PANDAS,
             "sklearn": HAS_SKLEARN,
@@ -209,7 +208,7 @@ async def capabilities():
 
     caps: dict = {
         "python": sys.version,
-        "server": "Sythrall v4.5",
+        "server": "Sythrall v4.7",
         "ts": now(),
         **{k: v for k, v in LIB_FLAGS.items()},
     }

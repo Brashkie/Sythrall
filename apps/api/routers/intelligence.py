@@ -3,7 +3,7 @@ Router: Editor Intelligence
 Endpoints optimizados para feedback en tiempo real en Monaco Editor.
 
 Fast path  (~15ms):  POST /intel/lint      → AST + syntax errors
-Heavy path (~80ms):  POST /intel/analyze   → pylint + radon + Big-O
+Heavy path (~80ms):  POST /intel/analyze   → pylint + complexity engine + Big-O
 Hover:               POST /intel/hover     → firma + Big-O + CC + docs para una función
 """
 
@@ -21,6 +21,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from shared import add_log, save_temp, safe_remove
+from services.complexity_client import analyze_complexity
 from services.static_parser import (
     _parse_ts,
     _parse_js,
@@ -30,6 +31,12 @@ from services.static_parser import (
     _recursion_info_python,
     _recursion_note,
     _loop_analysis_python,
+    _regex_info_python,
+    _regex_note,
+    _grammar_info_python,
+    _grammar_note,
+    _graph_traversal_info_python,
+    _graph_traversal_note,
 )
 
 router = APIRouter()
@@ -46,7 +53,7 @@ class LintRequest(BaseModel):
 class AnalyzeRequest(BaseModel):
     filename: str = "script.py"
     content: str = ""
-    tools: list[str] = ["ast", "flake8", "pylint", "radon"]
+    tools: list[str] = ["ast", "flake8", "pylint", "complexity"]
 
 
 class HoverRequest(BaseModel):
@@ -235,14 +242,14 @@ def _mk(
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  HEAVY PATH — análisis completo (idle 2s)
-#  pylint + radon + flake8. Se llama cuando el usuario para de escribir.
+#  pylint + complexity engine + flake8. Se llama cuando el usuario para de escribir.
 # ══════════════════════════════════════════════════════════════════════════════
 
 
 @router.post("/analyze")
 async def heavy_analyze(req: AnalyzeRequest) -> dict[str, Any]:
     """
-    Análisis completo con subprocess (pylint, flake8, radon).
+    Análisis completo con subprocess (pylint, flake8) + sidecar Rust (complexity).
     Se llama en idle ~2s, no en cada keystroke.
     Retorna markers + métricas + Big-O.
     """
@@ -268,9 +275,9 @@ async def heavy_analyze(req: AnalyzeRequest) -> dict[str, Any]:
                 if score is not None:
                     metrics["pylint_score"] = score
 
-            # radon CC + MI
-            if "radon" in req.tools:
-                cc_data, mi = _run_radon_metrics(req.content)
+            # complexity engine (Rust) — CC + MI
+            if "complexity" in req.tools:
+                cc_data, mi = await _run_complexity_metrics(req.content)
                 metrics["complexity"] = cc_data
                 metrics["maintainability"] = mi
 
@@ -284,6 +291,9 @@ async def heavy_analyze(req: AnalyzeRequest) -> dict[str, Any]:
                         bigo, reason = _infer_big_o_python(node, recursion["is_recursive"], depth)
                         theta, omega = _theta_omega_python(has_early_exit, bigo)
                         cc = _cyclomatic_python(node)
+                        regex_info = _regex_info_python(node)
+                        grammar_info = _grammar_info_python(node, recursion["is_recursive"])
+                        graph_info = _graph_traversal_info_python(node, recursion["is_recursive"])
                         big_o.append(
                             {
                                 "name": node.name,
@@ -296,6 +306,12 @@ async def heavy_analyze(req: AnalyzeRequest) -> dict[str, Any]:
                                 "is_recursive": recursion["is_recursive"],
                                 "is_tail_recursive": recursion["is_tail_recursive"],
                                 "recursion_note": _recursion_note(recursion),
+                                "regex_class": "Type-3 (Regular)" if regex_info["uses_regex"] else None,
+                                "regex_note": _regex_note(regex_info),
+                                "grammar_class": "Type-2 (Context-Free)" if grammar_info["is_grammar_shaped"] else None,
+                                "grammar_note": _grammar_note(grammar_info),
+                                "graph_traversal": graph_info["traversal_kind"],
+                                "graph_traversal_note": _graph_traversal_note(graph_info),
                             }
                         )
             except Exception:
@@ -420,27 +436,9 @@ def _run_pylint_markers(filepath: str) -> tuple[list[dict], float | None]:
     return markers, score
 
 
-def _run_radon_metrics(content: str) -> tuple[list[dict], float | None]:
-    cc_list: list[dict] = []
-    mi_score: float | None = None
-    try:
-        from radon.complexity import cc_visit, cc_rank
-        from radon.metrics import mi_visit
-
-        for block in cc_visit(content):
-            cc_list.append(
-                {
-                    "name": block.name,
-                    "line": block.lineno,
-                    "complexity": block.complexity,
-                    "rank": cc_rank(block.complexity),
-                }
-            )
-        mi_raw = mi_visit(content, multi=True)
-        mi_score = round(mi_raw, 2) if isinstance(mi_raw, float) else None
-    except Exception:
-        pass
-    return cc_list, mi_score
+async def _run_complexity_metrics(content: str) -> tuple[list[dict], float | None]:
+    data = await analyze_complexity("hover.py", content)
+    return data.get("functions") or [], data.get("mi")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -536,6 +534,12 @@ def _build_hover_python(fn: ast.FunctionDef | ast.AsyncFunctionDef, req: HoverRe
     theta, omega = _theta_omega_python(has_early_exit, bigo)
     rec_note = _recursion_note(recursion)
     cc = _cyclomatic_python(fn)
+    regex_info = _regex_info_python(fn)
+    regex_note = _regex_note(regex_info)
+    grammar_info = _grammar_info_python(fn, recursion["is_recursive"])
+    grammar_note = _grammar_note(grammar_info)
+    graph_info = _graph_traversal_info_python(fn, recursion["is_recursive"])
+    graph_note = _graph_traversal_note(graph_info)
     end_line = getattr(fn, "end_lineno", fn.lineno)
     loc = end_line - fn.lineno + 1
     docstring = ast.get_docstring(fn) or ""
@@ -570,6 +574,15 @@ def _build_hover_python(fn: ast.FunctionDef | ast.AsyncFunctionDef, req: HoverRe
     if rec_note:
         tail_badge = "🔁 tail-call" if recursion["is_tail_recursive"] else "🔁 no tail-call"
         md += f"\n\n**Recursión** — {tail_badge}\n\n{rec_note}"
+
+    if regex_note:
+        md += f"\n\n**🔤 Regex** — {regex_note}"
+
+    if grammar_note:
+        md += f"\n\n**🌳 Grammar/Parser** — {grammar_note}"
+
+    if graph_note:
+        md += f"\n\n**🕸️ Graph Traversal** — {graph_note}"
 
     if is_async:
         md += "\n\n🟣 Función **async**"

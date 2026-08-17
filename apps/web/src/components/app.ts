@@ -69,9 +69,9 @@ export function switchTab(name: TabId): void {
 }
 
 // ── Right panel tabs
-export function rpTab(name: 'flow' | 'analysis' | 'server'): void {
+export function rpTab(name: 'flow' | 'analysis' | 'server' | 'problems'): void {
   document.querySelectorAll<HTMLElement>('.rp-tab').forEach((el, i) => {
-    el.classList.toggle('active', ['flow', 'analysis', 'server'][i] === name)
+    el.classList.toggle('active', ['flow', 'analysis', 'server', 'problems'][i] === name)
   })
   document.querySelectorAll<HTMLElement>('.rp-panel').forEach((el) => {
     el.classList.remove('active')
@@ -164,7 +164,7 @@ export async function checkBackend(): Promise<void> {
     const allCaps = [
       'flake8',
       'pylint',
-      'radon',
+      'complexity',
       'numpy',
       'pandas',
       'polars',
@@ -189,7 +189,7 @@ export async function checkBackend(): Promise<void> {
         ${mr('Python', d.python?.toString().split(' ')[0])}
         ${mr('flake8', d.flake8 ? '✓' : '✗')}
         ${mr('pylint', d.pylint ? '✓' : '✗')}
-        ${mr('radon', d.radon ? '✓' : '✗')}
+        ${mr('complexity', d.complexity ? '✓' : '✗')}
         ${mr('PyTorch', d.torch ? '✓' : '✗')}
         ${mr('TensorFlow', d.tensorflow ? '✓' : '✗')}
         ${mr('Polars', d.polars ? '✓' : '✗')}

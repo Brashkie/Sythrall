@@ -268,7 +268,7 @@ class TestAnalyzeProject:
                     {"filename": "app.ts", "content": "export const x = 1\n"},
                     {"filename": "real.py", "content": "x = 1\n"},
                 ],
-                "tools": ["ast", "flake8", "pylint", "radon"],
+                "tools": ["ast", "flake8", "pylint", "complexity"],
             },
         )
         assert res.status_code == 200

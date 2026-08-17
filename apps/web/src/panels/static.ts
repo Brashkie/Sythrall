@@ -24,6 +24,12 @@ interface ParsedFunction {
   is_recursive?: boolean
   is_tail_recursive?: boolean
   recursion_note?: string | null
+  regex_class?: string | null
+  regex_note?: string | null
+  grammar_class?: string | null
+  grammar_note?: string | null
+  graph_traversal?: string | null
+  graph_traversal_note?: string | null
   calls?: string[]
   is_async?: boolean
   args?: string[]
@@ -294,6 +300,9 @@ function _renderBigOTable(functions: ParsedFunction[]): string {
             ? `<span class="bigo-recursion ${f.is_tail_recursive ? 'bigo-recursion-tail' : 'bigo-recursion-notail'}" title="${esc(f.recursion_note ?? '')}">🔁 ${f.is_tail_recursive ? 'tail-call' : 'recursión'}</span>`
             : ''
         }
+        ${f.regex_class ? `<span class="bigo-cs-badge bigo-regex" title="${esc(f.regex_note ?? '')}">🔤 Regex</span>` : ''}
+        ${f.grammar_class ? `<span class="bigo-cs-badge bigo-grammar" title="${esc(f.grammar_note ?? '')}">🌳 CFG</span>` : ''}
+        ${f.graph_traversal ? `<span class="bigo-cs-badge bigo-graph" title="${esc(f.graph_traversal_note ?? '')}">🕸️ ${esc(f.graph_traversal)}</span>` : ''}
       </td>
       <td><span class="bigo-badge" style="color:${color};border-color:${color}">${esc(f.big_o)}</span></td>
       <td class="bigo-thetaomega">${f.big_o_theta ? esc(f.big_o_theta) : '—'} / ${f.big_o_omega ? esc(f.big_o_omega) : '—'}</td>

@@ -4,13 +4,13 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-4.6.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-4.7.0-blue?style=flat-square)
 [![CI](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml/badge.svg)](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml)
 ![Frontend](https://img.shields.io/badge/Frontend-Vite%20%2B%20TypeScript-646cff?style=flat-square)
 ![Backend](https://img.shields.io/badge/Backend-FastAPI%20%2B%20Python-009688?style=flat-square)
 ![Terminal](https://img.shields.io/badge/Terminal-Rust%20%2B%20axum-dea584?style=flat-square)
 ![Deploy](https://img.shields.io/badge/Deploy-Docker%20%2B%20Nginx-2496ed?style=flat-square)
-![Tests](https://img.shields.io/badge/Tests-311%20passing-00f5a0?style=flat-square)
+![Tests](https://img.shields.io/badge/Tests-322%20passing-00f5a0?style=flat-square)
 ![Author](https://img.shields.io/badge/Author-Hepein%20Oficial-b87dff?style=flat-square)
 ![License](https://img.shields.io/badge/License-GPL%203.0-orange?style=flat-square)
 
@@ -35,7 +35,7 @@ Sythrall is a professional code intelligence platform built as both an education
 | **🔬 Static Analysis** | AST-based multi-language parser (Python, TypeScript, C/C++) — Big-O estimation, cyclomatic complexity, WASM/Cython hints, call graph, dead code |
 | **🕸 Code Graph Visual** | Import graph, Call graph, Circular dependency detection, Complexity heatmap — Mermaid Tree View, scoped to loose files or a whole uploaded project *(the interactive Force Graph renderer exists and is tested but isn't wired to a UI control yet)* |
 | **📂 Projects** | Upload files, a folder or a ZIP — the result can become the **active project**, which Editor · Issues · Diagram · Static · Metrics then read directly, without re-uploading anything per panel |
-| **🔍 Analysis** | pylint · flake8 · radon · AST — issues, complexity, maintainability index |
+| **🔍 Analysis** | pylint · flake8 · AST · `complexity-engine` (Rust) — issues, complexity, maintainability index |
 | **🤖 ML/DL** | Detection of 23 libraries, 23 pipeline patterns, 25 models, 20+ issue rules |
 | **🔀 Diagrams** | Flowchart · Callgraph · Classes · Sequence — generated with Mermaid.js + zoom/pan |
 | **📡 APIs** | External endpoint verification with history and response metrics |
@@ -61,7 +61,7 @@ sythrall/
 ├── requirements-dev.txt            ← Ruff (lint/format), dev-only
 ├── pyproject.toml                  ← Ruff config
 ├── pytest.ini                      ← testpaths: apps/api/tests
-├── Cargo.toml                      ← Rust manifest — apps/terminal sidecar
+├── Cargo.toml                      ← Rust manifest — apps/terminal + apps/complexity sidecars (2 [[bin]], 1 [lib])
 ├── Cargo.lock
 ├── docker-compose.yml
 ├── .dockerignore
@@ -69,6 +69,7 @@ sythrall/
 ├── scripts/                        ← Dev workflow without Docker (setup/dev/build/test/lint/format, .ps1 + .sh)
 │   ├── run-backend.mjs             ← spawns uvicorn (npm run dev:api)
 │   ├── run-terminal.mjs            ← spawns the Rust terminal sidecar (npm run dev:term)
+│   ├── run-complexity.mjs          ← spawns the Rust complexity sidecar (npm run dev:cx)
 │   └── dev-banner.mjs              ← ansimax startup banner for npm run dev
 ├── apps/                           ← every app/service the repo ships, one dir each
 │   ├── terminal/                   ← Rust sidecar: real interactive shell over WebSocket
@@ -77,8 +78,18 @@ sythrall/
 │   │       ├── main.rs             ← axum WS handler, token auth, PTY bridging
 │   │       ├── pty_session.rs      ← portable-pty wrapper (ConPTY/Unix PTY, one impl)
 │   │       └── auth.rs             ← token generation + constant-time comparison
+│   ├── complexity/                 ← Rust sidecar: cyclomatic complexity + MI + raw metrics (replaces radon)
+│   │   ├── Dockerfile
+│   │   ├── benches/complexity_bench.rs  ← Criterion — measured 9-21x faster than radon
+│   │   └── src/
+│   │       ├── main.rs             ← axum HTTP server (GET /health, POST /metrics/complexity)
+│   │       ├── lib.rs              ← analyze() entrypoint, shared by main.rs and the benchmark
+│   │       ├── parser.rs           ← rustpython-parser wrapper + byte-offset→line resolution
+│   │       ├── complexity.rs       ← McCabe cyclomatic complexity (own logic, not radon's)
+│   │       ├── maintainability.rs  ← Maintainability Index (Coleman-Oman formula, own Halstead count)
+│   │       └── raw.rs              ← loc/lloc/sloc/comments/blank/multi
 │   ├── api/                        ← FastAPI backend
-│   │   ├── main.py                 ← FastAPI v4.5 (30+ routes)
+│   │   ├── main.py                 ← FastAPI v4.6 (30+ routes)
 │   │   ├── shared.py
 │   │   ├── Dockerfile
 │   │   ├── routers/
@@ -93,8 +104,9 @@ sythrall/
 │   │   │   └── metrics_live.py     ← POST /metrics/live — instant per-keystroke metrics
 │   │   ├── services/
 │   │   │   ├── project_service.py
-│   │   │   └── static_parser.py    ← Multi-language parser: Python/C/C++/JS/TS
-│   │   └── tests/                  ← 311 tests total (see Tests section below)
+│   │   │   ├── static_parser.py    ← Multi-language parser: Python/C/C++/JS/TS
+│   │   │   └── complexity_client.py ← HTTP client for the Rust complexity-engine sidecar
+│   │   └── tests/                  ← 322 tests total (see Tests section below)
 │   └── web/                        ← TypeScript frontend (Vite, zero frameworks)
 │       ├── index.html
 │       ├── Dockerfile.frontend
@@ -117,7 +129,7 @@ sythrall/
 │           │   ├── ml.ts
 │           │   ├── upload.ts          ← Projects hub: upload, recent list, active project
 │           │   ├── static.ts          ← Static Analysis panel (+ active-project mode)
-│           │   ├── problems.ts        ← Live Metrics Bar (session restore implemented, not yet wired — see Roadmap)
+│           │   ├── problems.ts        ← Live Metrics Bar + Session Restore + Problems Panel (all 3 wired, each with its own home)
 │           │   └── graph.ts           ← Code Graph Visual — Mermaid Tree View wired; Force Graph/Dir Tree implemented, not yet wired to UI
 │           ├── store/state.ts         ← activeProjectId persists across reloads (localStorage)
 │           ├── styles/
@@ -219,6 +231,7 @@ npm run dev
 | **Swagger UI** | http://localhost:8000/docs |
 | **Health** | http://localhost:8000/health |
 | **Terminal sidecar (Rust)** | ws://127.0.0.1:7681 (proxied through `/terminal` in dev — not meant to be opened directly) |
+| **Complexity sidecar (Rust)** | http://127.0.0.1:7682 (called by the backend, not the browser — not meant to be opened directly) |
 
 ### 🔐 Terminal security note
 
@@ -247,7 +260,7 @@ GET  /static/languages      → Supported languages
 ### Editor Intelligence
 ```http
 POST /intel/lint         → Fast lint ~1ms
-POST /intel/analyze      → Heavy analyze ~80ms (pylint + radon + Big-O)
+POST /intel/analyze      → Heavy analyze ~80ms (pylint + complexity engine + Big-O)
 POST /intel/hover        → Signature + Big-O + CC + docs
 POST /intel/definition   → Go to Definition
 POST /intel/references   → Find References
@@ -282,7 +295,7 @@ DELETE /api/upload/projects/{id}
 | Library | Version | Use |
 |---|---|---|
 | FastAPI | 0.115.5 | Async REST server |
-| pylint / flake8 / radon | latest | Code quality |
+| pylint / flake8 | latest | Code quality (complexity/MI moved to the `complexity-engine` Rust sidecar — see 🦀 Rust stack below) |
 | tree-sitter | 0.23.2 | Multi-language AST |
 | networkx | 3.6.1 | Graph algorithms |
 | numpy / pandas / polars | latest | Data processing |
@@ -303,17 +316,21 @@ DELETE /api/upload/projects/{id}
 | @xterm/xterm | 6.0.0 | Terminal emulator (client side of the Rust sidecar) |
 | [ansimax](https://github.com/Brashkie/ansimax) | 1.5.0 | ANSI/CLI rendering for the `npm run dev` startup banner |
 
-## 🦀 Rust stack — `terminal-server`
+## 🦀 Rust stack — two sidecars, one `Cargo.toml`
 
-First use of Rust in the project: a small sidecar for the integrated terminal, not a rewrite of any existing Python code.
+`terminal-server` (first use of Rust in the project — a small sidecar for the integrated terminal, not a rewrite of any existing Python code) and `complexity-engine` (replaces the `radon` pip dependency — cyclomatic complexity, Maintainability Index, and raw line metrics, computed in-process instead of imported from a third-party library whose internals the project doesn't own). Both bins share one root `Cargo.toml` — `apps/{terminal,complexity}/` hold source only, no per-service manifest.
 
-| Crate | Use |
-|---|---|
-| axum | WebSocket server + HTTP routing |
-| tokio | Async runtime |
-| portable-pty | ConPTY (Windows) / PTY (Unix) — one implementation for both |
-| subtle | Constant-time token comparison |
-| rand | CSPRNG for the per-run token |
+| Crate | Used by | Use |
+|---|---|---|
+| axum | both | HTTP/WebSocket server + routing |
+| tokio | both | Async runtime |
+| portable-pty | terminal-server | ConPTY (Windows) / PTY (Unix) — one implementation for both |
+| subtle | terminal-server | Constant-time token comparison |
+| rand | terminal-server | CSPRNG for the per-run token |
+| rustpython-parser | complexity-engine | Python source → AST (the complexity/MI/raw-metrics logic on top of it is this project's own code, not radon's) |
+| criterion | complexity-engine (dev) | Benchmarks — `cargo bench --bench complexity_bench` |
+
+`complexity-engine` binds to `127.0.0.1:7682` by default (`COMPLEXITY_HOST`/`COMPLEXITY_PORT` overridable, same convention as the terminal sidecar) and exposes `GET /health` + `POST /metrics/complexity`. No auth token — unlike the terminal, it's a pure computation endpoint with no shell/filesystem access, so the risk a token mitigates there doesn't apply here. The Python backend calls it via `apps/api/services/complexity_client.py` and degrades gracefully (empty complexity/MI, no crash) if the sidecar isn't running — same pattern as flake8/pylint being optional.
 
 ---
 
@@ -325,17 +342,18 @@ cd apps/api && pytest
 ```
 
 ```
-test_upload.py            29 ✅
-test_analysis.py          62 ✅
-test_intelligence.py     109 ✅
-test_graph.py             46 ✅
-test_graph_phase2.py      31 ✅
-test_metrics_live.py      34 ✅
-─────────────────────────────
-Total: 311 passed
+test_upload.py             29 ✅
+test_analysis.py           62 ✅
+test_intelligence.py      116 ✅
+test_graph.py              46 ✅
+test_graph_phase2.py       31 ✅
+test_metrics_live.py       34 ✅
+test_complexity_client.py   4 ✅
+──────────────────────────────
+Total: 322 passed
 ```
 
-The Rust sidecar (`terminal-server`) has its own checks — `cargo build --release`, `cargo clippy -- -D warnings`, `cargo test` — run via the `terminal` job in [`ci.yml`](.github/workflows/ci.yml), separate from the Python suite above.
+Both Rust sidecars have their own checks — `cargo build --release`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (15 unit tests for `complexity-engine`'s complexity/MI/raw-metrics logic, hand-computed values) — run via the `terminal` job in [`ci.yml`](.github/workflows/ci.yml), separate from the Python suite above (same job builds/tests both bins, since they share one `Cargo.toml`).
 
 ---
 
@@ -367,23 +385,30 @@ docker compose down -v                         # Stop + delete volumes
 
 ## 🗺️ Roadmap
 
-### ✅ v1.0 — Foundation
+Organized by phase, not version number — a phase tracks one coherent chunk of work
+across the project's lifetime; actual releases/tags still carry semantic version
+numbers (see [`CHANGELOG.md`](CHANGELOG.md)), the two aren't the same axis. Same
+convention as [`ansimax`](https://github.com/Brashkie/ansimax)'s own roadmap.
+
+**✅ Complete · 🟡 Partial · 🔴 Planned**
+
+### ✅ Phase 1 — Foundation
 - [x] Flask backend + pylint, flake8, radon
 - [x] TypeScript + Vite frontend (zero frameworks)
 - [x] Monaco Editor + Chart.js + Docker
 
-### ✅ v2.0 — ML/DL Inspector
+### ✅ Phase 2 — ML/DL Inspector
 - [x] 23 library detections, 23 pipeline patterns, 25 models
 - [x] 20+ issue rules (data leakage, reproducibility, framework-specific)
 - [x] Score 0–100 + Mermaid pipeline diagram
 
-### ✅ v3.0 — Zoom/Pan + Responsive
+### ✅ Phase 3 — Zoom/Pan + Responsive
 - [x] Diagram zoom + pan, responsive layout, mobile bottom navigation
 
-### ✅ v4.0 — FastAPI + Project Upload
+### ✅ Phase 4 — FastAPI + Project Upload
 - [x] Flask → FastAPI migration, file/folder/ZIP upload, 83 tests
 
-### ✅ v4.1 — Static Analysis + Editor Intelligence
+### ✅ Phase 5 — Static Analysis + Editor Intelligence
 - [x] Multi-language AST parser (Python · TypeScript · C/C++) — no AI
 - [x] Big-O estimation per function, cyclomatic complexity, WASM/Cython hints
 - [x] Real-time linting (fast ~1ms, heavy ~80ms), inline diagnostics
@@ -391,33 +416,33 @@ docker compose down -v                         # Stop + delete volumes
 - [x] Go to Definition · Find References · Semantic autocomplete · Rename Symbol
 - [x] 162 automated tests
 
-### ✅ v4.2 — Code Graph + Project Explorer
+### ✅ Phase 6 — Code Graph + Project Explorer
 - [x] Import Graph · Call Graph · Circular Dependencies · Complexity Heatmap
-- [x] Phase 1: graphs from sidebar; Phase 2: graphs from uploaded ZIP projects
+- [x] Sub-phase A: graphs from sidebar; Sub-phase B: graphs from uploaded ZIP projects
 - [x] Cross-folder dependency resolution, NetworkX circular detection
-- [x] Interactive Force Graph (custom physics engine, no D3) *(implemented and tested — a later audit found the whole graph module had zero callers anywhere in the app; Mermaid Tree View got wired in Unreleased below, Force Graph is still waiting on its UI)*
+- [x] Interactive Force Graph (custom physics engine, no D3) *(implemented and tested — a later audit found the whole graph module had zero callers anywhere in the app; Mermaid Tree View got wired in Phase 10 below, Force Graph is still waiting on its UI)*
 - [x] Project Explorer: file tree + multi-file tabs + global search + outline
 - [x] 316 automated tests
 
-### 🔧 v4.3 — Problems Panel + Live Metrics *(shipped code, wiring found incomplete years later — see Unreleased)*
-- [ ] **Problems panel** (VSCode-style): errors · warnings · Big-O · complexity · security findings — *implemented in `panels/problems.ts`, but it targets the same DOM container as the existing file-analysis view and would clobber content that view has and Problems doesn't (Pylint score, Maintainability Index, per-function complexity); needs a placement decision before wiring it in*
-- [x] **Live metrics bar** in editor: LOC · functions · imports · complexity score · Big-O worst · parse time (ms) *(connected in Unreleased below — the module existed since this version but `editor.ts` never called it)*
+### ✅ Phase 7 — Problems Panel + Live Metrics *(shipped code, wiring found incomplete years later — see Phases 10 & 12)*
+- [x] **Problems panel** (VSCode-style): errors · warnings · Big-O · complexity · security findings — *originally shared a DOM container with the file-analysis view and would have clobbered it; resolved by giving it its own right-panel sub-tab (`#rpp-problems`) instead of merging the two views — see Phase 12 below*
+- [x] **Live metrics bar** in editor: LOC · functions · imports · complexity score · Big-O worst · parse time (ms) *(connected in Phase 10 below — the module existed since this phase but `editor.ts` never called it)*
 - [x] Auto-recovery if parser fails (safe mode + regex fallback)
 - [x] Corrupt file detection
-- [x] Session restore *(connected in Unreleased below, alongside persisting the active project — restoring "which file was open" only became meaningful once there was a real project to restore its content from)*
+- [x] Session restore *(connected in Phase 10 below, alongside persisting the active project — restoring "which file was open" only became meaningful once there was a real project to restore its content from)*
 
-### 🔧 v4.4 — Computer Science Engine *(shipped partial — direct extension of the existing analysis engine, no new architecture)*
+### ✅ Phase 8 — Computer Science Engine *(direct extension of the existing analysis engine, no new architecture)*
 
 Not just "what" the code does — *why* it behaves that way. Built entirely on data `static_parser.py` and the Big-O engine already compute:
 
 - [x] Full complexity picture per function: Θ (tight bound), Ω (best case), O (worst case) — not just worst-case O *(Python only for now; C/C++/JS/TS still show O only)*
 - [x] "Why" explanation attached to every Big-O result (e.g. *"2 nested loops — inner loop runs n times per outer iteration"*)
 - [x] Recursion detected → tail-call detection + "Lambda Calculus" framing *(recursion-depth estimate skipped — depends on runtime input, not reliably computable statically)*
-- [ ] Regex detected → classify as Finite Automaton / Chomsky Type-3 (Regular)
-- [ ] Grammar/parser-shaped code detected → Context-Free Grammar / Pushdown Automaton / Chomsky Type-2
-- [ ] Graph traversal detected → label as DFS/BFS/topological sort, O(V+E)
+- [x] Regex detected → classify as Finite Automaton / Chomsky Type-3 (Regular) *(direct `re.XXX(...)` calls only — doesn't trace a `re.Pattern` saved in a variable)*
+- [x] Grammar/parser-shaped code detected → Context-Free Grammar / Pushdown Automaton / Chomsky Type-2 *(heuristic: name keyword + recursion/explicit-stack shape — both signals required to keep false positives down)*
+- [x] Graph traversal detected → label as DFS/BFS/topological sort, O(V+E) *(heuristic: variable-name signals — `visited`/`seen`/`explored`, `in_degree`, a queue with `.popleft()` — not real data-flow analysis)*
 
-### ✅ v4.5 — Integrated Terminal + Folder Explorer + Theme
+### ✅ Phase 9 — Integrated Terminal + Folder Explorer + Theme
 
 Not originally on this roadmap — came directly from user feedback mid-development, folded in because each piece was small and well-scoped on its own:
 
@@ -426,7 +451,7 @@ Not originally on this roadmap — came directly from user feedback mid-developm
 - [x] **Light/dark theme** toggle, persisted, dark by default
 - [x] [`ansimax`](https://github.com/Brashkie/ansimax) (own library) for the `npm run dev` startup banner
 
-### 🔧 v4.6.0 — Rebrand + `apps/` restructure + large-project scaling + enterprise-style shell *(shipped partial — Problems panel placement still open)*
+### 🟡 Phase 10 — Rebrand + `apps/` restructure + large-project scaling + enterprise-style shell
 
 Not originally on this roadmap — triggered by wanting the project to scale to real large codebases and to look/behave like the reference tools used during development (Aikido, Datadog, DeepSource), not by a version-number plan:
 
@@ -435,33 +460,53 @@ Not originally on this roadmap — triggered by wanting the project to scale to 
 - [x] **Large-project benchmark**: built a reproducible synthetic-project harness (up to 4003 files, up to 1600 functions/file) instead of assuming a rewrite was needed. Found and fixed three real O(n²) bugs — two hidden inside one-line comprehensions, one a dead computation the frontend never read. Import Graph generation on the 4003-file case went from 3.9s to 0.128s (30×) with zero new languages. Details in [`CHANGELOG.md`](CHANGELOG.md#460). The parser itself (`static_parser.py`) was already linear and needed no changes — the earlier PyO3 finding below still holds.
 - [x] **Nav rail replaces the horizontal tabbar** — persistent vertical icon nav (`apps/web/src/utils/icons.ts`, inline SVGs, `stroke="currentColor"` so they follow the active theme with zero extra code), same pattern the reference tools use. `switchTab()` didn't change — the new nav items kept the same `class="tab"`/`data-tab`/`id="t-*"` convention, so this was purely a markup/CSS change.
 - [x] **One active project, not four disconnected upload paths.** Before: "+ Code"/"+ Folder"/"+ Log" in the sidebar were ephemeral (lost on refresh, never touched the backend) while Projects was the only persisted path — two mental models for the same idea. Now "+ Code"/"+ Folder" create or append to the **active project** (same backend endpoints Projects already used, `project_id` now optional on `/api/upload/{files,folder}` to support appending), and Editor · Issues · Diagram · Static · Metrics all read from whichever project is active — pick a project once, work across every panel.
-- [x] **Audit-driven fixes**, found using the same "does this actually have a caller" method that caught the Force Graph gap above: reconnected the Live Metrics Bar and Session Restore (`panels/problems.ts`, written for v4.3, never called from `editor.ts`); active project now persists to `localStorage` so both restore automatically on reload; fixed the APIs tab badge (never updated); Metrics panel gained an active-project mode matching Issues/Diagram/Static.
-- [ ] **Problems panel** placement — still needs a decision (see v4.3 note above) before it can be wired in without clobbering the existing file-analysis view.
+- [x] **Audit-driven fixes**, found using the same "does this actually have a caller" method that caught the Force Graph gap above: reconnected the Live Metrics Bar and Session Restore (`panels/problems.ts`, written for Phase 7, never called from `editor.ts`); active project now persists to `localStorage` so both restore automatically on reload; fixed the APIs tab badge (never updated); Metrics panel gained an active-project mode matching Issues/Diagram/Static.
+- [ ] **Problems panel** placement — still needs a decision (see Phase 7 note above) before it can be wired in without clobbering the existing file-analysis view. *(resolved in Phase 12 below — own right-panel sub-tab instead of sharing a container)*
+
+### ✅ Phase 11 — `radon` replaced by an own Rust sidecar (`complexity-engine`)
+
+Not a performance rewrite — the trigger was not wanting to depend on a third-party library's internals for something the project can own outright, for a codebase one person maintains solo. Measured before claiming any speed win, following the same benchmark-first approach as the large-project scaling work above:
+
+- [x] **New Rust sidecar `apps/complexity`**, same architecture as `terminal-server` (persistent process, HTTP, not a subprocess-per-call and not a PyO3 native extension) — `rustpython-parser` for the AST, this project's own code for cyclomatic complexity (McCabe), Maintainability Index (Coleman-Oman formula), and raw line metrics. Both sidecars now share one root `Cargo.toml` (2 `[[bin]]`, 1 `[lib]`).
+- [x] **Benchmarked with Criterion against real `radon`**, not assumed: 10 functions — 0.42ms vs 8.97ms; 100 functions — 4.7ms vs 89ms; 1000 functions — 102ms vs 899ms. 9–21× faster, measured on the same synthetic files both ways.
+- [x] `radon==6.0.1` removed from `requirements.txt`; `services/complexity_client.py` calls the sidecar over HTTP and degrades gracefully (empty complexity/MI, no crash) if it isn't running — same optional-capability pattern as flake8/pylint.
+- [x] Fixed a real startup-race bug found while wiring this in: the old design cached "is the tool available" once at backend startup, which meant a slow first `cargo build` could leave the capability stuck `false` for the rest of the session even after the sidecar came up. The actual analysis call sites no longer gate on that cached flag — they call the sidecar live and fall back gracefully per-request instead.
+- [x] 15 Rust unit tests (`cargo test`) for complexity/MI/raw-metrics against hand-computed values, run by the same CI job that already built `terminal-server`.
+
+### ✅ Phase 12 — Closed the last 3 CS Engine classifiers + Problems Panel placement
+
+Closes out the Phase 8 CS Engine roadmap items and the open Problems Panel decision from Phase 7/Phase 10:
+
+- [x] **Regex → Chomsky Type-3 (Regular)**: detects direct `re.compile/match/search/findall/...` calls per function. Honest about its limit — doesn't trace a `re.Pattern` saved in a variable, only direct `re.XXX(...)` calls.
+- [x] **Grammar/parser-shaped code → Chomsky Type-2 (Context-Free)**: heuristic requires *both* a name signal (`parse`/`grammar`/`tokenize`/`lexer`/...) *and* a shape signal (recursion or an explicit append/pop stack pattern) — either signal alone produced too many false positives in testing (a plain recursive `factorial` isn't a parser just because it's recursive).
+- [x] **Graph traversal → BFS/DFS/Topological Sort, O(V+E)**: heuristic on variable names (`visited`/`seen`/`explored`, `in_degree`) plus a queue (`.popleft()`) vs. stack/recursion shape to tell BFS from DFS. Same explicitly-heuristic, not-semantic-analysis style as the existing WASM-hint detector (`_wasm_hints_python`) — the new code follows its exact conventions.
+- [x] **Problems Panel got its own home**: a 4th right-panel sub-tab (`Flujo · Análisis · Servidor · Problems`, `#rpp-problems`/`#problems-content`) instead of trying to merge it into the existing file-analysis view — resolves the DOM-container conflict documented since Phase 7 without touching that view's richer content (Pylint score, MI, per-function table). Wired into `editor.ts::applyMarkers()`, exactly where `panels/problems.ts` had documented the intended integration point since it was written.
+- [x] Removed 3 confirmed-dead exports with zero callers, re-verified twice (`editor.ts::copyEditorContent`, `explorer.ts::explorerMarkModified`/`explorerRefresh`). A longer list of exports with no *visible* caller was found in the same pass but deliberately left alone — not enough certainty they aren't API surface for a feature that hasn't landed yet (same situation Force Graph was in before it got wired).
 
 ---
 
-The items below are grouped by how well-founded they are, not by version number — the goal is to be honest about scope before committing to it.
+The phases below are grouped by how well-founded they are, not numbered sequentially yet — the goal is to be honest about scope before committing to it.
 
-### 🔜 v4.7 — Data Structure Detector *(same heuristic-pattern style as the existing WASM-hint/dead-code detectors)*
+### 🔴 Phase 13 — Data Structure Detector *(same heuristic-pattern style as the existing WASM-hint/dead-code detectors)*
 
 - [ ] Detect AVL / Red-Black Tree / Trie / Heap / Segment Tree / Fenwick Tree / Bloom Filter / B-Tree / HashMap / Skip List from AST shape
 - [ ] For each match: complexity, typical use case, tradeoffs
 
-### 🔜 v4.8 — Multi-language Expansion
+### 🔴 Phase 14 — Multi-language Expansion
 
 Same pattern throughout: these are languages Sythrall can *read and analyze* — a tree-sitter grammar plus rules, same as the existing Python/TS/C/C++ pipeline. None of these require Sythrall's own engine to be written in that language; that's a separate, unproven bet (see Research spikes below).
 
 - [ ] **C/C++** full support (tree-sitter already integrated — complete pipeline)
 - [ ] **Java** — AST + complexity analysis
 - [ ] **Go** — imports, goroutine detection
-- [ ] **Rust** — ownership patterns, unsafe block warnings *(analysis-target Rust support — separate from the `terminal-server` sidecar shipped in v4.5, which is tooling, not a language the analyzer parses)*
+- [ ] **Rust** — ownership patterns, unsafe block warnings *(analysis-target Rust support — separate from the `terminal-server` sidecar shipped in Phase 9, which is tooling, not a language the analyzer parses)*
 - [ ] **PHP** — deprecated function detection
 - [ ] **SQL** — query complexity estimation
 - [ ] **Fortran** — DO-loop / array-op detection, vectorization/SIMD candidates, scientific-computing domain hints *(analysis target only — Sythrall already gets Fortran-level numerical performance for free via numpy/scipy's compiled LAPACK/BLAS backends, no reason to write Fortran itself)*
 - [ ] **Assembly (x86-64)** — instruction/register/control-flow breakdown from raw `.s`/inline-asm snippets *(pattern-matching on text the user pastes, not a disassembler — the PE/ELF/Mach-O binary case below already wraps Capstone/LIEF instead of hand-rolling one)*
 - [ ] Language-specific lint rules per extension
 
-### 🔜 v4.9 — Cython & WASM Integration
+### 🔴 Phase 15 — Cython & WASM Integration
 - [ ] Auto-detect Cython candidates from Big-O analysis (O(n²)+ functions)
 - [ ] Generate `.pyx` stubs from Python function signatures
 - [ ] Compile Cython in Docker (MSVC on Windows / GCC on Linux)
@@ -469,7 +514,7 @@ Same pattern throughout: these are languages Sythrall can *read and analyze* —
 - [ ] Estimated speedup shown in hover provider
 - [ ] WASM compilation path via Emscripten
 
-### 🔜 v4.10 — Execution Path Simulator
+### 🔴 Phase 16 — Execution Path Simulator
 - [ ] Animated circuit-board execution flow:
   `Input → Parser → AST → Dependency Resolver → Metrics → Report`
 - [ ] Step-by-step trace with timing per stage
@@ -477,17 +522,17 @@ Same pattern throughout: these are languages Sythrall can *read and analyze* —
 
 ### 🔬 Research spikes — integrate existing tools, don't rebuild them
 
-Real ideas, but each is its own serious project already solved well by dedicated open-source tools — the honest move is to link/embed those, not reinvent them:
+Real ideas, but each is its own serious project already solved well by dedicated open-source tools — the honest move is to link/embed those, not reinvent them. Not numbered as phases — nothing here is committed yet:
 
 - [ ] Compiler pipeline visualization (Lexer → AST → IR → Assembly) — embed [Compiler Explorer](https://godbolt.org) (open source) instead of building a teaching compiler from scratch
 - [ ] Executable analyzer (PE / ELF / Mach-O, sections, imports/exports, symbols) — wrap [Capstone](https://www.capstone-engine.org)/[LIEF](https://lief-project.github.io)/`objdump`, don't hand-write a disassembler
 - [ ] Graph centrality / hub detection (NetworkX is already a dependency) — surface the most-connected files/functions in the existing Code Graph, the same idea social networks use to find "influencers"
 - [ ] Standalone desktop build (PyInstaller/Nuitka + Tauri, or Zig for tiny static binaries) — a portable binary with no Docker/Node/Python required, as an alternative to `scripts/` and Docker
-- [x] ~~Rust extension (PyO3) for the static parser's hottest path~~ — **investigated twice with real benchmarks, not adopted either time**: first pass profiled `static_parser.py` on large *individual* files (250+ functions, 3000+ synthetic) and found the AST-walk consolidation already done was noise-level neutral (~160ms for realistic file sizes). Second pass (Unreleased, above) tested the other axis — thousands of *files* in one project, not one huge file — and found the parser itself still scaled linearly; the actual O(n²) cost was three ordinary Python bugs in the code *around* the parser, fixed without any new language. Rust *did* end up in the project (v4.5's `terminal-server`), but for a genuinely Rust-shaped problem — cross-platform PTY handling — not as a speed rewrite of working Python. If a real bottleneck ever shows up in `parse_file` itself, the integration model would be an Axum sidecar (same pattern as `terminal-server`) talking HTTP to FastAPI, not PyO3 embedding — simpler to maintain solo, no native-binding build matrix.
+- [x] ~~Rust extension (PyO3) for the static parser's hottest path~~ — **investigated twice with real benchmarks, not adopted either time**: first pass profiled `static_parser.py` on large *individual* files (250+ functions, 3000+ synthetic) and found the AST-walk consolidation already done was noise-level neutral (~160ms for realistic file sizes). Second pass (Phase 10, above) tested the other axis — thousands of *files* in one project, not one huge file — and found the parser itself still scaled linearly; the actual O(n²) cost was three ordinary Python bugs in the code *around* the parser, fixed without any new language. Rust *did* end up in the project (Phase 9's `terminal-server`), but for a genuinely Rust-shaped problem — cross-platform PTY handling — not as a speed rewrite of working Python. If a real bottleneck ever shows up in `parse_file` itself, the integration model would be an Axum sidecar (same pattern as `terminal-server`) talking HTTP to FastAPI, not PyO3 embedding — simpler to maintain solo, no native-binding build matrix.
 
 ### 🧭 Long-term / different tool category — not committed
 
-These need runtime instrumentation (ptrace/eBPF), a running process, or live packet capture — architecturally a different kind of tool than static analysis, so they stay here as ideas rather than roadmap commitments:
+These need runtime instrumentation (ptrace/eBPF), a running process, or live packet capture — architecturally a different kind of tool than static analysis, so they stay here as ideas rather than numbered phases:
 
 - [ ] Memory visualizer (stack/heap/data/bss) — requires a running process to inspect, not source text
 - [ ] Concurrency analyzer (races, deadlocks, mutex/atomic misuse) — needs real execution or tools like ThreadSanitizer, not AST inspection
@@ -495,10 +540,10 @@ These need runtime instrumentation (ptrace/eBPF), a running process, or live pac
 - [ ] Network analyzer (TCP/TLS/QUIC/WebSocket) — needs packet capture; this is a Wireshark-shaped tool, not a static analyzer
 - [ ] Security analyzer beyond pattern detection (ROP, heap spray, use-after-free exploitation) — competes directly with mature SAST tools (Semgrep, CodeQL, Bandit); the realistic version folds into the CS Engine above as "detect the pattern + explain the CWE," not a full exploit-analysis engine
 
-### 🔜 v5.0 — Enterprise Persistence
+### 🔴 Phase 17 — Enterprise Persistence
 - [ ] PostgreSQL + Delta Lake
 - [ ] Analysis history, metric comparison between versions
-- [ ] WebSockets for real-time analysis streaming *(the terminal's WebSocket, shipped in v4.5, is a different thing — an interactive PTY shell, not a streaming-analysis channel)*
+- [ ] WebSockets for real-time analysis streaming *(the terminal's WebSocket, shipped in Phase 9, is a different thing — an interactive PTY shell, not a streaming-analysis channel)*
 - [ ] JWT authentication, public API with rate limiting
 - [x] GitHub Action for CI/CD — `.github/workflows/ci.yml` (typecheck/lint/build/test on every push/PR) + `release.yml` (tag → GitHub Release with CHANGELOG notes + frontend build artifact)
 

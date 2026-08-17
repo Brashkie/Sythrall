@@ -40,7 +40,7 @@ export function wireAllEvents(): void {
 
   // ── Right panel tabs
   document.querySelectorAll<HTMLElement>('.rp-tab[data-rptab]').forEach((el) => {
-    el.addEventListener('click', () => rpTab(el.dataset['rptab'] as 'flow' | 'analysis' | 'server'))
+    el.addEventListener('click', () => rpTab(el.dataset['rptab'] as 'flow' | 'analysis' | 'server' | 'problems'))
   })
 
   // ── URL input

@@ -44,7 +44,7 @@ jobs:
       - run: cd apps/api && pytest
 
   terminal:
-    name: Terminal sidecar (cargo build · clippy · test)
+    name: Rust sidecars — terminal + complexity (cargo build · clippy · test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

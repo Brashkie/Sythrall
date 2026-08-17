@@ -526,7 +526,7 @@ html, body {
 .ii-tool { font-size: .7rem; padding: 2px 6px; border-radius: 3px; font-weight: 700; font-family: var(--mono); }
 .t-flake8 { background: rgba(184,125,255,.15); color: var(--purple); }
 .t-pylint { background: rgba(61,158,255,.15);  color: var(--info);   }
-.t-radon  { background: rgba(0,245,160,.12);   color: var(--ok);     }
+.t-complexity  { background: rgba(0,245,160,.12);   color: var(--ok);     }
 .t-ast    { background: rgba(255,182,39,.12);   color: var(--warn);  }
 .ii-sev { font-size: .7rem; font-weight: 700; padding: 2px 6px; border-radius: 3px; }
 .sev-error   { background: rgba(255,51,102,.2); color: var(--err);  }

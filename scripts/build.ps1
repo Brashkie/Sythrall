@@ -28,7 +28,7 @@ if (Test-Path $venvPython) {
 }
 
 if (Get-Command cargo -ErrorAction SilentlyContinue) {
-    Write-Host "`n[3/3] Terminal sidecar (cargo build --release)..." -ForegroundColor Yellow
+    Write-Host "`n[3/3] Rust sidecars (terminal + complexity) (cargo build --release)..." -ForegroundColor Yellow
     Push-Location $root
     try {
         cargo build --release
@@ -36,7 +36,7 @@ if (Get-Command cargo -ErrorAction SilentlyContinue) {
         Pop-Location
     }
 } else {
-    Write-Host "`n[3/3] Terminal sidecar - omitido (instala Rust: https://rustup.rs)." -ForegroundColor DarkYellow
+    Write-Host "`n[3/3] Rust sidecars (terminal + complexity) - omitido (instala Rust: https://rustup.rs)." -ForegroundColor DarkYellow
 }
 
 Write-Host "`nBuild completo. Salida frontend en dist\" -ForegroundColor Green
