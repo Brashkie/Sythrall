@@ -76,6 +76,46 @@
   white-space: nowrap;
 }
 
+/* ─── Asymptotic notation reference (Phase 13) ────────── */
+.bigo-notation-ref {
+  margin-bottom: 8px; font-size: .72rem;
+}
+.bigo-notation-ref summary {
+  cursor: pointer; color: var(--muted); font-weight: 600;
+  padding: 3px 0; user-select: none;
+}
+.bigo-notation-ref summary:hover { color: var(--txt); }
+.bigo-notation-table {
+  width: 100%; border-collapse: collapse; margin-top: 6px;
+  font-size: .68rem;
+}
+.bigo-notation-table td {
+  padding: 4px 8px; border-bottom: 1px solid var(--b0);
+  color: var(--muted); vertical-align: top;
+}
+.bigo-notation-table tr:last-child td { border-bottom: none; }
+.bigo-notation-table td:first-child {
+  font-family: var(--mono); font-weight: 700; color: var(--info);
+  white-space: nowrap; width: 1%;
+}
+.bigo-notation-table td:nth-child(2) { color: var(--txt); }
+
+/* ─── Security & Taint findings (Fase 21) ─────────────── */
+.sec-disclaimer {
+  font-size: .62rem; font-weight: 400; color: var(--muted); text-transform: none; letter-spacing: 0;
+}
+.sec-finding { border-left: 3px solid var(--err); }
+.sec-cwe {
+  font-family: var(--mono); font-size: .6rem; color: var(--muted);
+  background: var(--s1); border: 1px solid var(--b0); border-radius: 3px; padding: 1px 5px;
+}
+.sec-confidence { font-size: .62rem; color: var(--muted); }
+.sec-flow {
+  font-family: var(--mono); font-size: .68rem; color: var(--muted);
+  margin: 4px 0; word-break: break-word;
+}
+.sec-flow code { color: var(--txt); background: var(--s1); padding: 0 4px; border-radius: 3px; }
+
 /* Distribución Big O (proyecto) */
 .bigo-dist-row {
   display: flex; align-items: center; gap: 8px; margin-bottom: 5px;
@@ -176,6 +216,7 @@
   .st-summary-row { grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .bigo-table .bigo-reason { display: none; }
   .bigo-table .bigo-thetaomega { display: none; }
+  .bigo-table .bigo-space { display: none; }
   .st-toolbar { padding: 7px 10px; }
 }
 @media (max-width: 480px) {

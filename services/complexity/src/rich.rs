@@ -14,6 +14,8 @@ use crate::classifiers;
 use crate::complexity::cyclomatic;
 use crate::parser::{line_of_offset, parse_module};
 use crate::recursion;
+use crate::security::{self, SecurityFinding};
+use crate::space;
 use crate::structure::{self, RichClass, RichImport};
 
 #[derive(Serialize, Clone)]
@@ -31,6 +33,8 @@ pub struct RichFunction {
     pub big_o_reason: String,
     pub big_o_theta: String,
     pub big_o_omega: String,
+    pub space_complexity: String,
+    pub space_reason: String,
     pub is_recursive: bool,
     pub is_tail_recursive: bool,
     pub recursion_note: Option<String>,
@@ -58,6 +62,7 @@ pub struct RichAnalysisResult {
     pub functions: Vec<RichFunction>,
     pub classes: Vec<RichClass>,
     pub imports: Vec<RichImport>,
+    pub security_findings: Vec<SecurityFinding>,
     pub summary: RichSummary,
     pub error: Option<String>,
 }
@@ -70,6 +75,7 @@ pub fn analyze_rich(content: &str) -> RichAnalysisResult {
                 functions: Vec::new(),
                 classes: Vec::new(),
                 imports: Vec::new(),
+                security_findings: Vec::new(),
                 summary: RichSummary {
                     total_functions: 0,
                     total_classes: 0,
@@ -83,7 +89,10 @@ pub fn analyze_rich(content: &str) -> RichAnalysisResult {
     };
 
     let mut functions = Vec::new();
-    collect_functions(content, &suite, &mut functions);
+    let mut security_findings = Vec::new();
+    collect_functions(content, &suite, &mut functions, &mut security_findings);
+    security_findings.extend(security::hardcoded_credentials(content, &suite));
+    security_findings.sort_by_key(|f| f.line);
 
     let classes = structure::extract_classes(content, &suite);
     let imports = structure::extract_imports(content, &suite);
@@ -107,23 +116,30 @@ pub fn analyze_rich(content: &str) -> RichAnalysisResult {
         functions,
         classes,
         imports,
+        security_findings,
         error: None,
     }
 }
 
-fn collect_functions(source: &str, body: &[Stmt], out: &mut Vec<RichFunction>) {
+fn collect_functions(source: &str, body: &[Stmt], out: &mut Vec<RichFunction>, security_out: &mut Vec<SecurityFinding>) {
     for stmt in body {
         match stmt {
-            Stmt::FunctionDef(f) => out.push(build_function(source, &f.name, f.range, &f.body, &f.args, &f.decorator_list, f.returns.is_some(), false)),
-            Stmt::AsyncFunctionDef(f) => out.push(build_function(source, &f.name, f.range, &f.body, &f.args, &f.decorator_list, f.returns.is_some(), true)),
-            Stmt::ClassDef(c) => collect_functions(source, &c.body, out),
+            Stmt::FunctionDef(f) => {
+                security_out.extend(security::security_findings(&f.name, &f.body, source));
+                out.push(build_function(source, &f.name, f.range, &f.body, &f.args, &f.decorator_list, f.returns.is_some(), false));
+            }
+            Stmt::AsyncFunctionDef(f) => {
+                security_out.extend(security::security_findings(&f.name, &f.body, source));
+                out.push(build_function(source, &f.name, f.range, &f.body, &f.args, &f.decorator_list, f.returns.is_some(), true));
+            }
+            Stmt::ClassDef(c) => collect_functions(source, &c.body, out, security_out),
             _ => {}
         }
         // Funciones anidadas dentro de otros statements (if/for/with/try a
         // nivel de módulo, poco común pero `ast.walk` las encontraría) — se
         // cubre recorriendo también los cuerpos anidados no-función.
         for child in nested(stmt) {
-            collect_functions(source, child, out);
+            collect_functions(source, child, out, security_out);
         }
     }
 }
@@ -158,6 +174,7 @@ fn build_function(
 
     let recursion = recursion::analyze(name, body);
     let bigo = bigo::full(body, recursion.is_recursive);
+    let space_info = space::infer(body, recursion.is_recursive);
     let regex = classifiers::regex_info(body);
     let grammar = classifiers::grammar_info(name, body, recursion.is_recursive);
     let graph = classifiers::graph_info(body, recursion.is_recursive);
@@ -176,6 +193,8 @@ fn build_function(
         big_o_reason: bigo.reason,
         big_o_theta: bigo.theta,
         big_o_omega: bigo.omega,
+        space_complexity: space_info.space,
+        space_reason: space_info.reason,
         is_recursive: recursion.is_recursive,
         is_tail_recursive: recursion.is_tail_recursive,
         recursion_note: recursion::note(&recursion),

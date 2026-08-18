@@ -53,8 +53,6 @@ interface DirTreeNode {
 // ─── Estado del módulo ────────────────────────────────────────────────────────
 
 let _currentType = 'import'
-let _currentResult: GraphResult | null = null
-let _viewMode: 'tree' | 'force' = 'tree'
 const _forceSimulation: unknown = null // d3 simulation
 
 // ══════════════════════════════════════════
@@ -84,7 +82,6 @@ export async function generateCodeGraph(
 
   try {
     const result = (await api.analyzeGraph(files, graphType)) as GraphResult
-    _currentResult = result
 
     if (result.error) {
       onStatus(`Error: ${result.error}`, false)
@@ -109,6 +106,9 @@ export async function generateCodeGraph(
       statusMsg = n > 0 ? `🔴 ${n} ciclo(s) detectado(s)` : '✅ Sin dependencias circulares'
     } else if (graphType === 'heatmap') {
       statusMsg = `${summary.total_functions ?? 0} fn · ${summary.hot_paths ?? 0} hot paths`
+    } else if (graphType === 'centrality') {
+      const hubs = Array.isArray(summary.hubs) ? summary.hubs.length : 0
+      statusMsg = hubs > 0 ? `🔥 ${hubs} hub(s) detectado(s)` : '✅ Sin hubs (grafo poco conectado)'
     }
 
     onStatus(statusMsg, !result.has_cycles)
@@ -419,18 +419,6 @@ function _nodeMetaText(n: GraphNode, graphType: string): string {
   return n.id
 }
 
-// ─── Toggle view mode ─────────────────────────────────────────────────────────
-
-export function getViewMode(): 'tree' | 'force' {
-  return _viewMode
-}
-export function setViewMode(m: 'tree' | 'force'): void {
-  _viewMode = m
-}
-export function getCurrentResult(): GraphResult | null {
-  return _currentResult
-}
-
 // ══════════════════════════════════════════════════════════════════════════════
 //  FASE 2 — Graph desde proyectos ZIP/subidos
 // ══════════════════════════════════════════════════════════════════════════════
@@ -494,6 +482,9 @@ export async function generateProjectGraph(
           : '✅ Sin dependencias circulares'
     } else if (graphType === 'heatmap') {
       msg = `${summary.total_functions ?? 0} fn · ${summary.hot_paths ?? 0} hot paths · CC promedio ${summary.avg_cc ?? 0}`
+    } else if (graphType === 'centrality') {
+      const hubs = Array.isArray(summary.hubs) ? summary.hubs.length : 0
+      msg = hubs > 0 ? `🔥 ${hubs} hub(s) detectado(s)` : '✅ Sin hubs (grafo poco conectado)'
     }
 
     onStatus(msg, !result.has_cycles)

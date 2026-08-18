@@ -35,10 +35,6 @@ export function removeFile(id: string): void {
   if (state.currentFile?.id === id) state.currentFile = null
 }
 
-export function findFile(id: string): CodeFile | undefined {
-  return state.files.find((f) => f.id === id)
-}
-
 // ─── Proyecto activo — persiste entre refrescos ───────────────────────────────
 // state.activeProjectId solo (sin esto) vive en memoria y se pierde al
 // refrescar. Junto con Session Restore (panels/problems.ts), esto es lo que

@@ -91,7 +91,7 @@ export function notifyFileChanged(filename: string): void {
   _scheduleAnalysis()
 }
 
-export function teardownIntelligence(): void {
+function teardownIntelligence(): void {
   if (_fastTimer) clearTimeout(_fastTimer)
   if (_heavyTimer) clearTimeout(_heavyTimer)
   _disposables.forEach((d) => {
@@ -488,70 +488,6 @@ function _registerRenameProvider(): void {
   }
 }
 
-// ── Call Graph ────────────────────────────────────────────────────────────────
-
-export interface CallGraphData {
-  nodes: Array<{ id: string; label: string; kind: string; line: number; big_o?: string }>
-  edges: Array<{ from: string; to: string }>
-}
-
-export async function fetchCallGraph(filename: string, content: string): Promise<CallGraphData | null> {
-  try {
-    const ctrl = new AbortController()
-    const tid = setTimeout(() => ctrl.abort(), 8000)
-    const res = await fetch(getApiBase() + '/static/parse', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename, content }),
-      signal: ctrl.signal,
-    })
-    clearTimeout(tid)
-    if (!res.ok) return null
-    const data = (await res.json()) as StaticParseForGraph
-    const nodes = data.functions.map((fn) => ({
-      id: fn.name,
-      label: fn.name,
-      kind: fn.is_async ? 'async_function' : 'function',
-      line: fn.line,
-      big_o: fn.big_o,
-    }))
-    for (const cls of data.classes ?? []) {
-      nodes.push({ id: cls.name, label: cls.name, kind: 'class', line: cls.line, big_o: undefined })
-    }
-    return { nodes, edges: data.call_graph ?? [] }
-  } catch {
-    return null
-  }
-}
-
-export function callGraphToMermaid(graph: CallGraphData): string {
-  if (!graph.nodes.length) return 'flowchart TD\n    A[Sin funciones detectadas]'
-  const BIG_O_STYLE: Record<string, string> = {
-    'O(n²)': 'fill:#ff8a0020,stroke:#ff8a00',
-    'O(n³)': 'fill:#ff336620,stroke:#ff3366',
-    'O(2^n)': 'fill:#ff336640,stroke:#ff3366',
-  }
-  let code = 'flowchart TD\n'
-  for (const node of graph.nodes) {
-    const id = node.id.replace(/[^a-zA-Z0-9_]/g, '_')
-    const bigo = node.big_o ? ` · ${node.big_o}` : ''
-    const icon = node.kind === 'class' ? '🏛' : node.kind === 'async_function' ? '⚡' : '⚙️'
-    code += `    ${id}["${icon} ${node.label}${bigo}"]\n`
-  }
-  for (const edge of graph.edges) {
-    const from = edge.from.replace(/[^a-zA-Z0-9_]/g, '_')
-    const to = edge.to.replace(/[^a-zA-Z0-9_]/g, '_')
-    code += `    ${from} --> ${to}\n`
-  }
-  for (const node of graph.nodes) {
-    if (node.big_o && BIG_O_STYLE[node.big_o]) {
-      const id = node.id.replace(/[^a-zA-Z0-9_]/g, '_')
-      code += `    style ${id} ${BIG_O_STYLE[node.big_o]}\n`
-    }
-  }
-  return code
-}
-
 // ══════════════════════════════════════════
 //  Tipos internos
 // ══════════════════════════════════════════
@@ -633,10 +569,4 @@ interface RenameResponse {
   new_name: string
   filename: string
   error?: string
-}
-
-interface StaticParseForGraph {
-  functions: Array<{ name: string; line: number; big_o?: string; is_async?: boolean }>
-  classes: Array<{ name: string; line: number }>
-  call_graph: Array<{ from: string; to: string }>
 }

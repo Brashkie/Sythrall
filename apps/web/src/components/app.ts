@@ -120,7 +120,7 @@ export function updateStats(): void {
   scoreEl.style.color = avg == null ? 'var(--muted)' : avg >= 8 ? 'var(--ok)' : avg >= 5 ? 'var(--warn)' : 'var(--err)'
 }
 
-export function updateBadges(): void {
+function updateBadges(): void {
   const nDown = state.results.apis.filter((a) => a.status === 'down' || a.status === 'error').length
   const ta = document.getElementById('tb-apis')
   if (ta) ta.style.display = nDown ? '' : 'none'
@@ -421,7 +421,7 @@ export function addURL(url?: string): void {
   appendLog('info', '🌐 ' + v, 'fe')
 }
 
-export function renderURLList(): void {
+function renderURLList(): void {
   const el = document.getElementById('url-list')!
   if (!state.urls.length) {
     el.innerHTML = '<div class="empty" style="padding:10px;font-size:.68rem">Sin URLs</div>'
@@ -751,7 +751,7 @@ export async function runMLAnalysis(): Promise<void> {
 // ══════════════════════════════════════════
 //  DIAGRAM
 // ══════════════════════════════════════════
-const PROJECT_GRAPH_TYPES = new Set(['import', 'call', 'circular', 'heatmap'])
+const PROJECT_GRAPH_TYPES = new Set(['import', 'call', 'circular', 'heatmap', 'centrality'])
 
 export async function generateDiagram(): Promise<void> {
   const diagType = (document.getElementById('diag-type') as HTMLSelectElement).value

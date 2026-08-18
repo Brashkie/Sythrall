@@ -46,6 +46,13 @@ FILES_HEATMAP = [
     },
 ]
 
+FILES_HUB = [
+    {"filename": "utils.py", "content": "def helper():\n    return 1\n"},
+    {"filename": "a.py", "content": "import utils\n"},
+    {"filename": "b.py", "content": "import utils\n"},
+    {"filename": "c.py", "content": "import utils\nimport a\n"},
+]
+
 FILES_EMPTY = []
 
 
@@ -57,9 +64,9 @@ class TestGraphTypes:
         r = client.get("/analyze/graph/types")
         assert r.status_code == 200
 
-    def test_types_returns_4(self):
+    def test_types_returns_5(self):
         data = client.get("/analyze/graph/types").json()
-        assert len(data["types"]) == 4
+        assert len(data["types"]) == 5
 
     def test_types_ids(self):
         data = client.get("/analyze/graph/types").json()
@@ -68,6 +75,7 @@ class TestGraphTypes:
         assert "call" in ids
         assert "circular" in ids
         assert "heatmap" in ids
+        assert "centrality" in ids
 
     def test_types_structure(self):
         data = client.get("/analyze/graph/types").json()
@@ -324,3 +332,46 @@ class TestHeatmap:
     def test_heatmap_empty(self):
         data = client.post("/analyze/graph", json={"files": FILES_EMPTY, "graph_type": "heatmap"}).json()
         assert data["functions"] == []
+
+
+# ─── /analyze/graph — Centrality / Hub Detection (Fase 14) ───────────────────
+
+
+class TestCentralityGraph:
+    def test_centrality_ok(self):
+        r = client.post("/analyze/graph", json={"files": FILES_HUB, "graph_type": "centrality"})
+        assert r.status_code == 200
+
+    def test_centrality_detects_hub(self):
+        data = client.post("/analyze/graph", json={"files": FILES_HUB, "graph_type": "centrality"}).json()
+        assert "utils.py" in data["summary"]["hubs"]
+
+    def test_centrality_hub_has_highest_in_degree(self):
+        data = client.post("/analyze/graph", json={"files": FILES_HUB, "graph_type": "centrality"}).json()
+        utils_node = next(n for n in data["nodes"] if n["id"] == "utils.py")
+        assert utils_node["in_degree"] == 3
+        assert utils_node["is_hub"] is True
+
+    def test_centrality_leaf_not_hub(self):
+        data = client.post("/analyze/graph", json={"files": FILES_HUB, "graph_type": "centrality"}).json()
+        b_node = next(n for n in data["nodes"] if n["id"] == "b.py")
+        assert b_node["is_hub"] is False
+
+    def test_centrality_no_edges_no_hubs(self):
+        files = [{"filename": "a.py", "content": "x = 1\n"}, {"filename": "b.py", "content": "y = 2\n"}]
+        data = client.post("/analyze/graph", json={"files": files, "graph_type": "centrality"}).json()
+        assert data["summary"]["hubs"] == []
+
+    def test_centrality_mermaid_marks_hub(self):
+        data = client.post("/analyze/graph", json={"files": FILES_HUB, "graph_type": "centrality"}).json()
+        assert "🔥" in data["mermaid"]
+
+    def test_centrality_empty(self):
+        data = client.post("/analyze/graph", json={"files": FILES_EMPTY, "graph_type": "centrality"}).json()
+        assert data["summary"]["hubs"] == []
+        assert data["nodes"] == []
+
+    def test_centrality_appears_in_graph_types(self):
+        data = client.get("/analyze/graph/types").json()
+        ids = [t["id"] for t in data["types"]]
+        assert "centrality" in ids

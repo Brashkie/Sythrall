@@ -18,7 +18,7 @@ export function nowStr(): string {
   return new Date().toLocaleTimeString('es-PE')
 }
 
-export function nowTs(): string {
+function nowTs(): string {
   const d = new Date()
   return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':')
 }
@@ -39,10 +39,6 @@ export function getExt(name: string): string {
 
 export function uniqueId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2)
-}
-
-export function clamp(val: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, val))
 }
 
 // Toast notifications

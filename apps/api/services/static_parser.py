@@ -70,6 +70,7 @@ def parse_file(filename: str, content: str) -> dict[str, Any]:
             "big_o": [],
             "dead_code": [],
             "wasm_hints": [],
+            "security_findings": [],
         }
 
 
@@ -84,6 +85,7 @@ def _parse_python(filename: str, content: str) -> dict:
     functions: list[dict] = []
     classes: list[dict] = []
     imports: list[dict] = []
+    security_findings: list[dict] = []
 
     # ── Imports ───────────────────────────────────────────────────────────────
     for node in ast.walk(tree):
@@ -120,11 +122,13 @@ def _parse_python(filename: str, content: str) -> dict:
             depth, has_early_exit = _loop_analysis_python(node)
             bigo, bigo_reason = _infer_big_o_python(node, recursion["is_recursive"], depth)
             bigo_theta, bigo_omega = _theta_omega_python(has_early_exit, bigo)
+            space, space_reason = _infer_space_python(node, recursion["is_recursive"])
             decorators = [_decorator_name(d) for d in node.decorator_list]
 
             regex_info = _regex_info_python(node)
             grammar_info = _grammar_info_python(node, recursion["is_recursive"])
             graph_info = _graph_traversal_info_python(node, recursion["is_recursive"])
+            security_findings.extend(_security_findings_python(node))
 
             functions.append(
                 {
@@ -141,6 +145,8 @@ def _parse_python(filename: str, content: str) -> dict:
                     "big_o_reason": bigo_reason,
                     "big_o_theta": bigo_theta,
                     "big_o_omega": bigo_omega,
+                    "space_complexity": space,
+                    "space_reason": space_reason,
                     "is_recursive": recursion["is_recursive"],
                     "is_tail_recursive": recursion["is_tail_recursive"],
                     "recursion_note": _recursion_note(recursion),
@@ -205,6 +211,10 @@ def _parse_python(filename: str, content: str) -> dict:
     # ── Dependencias circulares entre imports ─────────────────────────────────
     circular = _detect_circular_imports(imports)
 
+    # ── Security & Taint (Fase 21 v1) ─────────────────────────────────────────
+    security_findings.extend(_hardcoded_credentials_python(tree))
+    security_findings.sort(key=lambda f: f["line"])
+
     return {
         "filename": filename,
         "language": "python",
@@ -216,6 +226,7 @@ def _parse_python(filename: str, content: str) -> dict:
         "call_graph": call_graph,
         "circular_deps": circular,
         "wasm_hints": wasm_hints,
+        "security_findings": security_findings,
         "summary": {
             "total_functions": len(functions),
             "total_classes": len(classes),
@@ -223,6 +234,7 @@ def _parse_python(filename: str, content: str) -> dict:
             "unused_imports": len(dead_imports),
             "avg_complexity": round(sum(f["complexity"] for f in functions) / len(functions), 2) if functions else 0,
             "max_loc_function": max((f["loc"] for f in functions), default=0),
+            "security_findings": len(security_findings),
         },
     }
 
@@ -257,6 +269,7 @@ def _parse_c(filename: str, content: str) -> dict:
         "macros": macros,
         "call_graph": _build_call_graph(functions),
         "wasm_hints": wasm_hints,
+        "security_findings": [],
         "summary": {
             "total_functions": len(functions),
             "total_structs": len(structs),
@@ -291,6 +304,7 @@ def _parse_cpp(filename: str, content: str) -> dict:
         "macros": macros,
         "call_graph": _build_call_graph(functions),
         "wasm_hints": wasm_hints,
+        "security_findings": [],
         "summary": {
             "total_functions": len(functions),
             "total_classes": len(classes),
@@ -314,11 +328,13 @@ def _ts_extract_functions(root, content: str, lang: str) -> list[dict]:
             loc = end - start + 1
             body_src = "\n".join(lines[start - 1 : end])
 
-            # Complejidad ciclomática básica por conteo de branch keywords
+            # Complejidad ciclomática básica por conteo de branch keywords.
+            # No sumar " else if " aparte: " else if " ya contiene " if " como
+            # substring, así que cada `else if` se contaba dos veces (CC=6 en
+            # vez de 4 para un if + 2 else-if) — " if " solo ya cubre ambos.
             cc = (
                 1
                 + body_src.count(" if ")
-                + body_src.count(" else if ")
                 + body_src.count(" for ")
                 + body_src.count(" while ")
                 + body_src.count(" case ")
@@ -577,6 +593,7 @@ def _parse_js_ts(filename: str, content: str, lang: str) -> dict:
         "dead_code": dead_imports,
         "call_graph": _build_call_graph(functions),
         "wasm_hints": wasm_hints,
+        "security_findings": [],
         "summary": {
             "total_functions": len(functions),
             "total_classes": len(classes),
@@ -590,18 +607,32 @@ def _parse_js_ts(filename: str, content: str, lang: str) -> dict:
 
 
 def _estimate_js_func_loc(content: str, start: int) -> int:
-    """Estima líneas de una función JS buscando la llave de cierre balanceada."""
-    depth, i, max_loc = 0, start, 0
+    """Estima líneas de una función JS buscando la llave de cierre
+    balanceada. Una arrow function sin `{ }` (cuerpo de una sola expresión,
+    ej. `const isEven = (n) => n % 2 === 0;`) nunca abre una llave propia —
+    sin este chequeo, el scan seguía de largo por el resto del archivo y
+    absorbía la llave de la SIGUIENTE función que sí tuviera bloque,
+    heredando su LOC/complejidad/Big-O. Se corta en el primer `;` fuera de
+    paréntesis (la lista de parámetros) visto antes de cualquier `{` — no
+    cubre el caso sin punto y coma final (ASI), documentado como límite
+    aceptado del heurístico."""
+    depth, paren_depth, i, max_loc = 0, 0, start, 0
     in_func = False
     while i < len(content) and max_loc < 500:
         ch = content[i]
-        if ch == "{":
+        if ch == "(":
+            paren_depth += 1
+        elif ch == ")":
+            paren_depth -= 1
+        elif ch == "{":
             depth += 1
             in_func = True
         elif ch == "}" and in_func:
             depth -= 1
             if depth == 0:
                 return content[start : i + 1].count("\n") + 1
+        elif ch == ";" and not in_func and paren_depth <= 0:
+            return content[start:i].count("\n") + 1
         elif ch == "\n":
             max_loc += 1
         i += 1
@@ -890,6 +921,103 @@ def _theta_omega_python(has_early_exit: bool, worst: str) -> tuple[str, str]:
     return f"Θ{suffix}", f"Ω{suffix}"
 
 
+_GROWABLE_METHODS = {"append", "add", "update", "insert", "extend"}
+
+
+def _is_growing_call_python(node: ast.expr) -> bool:
+    """¿Esta llamada hace crecer una colección (`.append(...)`, `.add(...)`, …)?"""
+    return isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in _GROWABLE_METHODS
+
+
+def _grows_structure_python(stmt: ast.AST) -> bool:
+    """¿Este statement crea/hace crecer una estructura auxiliar? Cubre
+    `xs.append(...)` (llamada) y `d[key] = value` (asignación por subscript
+    — el patrón típico para construir un dict incrementalmente)."""
+    if isinstance(stmt, ast.Expr):
+        return _is_growing_call_python(stmt.value)
+    if isinstance(stmt, ast.Assign):
+        return any(isinstance(t, ast.Subscript) for t in stmt.targets)
+    if isinstance(stmt, ast.AugAssign):
+        return isinstance(stmt.target, ast.Subscript)
+    return False
+
+
+def _aux_structure_depth_python(func: ast.FunctionDef) -> int:
+    """Profundidad máxima de anidamiento de loop en la que ocurre una
+    operación que hace crecer una estructura — separado de la profundidad de
+    loop "para tiempo" de `_loop_analysis_python`, que cuenta iteración sin
+    importar si algo se construye (un loop que solo acumula en un escalar es
+    O(1) de espacio aunque sea O(n) de tiempo)."""
+    LOOP_TYPES = (ast.For, ast.While)
+    max_depth = [0]
+
+    def walk(n: ast.AST, depth: int) -> None:
+        for child in ast.iter_child_nodes(n):
+            is_loop = isinstance(child, LOOP_TYPES)
+            d = depth + 1 if is_loop else depth
+            if d > 0 and _grows_structure_python(child):
+                max_depth[0] = max(max_depth[0], d)
+            walk(child, d)
+
+    walk(func, 0)
+    return max_depth[0]
+
+
+def _comprehension_depth_python(node: ast.expr) -> int:
+    """Profundidad de anidamiento de comprehensions (`[x for x in y]` cuenta
+    1; `[[x for x in row] for row in m]` cuenta 2 porque la interna vive en
+    el `elt` de la externa). No distingue múltiples generators en una sola
+    comprehension — heurística deliberadamente conservadora."""
+    if isinstance(node, ast.ListComp | ast.SetComp | ast.GeneratorExp):
+        return 1 + _comprehension_depth_python(node.elt)
+    if isinstance(node, ast.DictComp):
+        return 1 + max(_comprehension_depth_python(node.key), _comprehension_depth_python(node.value))
+    return 0
+
+
+def _max_comprehension_depth_python(func: ast.FunctionDef) -> int:
+    return max((_comprehension_depth_python(n) for n in ast.walk(func) if isinstance(n, ast.expr)), default=0)
+
+
+def _infer_space_python(func: ast.FunctionDef, is_recursive: bool) -> tuple[str, str]:
+    """Complejidad de espacio (Fase 13) — heurística AST paralela al motor de
+    Big-O de tiempo arriba: mismo criterio general (forma del loop, forma de
+    la recursión), pero mirando qué estructuras auxiliares se crean en vez de
+    cuántas veces se itera."""
+    structure_depth = max(_aux_structure_depth_python(func), _max_comprehension_depth_python(func))
+    has_binary = is_recursive and _has_binary_split_python(func)
+
+    if structure_depth >= 2:
+        return (
+            "O(n²)",
+            "Una estructura auxiliar 2D crece con n² — una matriz construida dentro de loops "
+            "anidados, o una comprehension anidada",
+        )
+    if structure_depth == 1:
+        return (
+            "O(n)",
+            "Una lista/set/dict auxiliar crece con el input — aproximadamente un valor "
+            "guardado por elemento procesado",
+        )
+    if is_recursive and has_binary:
+        return (
+            "O(log n)",
+            "La recursión divide el problema a la mitad en cada llamada — el call stack "
+            "nunca crece más de log n frames",
+        )
+    if is_recursive:
+        return (
+            "O(n)",
+            "Recursión sin dividir el input — el call stack crece un frame por llamada, "
+            "hasta n de profundidad (Python no optimiza tail calls)",
+        )
+    return (
+        "O(1)",
+        "Ninguna estructura auxiliar crece con n, y no hay recursión — espacio extra "
+        "constante más allá del input mismo",
+    )
+
+
 def _infer_big_o_c(body: str) -> tuple[str, str]:
     """Heurística Big O para C/C++ basada en keywords del cuerpo."""
     loops = body.count(" for ") + body.count("\tfor ") + body.count(" while ") + body.count("\twhile ")
@@ -943,8 +1071,11 @@ def _cyclomatic_python(func: ast.FunctionDef) -> int:
 
 
 def _cyclomatic_js(body: str) -> int:
+    # No contar "else if " aparte: "else if " ya contiene "if " como
+    # substring, así que cada `else if` sumaba dos veces — "if " solo ya
+    # cubre tanto un `if` normal como la parte "if" de un `else if`.
     cc = 1
-    keywords = ["if ", "else if ", "for ", "while ", "case ", "catch ", "&&", "||", "? "]
+    keywords = ["if ", "for ", "while ", "case ", "catch ", "&&", "||", "? "]
     for kw in keywords:
         cc += body.count(kw)
     return cc
@@ -982,6 +1113,252 @@ def _extract_calls_python(func: ast.FunctionDef) -> list[str]:
             elif isinstance(node.func, ast.Attribute):
                 calls.append(node.func.attr)
     return list(set(calls))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  SECURITY & TAINT (Fase 21 v1) — heurística de patrones, no un reemplazo de SAST
+# ══════════════════════════════════════════════════════════════════════════════
+#  Taint tracking de una sola pasada dentro de cada función: no sigue el flujo
+#  de control real (no distingue ramas de if/else ni loops — una variable
+#  asignada desde una fuente no confiable queda "tainted" para el resto de la
+#  función) y no es interprocedural (no rastrea un valor pasado a otra función
+#  definida en el mismo archivo — eso necesita el call graph del Dependency
+#  Engine, Fase 18). Cada finding trae fuente + evidencia + confianza; nunca
+#  se afirma "esto ES una vulnerabilidad", solo "este patrón lo amerita".
+
+_TAINT_HTTP_ATTRS = {"args", "form", "values", "json", "GET", "POST", "COOKIES", "headers"}
+_TAINT_DOTTED_SOURCES = {
+    "os.getenv": "variable de entorno",
+    "os.environ.get": "variable de entorno",
+    "request.get_json": "solicitud HTTP",
+}
+_SQL_SINK_METHODS = {"execute", "executemany"}
+_SHELL_CALL_DOTTED = {"os.system", "os.popen"}
+_SUBPROCESS_SHELL_FUNCS = {"call", "run", "Popen", "check_call", "check_output"}
+_CREDENTIAL_NAME_RE = re.compile(r"(password|passwd|pwd|secret|api_?key|access_?key|auth_?token|private_?key)", re.I)
+_PLACEHOLDER_VALUE_RE = re.compile(r"^(|changeme|xxx+|todo|your[-_]?\w*|<.*>|\{\{.*\}\}|\$\{.*\})$", re.I)
+
+
+def _taint_source_kind(node: ast.expr) -> str | None:
+    """Fuentes no confiables reconocidas: solicitud HTTP (`request.args/form/
+    values/json/GET/POST/COOKIES/headers`), stdin (`input()`), argv
+    (`sys.argv`), variables de entorno (`os.environ`/`os.getenv`). No cubre
+    sockets/DB/lectura de archivo genérica — necesitarían contexto que un
+    análisis por función no tiene."""
+    if isinstance(node, ast.Call):
+        if isinstance(node.func, ast.Name) and node.func.id in ("input", "raw_input"):
+            return "stdin (input())"
+        dotted = _node_name(node.func)
+        if dotted in _TAINT_DOTTED_SOURCES:
+            return _TAINT_DOTTED_SOURCES[dotted]
+        if isinstance(node.func, ast.Attribute) and node.func.attr == "get":
+            base = _node_name(node.func.value)
+            if base == "os.environ":
+                return "variable de entorno"
+            if base.rsplit(".", 1)[-1] in _TAINT_HTTP_ATTRS:
+                return "solicitud HTTP"
+        return None
+    if isinstance(node, ast.Subscript):
+        base_name = _node_name(node.value)
+        if base_name == "sys.argv":
+            return "argumento de línea de comandos"
+        if base_name == "os.environ":
+            return "variable de entorno"
+        if isinstance(node.value, ast.Attribute) and node.value.attr in _TAINT_HTTP_ATTRS:
+            return "solicitud HTTP"
+        return None
+    if isinstance(node, ast.Attribute) and node.attr in _TAINT_HTTP_ATTRS:
+        return "solicitud HTTP"
+    return None
+
+
+def _expr_taint_info(expr: ast.expr, tainted: dict[str, tuple[str, bool]]) -> tuple[str, bool] | None:
+    """Retorna (fuente, construido_por_concatenación) si `expr` es o contiene
+    un valor tainted. El flag "construido" es la señal real de riesgo para
+    SQL/command injection: True si el taint llegó a través de concatenación
+    (BinOp, incluye `%`), f-string, o `.format()` — es decir, se está armando
+    un string a mano en vez de pasar el valor como parámetro separado."""
+    direct = _taint_source_kind(expr)
+    if direct:
+        return (direct, False)
+    if isinstance(expr, ast.Name) and expr.id in tainted:
+        return tainted[expr.id]
+    if isinstance(expr, ast.BinOp):
+        found = _expr_taint_info(expr.left, tainted) or _expr_taint_info(expr.right, tainted)
+        return (found[0], True) if found else None
+    if isinstance(expr, ast.JoinedStr):  # f-string
+        for value in expr.values:
+            if isinstance(value, ast.FormattedValue):
+                found = _expr_taint_info(value.value, tainted)
+                if found:
+                    return (found[0], True)
+        return None
+    if isinstance(expr, ast.Call) and isinstance(expr.func, ast.Attribute) and expr.func.attr == "format":
+        for arg in list(expr.args) + [kw.value for kw in expr.keywords]:
+            found = _expr_taint_info(arg, tainted)
+            if found:
+                return (found[0], True)
+        return None
+    return None
+
+
+def _own_scope_nodes(func: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.AST]:
+    """Como `ast.walk(func)` pero sin descender a funciones/lambdas anidadas:
+    esas tienen su propio scope (y su propia línea de tiempo — pueden
+    llamarse después, varias veces, o nunca) y ya se analizan por separado
+    cuando el loop principal de `_parse_python` las visita como su propio
+    `FunctionDef`. Mezclarlas con el scope de `func` producía falsos
+    positivos de taint cuando reusaban un nombre de variable."""
+    nodes: list[ast.AST] = []
+    stack = list(ast.iter_child_nodes(func))
+    while stack:
+        node = stack.pop()
+        nodes.append(node)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda):
+            continue
+        stack.extend(ast.iter_child_nodes(node))
+    return nodes
+
+
+def _taint_propagation_python(func: ast.FunctionDef) -> dict[str, tuple[str, bool]]:
+    """Pasada única sobre las asignaciones de la función (scope propio, sin
+    bajar a funciones anidadas — ver `_own_scope_nodes`), en orden de línea:
+    si el lado derecho es o contiene un valor tainted, el nombre del lado
+    izquierdo queda tainted con esa misma fuente; si NO lo es, se limpia
+    cualquier taint previo de ese nombre — una reasignación a un valor seguro
+    (`cmd = "ls -la"`) deja de estar tainted para el resto del análisis
+    (aproximación lineal, no sigue ramas — documentado arriba)."""
+    tainted: dict[str, tuple[str, bool]] = {}
+    assigns = sorted((n for n in _own_scope_nodes(func) if isinstance(n, ast.Assign)), key=lambda n: n.lineno)
+    for n in assigns:
+        info = _expr_taint_info(n.value, tainted)
+        for target in n.targets:
+            if not isinstance(target, ast.Name):
+                continue
+            if info:
+                tainted[target.id] = info
+            else:
+                tainted.pop(target.id, None)
+    return tainted
+
+
+def _check_sql_injection(call: ast.Call, tainted: dict[str, tuple[str, bool]]) -> dict | None:
+    """CWE-89. Solo dispara si el query se arma por concatenación/f-string/
+    `.format()` con un valor tainted — un query parametrizado real
+    (`cursor.execute("...%s...", (val,))`) no lo dispara, porque `args[0]` ahí
+    es un literal, no una expresión construida."""
+    if not (isinstance(call.func, ast.Attribute) and call.func.attr in _SQL_SINK_METHODS):
+        return None
+    if not call.args:
+        return None
+    info = _expr_taint_info(call.args[0], tainted)
+    if not info or not info[1]:
+        return None
+    source, _built = info
+    base = _node_name(call.func.value)
+    sink = f"{base}.{call.func.attr}(...)" if base != "?" else f"{call.func.attr}(...)"
+    return {
+        "cwe": "CWE-89",
+        "category": "SQL Injection",
+        "severity": "High",
+        "confidence": "High",
+        "source": source,
+        "sink": sink,
+        "line": call.lineno,
+        "recommendation": "Usar query parametrizada (placeholders `?`/`%s` + tupla de parámetros) en vez de construir el SQL por concatenación/f-string.",
+    }
+
+
+def _check_command_injection(call: ast.Call, tainted: dict[str, tuple[str, bool]]) -> dict | None:
+    """CWE-78. `os.system`/`os.popen` siempre corren en shell, así que
+    cualquier taint alcanzando el comando alcanza — construido o no.
+    `subprocess.*` solo dispara con `shell=True` explícito (sin eso, pasar
+    una lista de argumentos ya es la forma segura y no ejecuta por shell)."""
+    dotted = _node_name(call.func)
+    is_os_shell = dotted in _SHELL_CALL_DOTTED
+    is_subprocess_shell = (
+        isinstance(call.func, ast.Attribute)
+        and call.func.attr in _SUBPROCESS_SHELL_FUNCS
+        and _node_name(call.func.value) == "subprocess"
+        and any(
+            kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True for kw in call.keywords
+        )
+    )
+    if not (is_os_shell or is_subprocess_shell):
+        return None
+    if not call.args:
+        return None
+    info = _expr_taint_info(call.args[0], tainted)
+    if not info:
+        return None
+    source, _built = info
+    sink_name = dotted if dotted != "?" else (call.func.attr if isinstance(call.func, ast.Attribute) else "?")
+    return {
+        "cwe": "CWE-78",
+        "category": "Command Injection",
+        "severity": "High",
+        "confidence": "High",
+        "source": source,
+        "sink": f"{sink_name}(...)",
+        "line": call.lineno,
+        "recommendation": "Pasar el comando como lista de argumentos (`subprocess.run([...])`, sin `shell=True`) en vez de un string construido con datos externos.",
+    }
+
+
+def _security_findings_python(func: ast.FunctionDef) -> list[dict]:
+    """Taint tracking + catálogo de sinks conocidos, dentro de una sola
+    función (scope propio, sin bajar a funciones anidadas — esas se analizan
+    por separado cuando el loop principal las visita). Cada finding incluye
+    `function` con el nombre de la función donde se detectó."""
+    tainted = _taint_propagation_python(func)
+    if not tainted:
+        return []
+    findings: list[dict] = []
+    calls = sorted((c for c in _own_scope_nodes(func) if isinstance(c, ast.Call)), key=lambda c: c.lineno)
+    for call in calls:
+        finding = _check_sql_injection(call, tainted) or _check_command_injection(call, tainted)
+        if finding:
+            finding["function"] = func.name
+            findings.append(finding)
+    return findings
+
+
+def _hardcoded_credentials_python(tree: ast.Module) -> list[dict]:
+    """CWE-798, a nivel de archivo (no por función, como el resto de la
+    seguridad — una credencial hardcodeada suele vivir en una constante de
+    módulo). Dos señales requeridas: el nombre de variable sugiere una
+    credencial Y el valor es un string literal no vacío que no parece un
+    placeholder (`""`, `"changeme"`, `"<your-key>"`, `"${VAR}"`). Heurística
+    de nombre+forma, mismo estilo que el resto del CS Engine — no valida si
+    el string realmente funciona como credencial."""
+    findings: list[dict] = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Assign):
+            targets, value = n.targets, n.value
+        elif isinstance(n, ast.AnnAssign) and n.value is not None:
+            targets, value = [n.target], n.value
+        else:
+            continue
+        if not (isinstance(value, ast.Constant) and isinstance(value.value, str)):
+            continue
+        if _PLACEHOLDER_VALUE_RE.match(value.value.strip()):
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name) and _CREDENTIAL_NAME_RE.search(target.id):
+                findings.append(
+                    {
+                        "cwe": "CWE-798",
+                        "category": "Hardcoded Credentials",
+                        "severity": "Medium",
+                        "confidence": "Medium",
+                        "source": f"literal en el código (`{target.id}`)",
+                        "sink": None,
+                        "line": n.lineno,
+                        "function": None,
+                        "recommendation": "Mover el valor a una variable de entorno o a un gestor de secretos — no dejarlo como literal en el código fuente.",
+                    }
+                )
+    return findings
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1226,5 +1603,6 @@ def _unsupported(filename: str, ext: str, reason: str = "") -> dict:
         "dead_code": [],
         "call_graph": [],
         "wasm_hints": [],
+        "security_findings": [],
         "summary": {},
     }

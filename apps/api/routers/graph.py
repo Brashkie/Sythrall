@@ -111,6 +111,12 @@ async def graph_types():
                 "icon": "🌡️",
                 "description": "Mapa de calor por complejidad ciclomática y Big-O",
             },
+            {
+                "id": "centrality",
+                "label": "Centrality / Hubs",
+                "icon": "🔥",
+                "description": "Archivos más conectados del proyecto — mismo concepto que centralidad en redes sociales, aplicado a dependencias",
+            },
         ]
     }
 
@@ -136,6 +142,8 @@ async def generate_graph(req: GraphRequest) -> dict[str, Any]:
             return _build_circular_graph(parsed_files)
         elif req.graph_type == "heatmap":
             return _build_heatmap(parsed_files)
+        elif req.graph_type == "centrality":
+            return _build_centrality_graph(parsed_files)
         else:
             return {"error": f"Tipo de grafo desconocido: {req.graph_type}"}
     except Exception as e:
@@ -485,6 +493,126 @@ def _circular_to_mermaid(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  CENTRALITY / HUB DETECTION (Fase 14)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def _build_centrality_graph(parsed_files: list[dict]) -> dict[str, Any]:
+    """
+    Centralidad/hub detection sobre el import graph: qué archivos son más
+    "influyentes" en el proyecto — mismo concepto que centralidad en redes
+    sociales (grado de conexión), aplicado a dependencias entre módulos.
+    Reusa NetworkX, ya dependencia del proyecto (el detector de dependencias
+    circulares ya lo usa) — no una librería nueva para esto.
+
+    "Hub" = entre los 5 archivos con más in-degree (más otros archivos
+    dependen de él — cambiarlo tiene el radio de impacto más grande) Y con
+    al menos 2 dependientes, para no marcar como hub un archivo con una sola
+    import entrante.
+    """
+    file_names = {p["_filename"] for p in parsed_files}
+    all_edges: list[dict] = []
+    seen: set[str] = set()
+
+    for p in parsed_files:
+        src = p["_filename"]
+        for imp in p.get("imports", []):
+            mod = imp.get("module", "")
+            for candidate in _module_to_candidates(mod, src):
+                if candidate in file_names and candidate != src:
+                    key = f"{src}→{candidate}"
+                    if key not in seen:
+                        seen.add(key)
+                        all_edges.append({"from": src, "to": candidate, "via": mod})
+                    break
+
+    if not HAS_NX or not all_edges:
+        nodes = [
+            {
+                "id": p["_filename"],
+                "label": _short_name(p["_filename"]),
+                "in_degree": 0,
+                "out_degree": 0,
+                "centrality": 0.0,
+                "is_hub": False,
+            }
+            for p in parsed_files
+        ]
+        return {
+            "graph_type": "centrality",
+            "nodes": nodes,
+            "edges": [],
+            "mermaid": _centrality_to_mermaid(nodes, []),
+            "summary": {"total_files": len(nodes), "hubs": [], "max_in_degree": 0},
+        }
+
+    G = nx.DiGraph()
+    for p in parsed_files:
+        G.add_node(p["_filename"])
+    for e in all_edges:
+        G.add_edge(e["from"], e["to"])
+
+    degree_centrality = nx.degree_centrality(G)
+    in_degree = dict(G.in_degree())
+    out_degree = dict(G.out_degree())
+
+    nodes = []
+    for p in parsed_files:
+        fname = p["_filename"]
+        nodes.append(
+            {
+                "id": fname,
+                "label": _short_name(fname),
+                "in_degree": in_degree.get(fname, 0),
+                "out_degree": out_degree.get(fname, 0),
+                "centrality": round(degree_centrality.get(fname, 0.0), 3),
+            }
+        )
+
+    ranked = sorted(nodes, key=lambda n: n["in_degree"], reverse=True)
+    hub_ids = {n["id"] for n in ranked[:5] if n["in_degree"] >= 2}
+    for n in nodes:
+        n["is_hub"] = n["id"] in hub_ids
+
+    mermaid = _centrality_to_mermaid(nodes, all_edges)
+
+    return {
+        "graph_type": "centrality",
+        "nodes": nodes,
+        "edges": all_edges,
+        "mermaid": mermaid,
+        "summary": {
+            "total_files": len(nodes),
+            "hubs": [n["id"] for n in nodes if n["is_hub"]],
+            "max_in_degree": max((n["in_degree"] for n in nodes), default=0),
+        },
+    }
+
+
+def _centrality_to_mermaid(nodes: list[dict], edges: list[dict]) -> str:
+    if not nodes:
+        return "flowchart TD\n    A[Sin archivos]"
+
+    lines = ["flowchart TD"]
+    for n in nodes:
+        nid = _safe_id(n["id"])
+        hub_badge = " 🔥" if n.get("is_hub") else ""
+        lines.append(f'    {nid}["{n["label"]}{hub_badge}\\nin:{n["in_degree"]} · out:{n["out_degree"]}"]')
+
+    for e in edges:
+        f = _safe_id(e["from"])
+        t = _safe_id(e["to"])
+        lines.append(f"    {f} --> {t}")
+
+    for n in nodes:
+        if n.get("is_hub"):
+            nid = _safe_id(n["id"])
+            lines.append(f"    style {nid} fill:#ff8a0020,stroke:#ff8a00,stroke-width:2px")
+
+    return "\n".join(lines) + "\n"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  COMPLEXITY HEATMAP
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -662,6 +790,8 @@ def _empty_response(graph_type: str) -> dict:
         base["has_cycles"] = False
     if graph_type == "heatmap":
         base["functions"] = []
+    if graph_type == "centrality":
+        base["summary"] = {"total_files": 0, "hubs": [], "max_in_degree": 0}
     return base
 
 
@@ -707,6 +837,8 @@ async def generate_project_graph(req: ProjectGraphRequest) -> dict[str, Any]:
             result = _build_circular_graph(parsed_files)
         elif req.graph_type == "heatmap":
             result = _build_heatmap(parsed_files)
+        elif req.graph_type == "centrality":
+            result = _build_centrality_graph(parsed_files)
         else:
             return {"error": f"Tipo desconocido: {req.graph_type}"}
 

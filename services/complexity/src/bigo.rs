@@ -54,7 +54,7 @@ pub fn loop_analysis(body: &[Stmt]) -> (u32, bool) {
     (max_depth, has_early_exit)
 }
 
-fn has_binary_split(body: &[Stmt]) -> bool {
+pub(crate) fn has_binary_split(body: &[Stmt]) -> bool {
     let mut found = false;
     let mut on_expr = |expr: &Expr| {
         if found {

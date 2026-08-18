@@ -1,6 +1,6 @@
 {
   "name": "sythrall",
-  "version": "4.7.1",
+  "version": "4.8.0",
   "description": "Sythrall — Monitor de API y código ML/DL · FastAPI backend",
   "type": "module",
   "scripts": {

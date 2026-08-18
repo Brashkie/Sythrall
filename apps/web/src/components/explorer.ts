@@ -2,22 +2,10 @@
 //  Sythrall — Project Explorer v1.0
 //  Árbol expandible + File tabs + Búsqueda global + Outline
 //
-//  INTEGRACIÓN (3 pasos en app.ts):
-//
-//  1. Import:
-//     import { initExplorer, explorerAddFile, explorerRemoveFile, explorerSelectFile } from './explorer'
-//
-//  2. En initApp(), después de initEditor():
-//     initExplorer({ onFileOpen: (f) => selectFile(f.id) })
-//
-//  3. En handleCodeFiles(), después de state.files.push(...):
-//     explorerAddFile(file)
-//
-//  4. En removeFile():
-//     explorerRemoveFile(id)
-//
-//  5. En selectFile():
-//     explorerSelectFile(id)
+//  API pública (consumida por app.ts / events.ts / file-browser.ts):
+//    initExplorer({ onFileOpen: (f) => ... })  — engancha la apertura de archivos
+//    explorerAddFile(file) / explorerRemoveFile(id)
+//    openSearch()
 // ══════════════════════════════════════════
 
 import { state } from '../store/state'
@@ -449,7 +437,7 @@ function _runSearch(): void {
   }
 }
 
-export function toggleSearch(): void {
+function toggleSearch(): void {
   _searchOpen ? closeSearch() : openSearch()
 }
 
@@ -464,7 +452,7 @@ export function openSearch(): void {
   }, 50)
 }
 
-export function closeSearch(): void {
+function closeSearch(): void {
   _searchOpen = false
   document.getElementById('exp-search-overlay')?.classList.remove('exp-search-visible')
 }
@@ -474,7 +462,7 @@ export function closeSearch(): void {
 //  Se renderiza cuando se abre un archivo
 // ══════════════════════════════════════════
 
-export function renderOutline(file: CodeFile): void {
+function renderOutline(file: CodeFile): void {
   const container = document.getElementById('analysis-content')
   if (!container) return
 
@@ -627,7 +615,7 @@ export function explorerRemoveFile(id: string): void {
   _renderFileTree()
 }
 
-export function explorerSelectFile(id: string): void {
+function explorerSelectFile(id: string): void {
   const f = state.files.find((x) => x.id === id)
   if (!f || !_opts) return
 

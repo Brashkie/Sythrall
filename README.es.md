@@ -4,13 +4,13 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/versión-4.5.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/versión-4.8.0-blue?style=flat-square)
 [![CI](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml/badge.svg)](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml)
 ![Frontend](https://img.shields.io/badge/Frontend-Vite%20%2B%20TypeScript-646cff?style=flat-square)
 ![Backend](https://img.shields.io/badge/Backend-FastAPI%20%2B%20Python-009688?style=flat-square)
 ![Terminal](https://img.shields.io/badge/Terminal-Rust%20%2B%20axum-dea584?style=flat-square)
 ![Deploy](https://img.shields.io/badge/Deploy-Docker%20%2B%20Nginx-2496ed?style=flat-square)
-![Tests](https://img.shields.io/badge/Tests-329%20pasando-00f5a0?style=flat-square)
+![Tests](https://img.shields.io/badge/Tests-373%20pasando-00f5a0?style=flat-square)
 ![Author](https://img.shields.io/badge/Autor-Hepein%20Oficial-b87dff?style=flat-square)
 ![License](https://img.shields.io/badge/Licencia-GPL%203.0-orange?style=flat-square)
 
@@ -33,7 +33,7 @@ Sythrall es una plataforma profesional de inteligencia de código construida com
 | **🖥 Terminal integrada** | Shell interactiva real (PowerShell/bash) en un panel inferior redimensionable, con un sidecar en Rust (`portable-pty` + `axum`) — protegida por token, sin fricción para uso local |
 | **📝 Editor Intelligence** | Linting en tiempo real, diagnósticos inline, hover con Big-O, Go to Definition, Find References, Rename Symbol, autocompletado semántico |
 | **🔬 Análisis Estático** | Parser AST multi-lenguaje (Python, TypeScript, C/C++) — estimación Big-O, complejidad ciclomática, hints WASM/Cython, call graph, dead code |
-| **🕸 Code Graph Visual** | Import Graph, Call Graph, detección de dependencias circulares, Complexity Heatmap — Tree View con Mermaid, sobre archivos sueltos o un proyecto completo *(el Force Graph interactivo existe y está testeado, pero todavía no tiene un control de UI que lo dispare)* |
+| **🕸 Code Graph Visual** | Import Graph, Call Graph, detección de dependencias circulares — Tree View con Mermaid, sobre archivos sueltos o un proyecto completo *(el Force Graph interactivo y el dir-tree de Complexity Heatmap existen y están testeados, pero ninguno de los dos tiene todavía un control de UI que lo dispare)* |
 | **📂 Proyectos** | Subí archivos, una carpeta o un ZIP — el resultado puede quedar como **proyecto activo**, que Editor · Issues · Diagrama · Static · Métricas leen directo, sin volver a subir nada por panel |
 | **🔍 Análisis** | pylint · flake8 · AST · `complexity-engine` (Rust) — issues, complejidad, maintainability index |
 | **🤖 ML/DL** | Detección de 23 librerías, 23 patrones de pipeline, 25 modelos, 20+ reglas |
@@ -73,7 +73,7 @@ sythrall/
 │   └── dev-banner.mjs              ← banner de arranque con ansimax para npm run dev
 ├── apps/                           ← productos que un usuario corre directamente, un directorio cada uno
 │   ├── api/                        ← Backend FastAPI
-│   │   ├── main.py                 ← FastAPI v4.6 (30+ rutas)
+│   │   ├── main.py                 ← FastAPI v4.8 (35+ rutas)
 │   │   ├── shared.py
 │   │   ├── Dockerfile
 │   │   ├── routers/
@@ -499,25 +499,34 @@ en vez de una lista plana de "agregar más lenguajes":
 | Capa | Lenguaje | Rol | Evidencia hasta ahora |
 |---|---|---|---|
 | Interacción | **TypeScript** | UI, integración con Monaco, editor intelligence, diagramas — la única capa que el usuario toca directamente | Vite + Monaco + Mermaid + Chart.js + xterm, todo shippeado (Fases 1–9) |
-| Intelligence & Science | **Python** | El motor de análisis en sí, detección ML/DL, orquestación | `static_parser.py`, 23 librerías detectadas, ML/DL Inspector (Fase 2) |
-| Native Analysis | **Rust** | Motores de análisis CPU/memory-bound — adoptado solo donde un cuello de botella medido lo justifica, nunca asumido | `terminal-server` (manejo de PTY, un problema genuinamente pensado para Rust), `complexity-engine` (9–21× más rápido que `radon`, benchmarkeado con Criterion antes de decidir — Fase 11) |
+| Intelligence & Science | **Python** | IA/ML, orquestación, cargas científicas — **no** el motor de análisis estático a largo plazo: ese rol se está retirando hacia Rust (Native Analysis Core de la Fase 18), una porción medida a la vez | 23 librerías detectadas, ML/DL Inspector (Fase 2). `static_parser.py` en sí es la pieza legacy que la Fase 18 está migrando fuera de Python, no un fixture permanente |
+| Native Analysis | **Rust** | El motor de análisis estático, destino comprometido — parsing, AST, resolución de símbolos, complejidad, seguridad, calidad, grafos. Cada porción se sigue perfilando/benchmarkeando antes del swap (eso es el *cómo*, no el *si*) | `terminal-server` (manejo de PTY), `complexity-engine` (9–21× más rápido que `radon` — Fase 11), análisis Python rico portado (Fase 18) |
 | Scientific/HPC | **Fortran** | *Objetivo* de análisis, no lenguaje de implementación — Sythrall ya tiene rendimiento numérico nivel Fortran gratis vía los backends LAPACK/BLAS compilados de numpy/scipy | Planeado (Fase 20) |
 | Nivel máquina | **Assembly** | Objetivo de análisis para desglose de instrucciones/registros/control-flow — envuelve Capstone/LIEF en vez de escribir un disassembler a mano | Planeado (Fase 19) |
-| Native tooling | **Zig** | Build, cross-compilación, distribución standalone — una preocupación distinta al rol de motor de análisis de Rust, no compite con él | Planeado (Fase 22) |
+| Native tooling | **Zig** | Build, cross-compilación, distribución standalone — una preocupación distinta al rol de motor de análisis de Rust, no compite con él | Planeado (Fase 25) |
 
-La regla para mover cualquier cosa a Rust (o cualquier lenguaje nativo) es la misma
-que `complexity-engine` ya demostró: perfilar primero, benchmarkear el reemplazo, y
-quedarse con él solo si los números lo justifican. La investigación de proyectos
-gigantes de la Fase 10 encontró que el costo real O(n²) eran tres bugs de Python
-comunes, no el parser — arreglado sin lenguaje nuevo. El `complexity-engine` de la
-Fase 11 encontró una ganancia real, medida, de 9–21× — adoptado. Los dos resultados
-salieron del mismo proceso; ninguno se asumió de entrada. Ese proceso, no una
-preferencia de lenguaje, es lo que la Fase 18 de abajo extiende.
+La regla para mover cualquier cosa a Rust (o cualquier lenguaje nativo) solía ser
+un either/or de verdad: perfilar primero, benchmarkear el reemplazo, y quedarse con
+él solo si los números lo justifican — la investigación de proyectos gigantes de la
+Fase 10 encontró que el costo real O(n²) eran tres bugs de Python comunes, no el
+parser, y se arregló sin lenguaje nuevo; el `complexity-engine` de la Fase 11
+encontró una ganancia real, medida, de 9–21× y adoptó Rust. Los dos resultados
+salieron del mismo proceso; ninguno se asumió de entrada.
+
+Para el motor de análisis estático puntualmente, esa pregunta ya está resuelta: se
+muda a Rust, completo, no solo donde un benchmark lo favorezca — ver el Native
+Analysis Core de la Fase 18 más abajo. Lo que sobrevive de la regla vieja es el
+*método*, no la *decisión*: cada porción se sigue portando, testeando por paridad
+contra el Python que reemplaza, y benchmarkeando antes de que los call sites
+cambien — la migración nunca cambia correctitud por velocidad de llegar a la meta.
+El framing either/or todavía aplica a cualquier *otra* adopción futura de lenguaje
+nativo fuera de esta migración puntual — esto es una excepción explícita y única,
+no una reversión de la regla general.
 
 ### Hacia dónde va esto: Computer Science Intelligence, no un linter
 
 La descripción honesta de Sythrall hoy es "lee código, calcula Big-O." Las Fases
-13–21 de abajo son el plan para hacer crecer eso hacia algo más específico:
+13–23 de abajo son el plan para hacer crecer eso hacia algo más específico:
 *Sythrall analiza software desde las estructuras matemáticas/algorítmicas de abajo,
 hasta el compilador, el código máquina, y el hardware sobre el que corre.* No
 convirtiéndose en un solver matemático ni en un compilador — conectando la teoría de
@@ -580,10 +589,10 @@ adopción de un lenguaje nativo sigue necesitando su propio benchmark antes/desp
 - [x] 162 tests automatizados
 
 ### ✅ Fase 6 — Code Graph + Project Explorer
-- [x] Import Graph · Call Graph · Dependencias Circulares · Complexity Heatmap
+- [x] Import Graph · Call Graph · Dependencias Circulares
 - [x] Sub-etapa A: grafos desde sidebar; Sub-etapa B: desde proyectos ZIP completos
 - [x] Resolución cross-folder, detección circular con NetworkX
-- [x] Force Graph interactivo (motor de física propio, sin D3) *(implementado y testeado — ningún control de UI lo llamaba hasta que un audit posterior encontró que todo el módulo de grafos no tenía ni un caller en la app; el Tree View con Mermaid quedó conectado en la Fase 10 más abajo, el Force Graph todavía espera su UI)*
+- [x] Force Graph interactivo *y* dir-tree de Complexity Heatmap (`renderForceGraph`/`renderDirTree` en `panels/graph.ts`, motor de física propio, sin D3) *(los dos implementados y testeados — un audit posterior encontró que todo el módulo de grafos no tenía ni un caller en la app; el Tree View con Mermaid quedó conectado en la Fase 10 más abajo, pero `generateWholeProjectDiagram` en `app.ts` todavía pasa `onForce`/`onDirTree` como no-ops (documentado en su propio docstring) — ninguno de los dos tiene control de UI todavía)*
 - [x] Project Explorer: árbol + tabs múltiples + búsqueda global + outline
 - [x] 316 tests automatizados
 
@@ -624,7 +633,7 @@ No estaba originalmente en este roadmap — salió de querer que el proyecto agu
 - [x] **Nav vertical reemplaza la tabbar horizontal** — nav de iconos persistente (`apps/web/src/utils/icons.ts`, SVGs inline, `stroke="currentColor"` para seguir el tema activo sin código extra), mismo patrón que usan las herramientas de referencia. `switchTab()` no cambió — los items del nav nuevo mantuvieron la convención `class="tab"`/`data-tab`/`id="t-*"`, así que fue un cambio puramente de HTML/CSS.
 - [x] **Un solo proyecto activo, no cuatro entradas separadas.** Antes: "+ Código"/"+ Carpeta"/"+ Log" del sidebar eran efímeros (se perdían al refrescar, nunca tocaban el backend) mientras que Proyectos era el único camino persistente — dos modelos mentales para la misma idea. Ahora "+ Código"/"+ Carpeta" crean o suman al **proyecto activo** (mismos endpoints del backend que ya usaba Proyectos, `project_id` ahora opcional en `/api/upload/{files,folder}` para soportar el append), y Editor · Issues · Diagrama · Static · Métricas leen todos del proyecto que esté activo — elegís un proyecto una vez, trabajás en todos los paneles.
 - [x] **Arreglos encontrados por audit**, con el mismo método de "¿esto tiene algún caller de verdad?" que encontró el hueco del Force Graph arriba: se reconectaron la Live Metrics Bar y Session Restore (`panels/problems.ts`, escrito para la Fase 7, nunca llamado desde `editor.ts`); el proyecto activo ahora persiste en `localStorage` así que ambos se restauran solos al recargar; se arregló el badge de la pestaña APIs (nunca se actualizaba); el panel de Métricas ganó un modo de proyecto activo igual que Issues/Diagrama/Static.
-- [ ] Ubicación del **panel de problemas** — todavía necesita una decisión (ver nota de la Fase 7 arriba) antes de poder conectarse sin pisar la vista de análisis de archivo existente. *(resuelto en la Fase 12 más abajo — sub-tab propio del panel derecho en vez de compartir contenedor)*
+- [x] Ubicación del **panel de problemas** — todavía necesita una decisión (ver nota de la Fase 7 arriba) antes de poder conectarse sin pisar la vista de análisis de archivo existente. *(resuelto en la Fase 12 más abajo — sub-tab propio del panel derecho en vez de compartir contenedor)*
 
 ### ✅ Fase 11 — `radon` reemplazado por un sidecar Rust propio (`complexity-engine`)
 
@@ -648,23 +657,23 @@ Cierra los ítems de roadmap del CS Engine de la Fase 8 y la decisión pendiente
 
 ---
 
-Las fases de abajo son los 9 pilares conceptuales de "Computer Science Intelligence" (ver arriba) más una fase final de productización — agrupadas según qué tan fundamentadas están, no según qué tan lejos en el futuro caen. Las Fases 13–14 son la continuación más directa de lo que la Fase 8/12 ya shippeó; 15–17 son terreno teórico genuinamente nuevo; 18–20 construyen sobre la tabla de filosofía de lenguajes; 21–22 cierran el círculo (runtime + cómo el producto realmente llega a la gente).
+Las fases de abajo son los 11 pilares conceptuales de "Computer Science Intelligence" (ver arriba) más dos fases finales que quedan fuera de esa teoría — una arquitectónica, una de productización — agrupadas según qué tan fundamentadas están, no según qué tan lejos en el futuro caen. Las Fases 13–14 son la continuación más directa de lo que la Fase 8/12 ya shippeó; 15–17 son terreno teórico genuinamente nuevo; 18–20 construyen sobre la tabla de filosofía de lenguajes; 21–22 llenan un hueco que la pasada original de 9 pilares no vio (seguridad, calidad de código) — mismo estilo heurístico con confianza puntuada que todo lo demás acá, no una metodología nueva; 23 es arquitectónicamente distinta a todo lo de arriba (necesita un proceso corriendo, no solo texto fuente); 24–25 cierran el círculo — 24 es el límite de API que dejaría crecer las Fases 13–23 como plugins en vez de que cada analizador termine directo en `apps/api`, 25 es cómo el producto realmente llega a la gente una vez que hay algo para mostrar.
 
-### 🔴 Fase 13 — Algorithmic Intelligence *(extiende el motor O/Θ/Ω de la Fase 8, sin arquitectura nueva)*
+### 🟡 Fase 13 — Algorithmic Intelligence *(extiende el motor O/Θ/Ω de la Fase 8, sin arquitectura nueva)*
 
 La Fase 8 ya calcula O del peor caso, Ω del mejor caso, y Θ de cota ajustada por función — una aplicación específica y estándar de la notación asintótica en análisis de algoritmos (misma convención que usan CLRS y la mayoría de los textos de algoritmos). Vale la pena hacerlo explícito en vez de implícito, ya que las definiciones generales son más amplias que ese uso puntual:
 
-- [ ] **Referencia de notación asintótica**, mostrada donde ya aparece un resultado Big-O: O (cota superior), Ω (cota inferior), Θ (cota ajustada), o (cota superior estricta), ω (cota inferior estricta) — las definiciones generales primero, la convención específica de Sythrall (peor/mejor/cota ajustada) después, para que la distinción se enseñe, no se asuma
-- [ ] **Complejidad de espacio** junto a la de tiempo — espacio auxiliar vs. espacio de entrada, mismo tratamiento O/Θ/Ω que ya se aplica al tiempo, mismo enfoque heurístico basado en AST (sin ejecución)
+- [x] **Referencia de notación asintótica**, mostrada donde ya aparece un resultado Big-O: una tabla `<details>` colapsable arriba de la tabla Big-O del panel Static (`panels/static.ts::_renderBigOTable`) cubre los cinco símbolos — O (cota superior), Ω (cota inferior), Θ (cota ajustada), o (cota superior estricta), ω (cota inferior estricta) — definición general primero, honesto en que `o`/`ω` no se calculan (no hay heurística estática confiable que distinga "estricto" del caso ajustado). El tooltip de hover en Python (`_build_hover_python`) recibe la misma explicación como nota de una línea debajo de su tabla O/Θ/Ω. El hover de JS/TS queda sin tocar a propósito — solo calcula O, no Θ/Ω, así que la referencia completa todavía no aplica ahí.
+- [x] **Complejidad de espacio** junto a la de tiempo, construida en Rust y Python desde la misma pasada esta vez (`services/complexity/src/space.rs` + `static_parser.py::_infer_space_python`, las dos cableadas el mismo día) — mismo enfoque heurístico basado en AST que el motor de tiempo (sin ejecución), pero la señal es *qué estructura auxiliar se construye*, no *cuántas veces corre un loop*: un loop que solo acumula en un escalar (`total += x`) es O(1) de espacio aunque sea O(n) de tiempo. Detecta colecciones que crecen (`.append`/`.add`/`.update`/`.insert`/`.extend`, o asignación por subscript `d[k] = v`) según la profundidad de anidamiento de loop (O(n) en profundidad 1, O(n²) en profundidad 2 — una matriz construida en loops anidados), comprehensions anidadas (`[[0 for _ in range(n)] for _ in range(n)]`), y profundidad del call stack por recursión (O(log n) para recursión con división binaria, reusando el detector de split que ya tiene `bigo.rs`; O(n) para recursión lineal, porque Python no optimiza tail calls). 8 tests unitarios en Rust + 8 en Python (`TestSpaceComplexity`), paridad byte a byte confirmada a mano en los 8 casos. Cableado en `/intel/hover` y `/intel/analyze` (Rust primero, fallback a Python, mismo gate que Big-O) y una columna **Space** nueva en la tabla Big-O del panel Static. Benchmarkeado con Criterion contra el tiempo real de `_parse_python()` sobre los mismos archivos sintéticos: 10 funciones — 0.77ms vs 18.0ms (23.4×); 100 — 9.17ms vs 212.6ms (23.2×); 1000 — 254ms vs 2083ms (8.2×) — y reportado con honestidad que agregar este pase hizo a `analyze_rich()` mismo 30–59% más lento contra su propio baseline previo (dos recorridos completos más por función se acumulan), no solo la ganancia contra Python.
 - [ ] **Reconocimiento de relaciones de recurrencia** para funciones divide-and-conquer — ej. el patrón `T(n) = 2T(n/2) + Θ(n)` de `merge_sort` matcheado contra los tres casos del Teorema Maestro en vez de caer en la heurística genérica de loop/recursión ya existente, llegando a `Θ(n log n)` mostrando la recurrencia, no solo la respuesta
 
-### 🔴 Fase 14 — Data Structures & Graph Intelligence *(mismo estilo heurístico que los detectores de WASM-hints/dead-code ya existentes)*
+### 🟡 Fase 14 — Data Structures & Graph Intelligence *(mismo estilo heurístico que los detectores de WASM-hints/dead-code ya existentes)*
 
 Continuación directa del CS Engine (Fase 8/12) — mismo enfoque de análisis estático, sin arquitectura nueva. No solo nombrar la estructura, explicarla:
 
 - [ ] Detectar AVL / Red-Black Tree / Trie / Heap / Segment Tree / Fenwick Tree / Bloom Filter / B-Tree / HashMap / Skip List a partir de la forma del AST
 - [ ] Por cada detección: complejidad (tiempo *y* espacio), operaciones típicas, casos de uso, ventajas/desventajas contra las alternativas — el mismo estándar de "por qué", no solo "qué", que ya se exige el motor de Big-O
-- [ ] **Algoritmos de grafo como operaciones de primera clase** sobre el Code Graph que ya existe (Fase 6), no solo un target de renderizado — BFS/DFS, camino más corto, componentes conexas, detección de ciclos (el detector de imports circulares ya existente es una instancia de esto, generalizada), orden topológico, centralidad/detección de "hubs" (NetworkX ya es dependencia — mostrar los archivos/funciones más conectados, la misma idea que usan las redes sociales para detectar influencers)
+- [x] **Algoritmos de grafo como operaciones de primera clase, primera porción: centralidad/detección de hubs** (`routers/graph.py::_build_centrality_graph`) — nuevo tipo de grafo `centrality` que reusa el import graph que ya se construye para los otros 4 (Import/Call/Circular/Heatmap), puntuado con `nx.degree_centrality`/`in_degree`/`out_degree` sobre el mismo `DiGraph` de NetworkX que el detector de dependencias circulares ya construye — no una librería nueva, la misma que ya se ganaba su lugar. Un archivo se marca como "hub" cuando está entre los 5 con mayor in-degree *y* tiene al menos 2 dependientes (evita marcar como hub un archivo con una sola import entrante). Cableado en el dropdown de proyecto del panel Diagrama (`index.html`, `PROJECT_GRAPH_TYPES` en `app.ts`) — alcanzable por un usuario, no solo una respuesta de API, la misma disciplina de "¿esto tiene un control de UI?" que enseñó el hueco del Force Graph. 8 tests de backend (`TestCentralityGraph`). **BFS/DFS/camino más corto/componentes conexas/orden topológico sin empezar todavía** — esta porción es el ítem puntual que el texto del roadmap ya nombraba ("centralidad/detección de hubs... mostrar los archivos más conectados"); el resto de la lista de algoritmos de grafo sigue abierto. Deliberadamente todavía Python (`networkx`, no Rust) — el Graph Engine de la Fase 18 necesita la *construcción* del import/call graph en Rust primero, que todavía no existe; portar solo los algoritmos antes de eso significaría mantener dos representaciones de grafo separadas.
 - [ ] **Detección de interacción entre estructuras anidadas** — ej. una hash table recorrida dentro de un loop que también toca esa misma hash table, marcada como un posible recorrido O(n²); análisis de complejidad que mira cómo las estructuras *se combinan*, no solo complejidad por función aislada
 
 ### 🔴 Fase 15 — Mathematical Intelligence *(matemática discreta usada para explicar programas, no un solver matemático)*
@@ -691,17 +700,37 @@ El framing de Cálculo Lambda ya existe sobre la recursión tail-call (Fase 8) �
 - [ ] Visualización del pipeline del compilador (Lexer → AST → IR → optimización → codegen) — integrar [Compiler Explorer](https://godbolt.org) (open source) en vez de construir un compilador educativo desde cero
 - [ ] Vista a nivel IR de la reescritura tail-call que la Fase 8 ya explica en prosa — mostrar cómo se ve el IR de una función tail-recursive reducida a un loop, en vez de solo afirmar que "podría" serlo
 
-### 🟡 Fase 18 — Native Intelligence *(hacer crecer el rol de Rust más allá de `complexity-engine`, misma regla benchmark-primero cada vez)*
+### 🟡 Fase 18 — Native Analysis Core *(migración comprometida: el rol de `static_parser.py` se muda a Rust, completo — no solo donde un benchmark lo favorezca)*
 
-`complexity-engine` (Fase 11) es la prueba de concepto, no un caso aislado: un sidecar Rust se gana su lugar solo cuando hay un cuello de botella de CPU/memoria que un benchmark confirma de verdad — nunca asumido, nunca "Python es lento así que reescribamos". Primera porción hecha, siguiendo exactamente ese proceso:
+`complexity-engine` (Fase 11) fue la prueba de concepto; esta fase es la decisión que esa prueba justificó. **El motor de análisis estático se muda a Rust, completo** — parsing, construcción de AST, resolución de símbolos, complejidad, seguridad, grafos, métricas de calidad, todo, consolidado progresivamente en un core nativo modular. El rol de Python se acota a lo que el ML/DL Inspector de la Fase 2 ya hace bien: IA, ML, cargas científicas — no parsear código fuente. El estado final **no tiene capa de compatibilidad permanente ni doble implementación**: una vez que una pieza se porta y se prueba correcta, la versión Python que reemplazó se elimina, no se queda "por las dudas". `static_parser.py` en sí es el objetivo de la migración, no un fixture que la sobrevive.
 
-- [x] **Análisis Python rico, portado a `complexity-engine`** — el trabajo por función/clase/import de `_parse_python()` (Big-O, Θ/Ω, complejidad ciclomática, recursión tail-call, los 3 clasificadores del CS Engine de la Fase 12) ahora también corre en Rust, expuesto como `POST /parse/python`, con paridad byte a byte contra la implementación Python sobre el mismo archivo (solo difiere el idioma del texto de razón — inglés en Rust, español en Python, a propósito). Benchmarkeado con Criterion contra el tiempo real de `_parse_python()` sobre los mismos archivos sintéticos: 10 funciones — 0.48ms vs 9.94ms (20.6×); 100 — 5.95ms vs 100.7ms (16.9×); 1000 — 187ms vs 1038ms (5.6×) — el margen se achica a mayor escala, reportado tal cual se midió, no redondeado para arriba. Conectado solo en `/static/bigO` (un endpoint que genuinamente es un subconjunto — no lee nada más), chequeado en vivo por pedido sin gate de flag cacheado, misma lección del arreglo de condición de carrera de la Fase 11. **Deliberadamente no conectado en `/static/parse`**: ese endpoint devuelve el shape legacy completo (`dead_code`, `call_graph`, `circular_deps`, `wasm_hints`, `exports`) al frontend, nada de lo cual esta porción calcula todavía — conectarlo hubiera descartado en silencio campos que el panel Static renderiza.
-- [ ] **Graph Engine** — construcción y recorrido de import/call graph para proyectos muy grandes, hoy Python puro en `graph.py` (el hogar natural del trabajo de algoritmos de grafo de la Fase 14 una vez que un proyecto sea lo bastante grande como para que el recorrido en Python sea el cuello de botella real — no antes)
-- [ ] **Dependency Engine** — detección de dependencias circulares y resolución cross-file a escala de proyecto (la próxima porción natural — `/static/parse` necesita exactamente esto más WASM hints y detección de dead-code antes de poder salir del path Python también)
+Lo que no cambia: *cómo* se mueve cada porción sigue siendo disciplinado — se porta, se testea por paridad contra el Python que reemplaza sobre el mismo input, se benchmarkea con Criterion, y solo entonces se conecta a los call sites en vivo, exactamente el proceso que ya usó la primera porción de abajo. El compromiso es con el destino; el rigor está en cómo se llega a cada paso, para que migrar rápido nunca signifique migrar con descuido.
+
+- [x] **Análisis Python rico, portado a `complexity-engine`** — el trabajo por función/clase/import de `_parse_python()` (Big-O, Θ/Ω, complejidad ciclomática, recursión tail-call, los 3 clasificadores del CS Engine de la Fase 12) ahora también corre en Rust, expuesto como `POST /parse/python`, con paridad byte a byte contra la implementación Python sobre el mismo archivo (solo difiere el idioma del texto de razón — inglés en Rust, español en Python, a propósito). Benchmarkeado con Criterion contra el tiempo real de `_parse_python()` sobre los mismos archivos sintéticos: 10 funciones — 0.48ms vs 9.94ms (20.6×); 100 — 5.95ms vs 100.7ms (16.9×); 1000 — 187ms vs 1038ms (5.6×) — el margen se achica a mayor escala, reportado tal cual se midió, no redondeado para arriba. Conectado en `/static/bigO`, `/intel/analyze` (el "heavy path" que corre a los ~2s de inactividad mientras se tipea) y `/intel/hover` (solo la porción de clasificación CS Engine — el texto de firma del hover sigue siendo AST en Python, porque `RichFunction` de Rust solo trae nombres de argumento planos, sin anotaciones de tipo), cada uno chequeado en vivo por pedido sin gate de flag cacheado, misma lección del arreglo de condición de carrera de la Fase 11. **Todavía no conectado en `/static/parse`**: ese endpoint devuelve el shape legacy completo (`dead_code`, `call_graph`, `circular_deps`, `wasm_hints`, `exports`) al frontend, nada de lo cual esta porción calcula todavía — los siguientes cuatro ítems son exactamente lo que falta antes de que pueda mudarse.
+- [ ] **Graph Engine** — construcción y recorrido de import/call graph para proyectos grandes, hoy Python puro en `graph.py`; la pieza que tanto `/static/parse` como el trabajo de algoritmos de grafo de la Fase 14 necesitan en Rust antes de poder dejar Python atrás
+- [ ] **Dependency Engine** — detección de dependencias circulares y resolución cross-file a escala de proyecto — la otra mitad que `/static/parse` necesita, junto con WASM hints y detección de dead-code, para retirar del todo su path en Python
 - [ ] **Symbol Engine** — go-to-definition / find-references sobre codebases grandes, hoy basado en regex/AST por archivo
 - [ ] **Project Scanner** — el fan-out de recorrer+parsear archivos para análisis de proyecto completo (`read_project_files` y afines)
+- [x] **Security, primera porción portada** — `security.rs`: taint tracking + SQL/Command Injection + credenciales hardcodeadas, portado el mismo día que se shippeó la versión Python (Fase 21), misma disciplina de benchmarkear-y-después-swap que cada otra fila de acá. Path Traversal/Deserialización insegura (todavía solo Python) y Code Quality (Fase 22, sin empezar en ningún lenguaje todavía) quedan en cola — el paso de "escribir en Python primero" sigue siendo legítimo para una heurística genuinamente nueva que todavía itera sobre falsos positivos, ya no es el lugar de descanso por default
+- [ ] **`static_parser.py` eliminado** — la meta real: una vez que cada endpoint que lo lee hoy (`/static/parse`, `/static/bigO`, `/intel/*`, `graph.py`) lea del core Rust en su lugar, el archivo Python se elimina, no se deja deprecado-pero-vivo
 
-`static_parser.py` no desaparece — Python y Rust corren en paralelo, y nada de lo de arriba está comprometido como reescritura completa. Cada ítem es la lista de "próximo lugar a mirar", siguiendo exactamente el proceso que la Fase 10 y la Fase 11 ya validaron dos veces (Fase 10: se miró, se encontraron bugs de Python comunes, se arregló en Python; Fase 11: se miró, se encontró un caso real de 9–21×, se adoptó Rust).
+```
+                    Sythrall
+                       │
+                 Native Analysis Core (Rust)
+                       │
+       ┌───────────────┼────────────────┐
+       │               │                │
+    Parsing          Analysis         Graph
+   AST/símbolos  Complexity/Security  CFG/DFG
+                       │
+              Deep Analysis
+       ┌───────────────┼───────────────┐
+       │               │               │
+    Security        Quality       Performance
+```
+
+Una cosa que esto deliberadamente NO es: `static_parser.py` → un solo `static_parser.rs` gigante. La división modular de arriba — módulos Rust separados por responsabilidad, el mismo patrón que ya usan `bigo.rs`/`classifiers.rs`/`recursion.rs`/`structure.rs` dentro de `rich.rs` hoy — es a donde porta cada ítem de arriba, no un port monolítico único. Y una vez que exista la Fase 24 (Extensibility Platform), este core tampoco tiene que cargar con todo para siempre — catálogos de CWE, reglas adicionales, soporte de lenguajes nuevos, y modelos de explicación de IA son exactamente el tipo de cosa que pertenece como plugin *encima* de estos primitives, no hardcodeado para siempre dentro del core mismo.
 
 ### 🔬 Fase 19 — Machine Intelligence *(el lado Assembly de la tabla de filosofía de lenguajes — integrar herramientas maduras, no reconstruirlas)*
 
@@ -719,19 +748,54 @@ Fortran como lenguaje-objetivo, conectado al stack numérico que Sythrall ya tra
 - [ ] Reconocimiento de algoritmos numéricos (operaciones con matrices, descomposiciones) con framing específico de dominio, ej. *"Multiplicación de matrices — O(n³), candidatos: SIMD, blocking, paralelización — dominio: HPC/Computación Numérica"* en vez de una etiqueta Big-O pelada
 - [ ] Detección de uso de BLAS/LAPACK — marcar dónde un proyecto ya se apoya en backends numéricos compilados en vez de reimplementar algo que ya proveen
 
-### 🔴 Fase 21 — Execution Intelligence *(instrumentación en runtime — un tipo de herramienta distinto a todo lo de arriba)*
+### 🟡 Fase 21 — Security & Taint Intelligence *(análisis de flujo de datos basado en patrones, con confianza puntuada — no un reemplazo de SAST)*
 
-Todo en las Fases 1–20 es análisis estático: texto fuente entra, hechos salen, sin necesidad de ejecución. Esta fase es arquitectónicamente distinta — necesita un proceso corriendo, ptrace/eBPF, o captura de paquetes en vivo, por eso se quedó como idea "de largo plazo" no comprometida durante mucho tiempo. Numerada acá para ser honestos de que es un destino real, no para afirmar que está cerca:
+Un hueco que la pasada original de 9 pilares no vio: nada en las Fases 13–20 mira seguridad. Continuación directa del estilo del CS Engine — los clasificadores de regex/grammar de la Fase 8/12 ya demuestran que "patrón heurístico + confianza etiquetada con honestidad" funciona — aplicado a flujo de datos source→sink en vez de forma algorítmica. Nada acá debería presentarse jamás como "esto ES una vulnerabilidad", solo como un patrón que merece la atención de una persona, con la evidencia mostrada para que la afirmación sea auditable. Primera porción hecha:
+
+- [x] **Taint tracking dentro de una sola función** — un recorrido recursivo que arrastra procedencia resuelve un valor hasta una fuente no confiable (`request.args`/`form`/`values`/`json`/`GET`/`POST`/`COOKIES`/`headers`, `input()`, `sys.argv`, `os.environ`/`os.getenv`) a través de asignaciones, concatenación de strings, f-strings y `.format()`, rastreando además *si* el taint se armó por construcción de string (la señal real de riesgo de SQLi/command injection) o solo pasó de largo. **Deliberadamente no cross-function** — el taint interprocedural necesita el call graph que el Dependency Engine de abajo todavía no construye. **Portado a Rust el mismo día que se shippeó en Python** (`services/complexity/src/security.rs`), no dejado como un "después" — ver la nota de Native Analysis Core más abajo sobre por qué. 19 tests unitarios en Python (`test_security_findings.py`) + 9 en Rust (`security::tests`), ambos cubriendo la forma vulnerable y la forma segura/parametrizada de cada check, paridad byte a byte entre los dos confirmada a mano sobre los mismos inputs.
+- [x] **Catálogo CWE v1, 3 de 5 shippeados**: SQL Injection (CWE-89) — dispara solo cuando el query se *arma* por concatenación/f-string/`.format()`, así que `cursor.execute("...%s...", (val,))` correctamente no produce finding; Command Injection (CWE-78) — `os.system`/`os.popen` (siempre corren en shell) o `subprocess.*(..., shell=True)`, `subprocess.run([...])` sin `shell=True` correctamente no produce finding; credenciales hardcodeadas (CWE-798) — heurística de nombre+forma (variable con nombre de credencial asignada a un literal string no-placeholder), a nivel de archivo en vez de por función porque es genuinamente ahí donde viven. **Path Traversal (CWE-22) y Deserialización insegura (CWE-502) sin empezar** — diferidos, no descartados en silencio
+- [x] **Findings con confianza puntuada** (por ahora Alta/Media, ningún caso dispara Baja todavía), nunca un sí/no binario — refleja el precedente de "ambas señales requeridas" del clasificador de grammar de la Fase 12: una fuente sola no es un finding, fuente *y* la señal de concatenación/sink disparando juntas sí lo es
+- [x] **Schema de finding en árbol de evidencia** — categoría → CWE → severidad → confianza → fuente → sink → línea → recomendación, una sola forma compartida para cada finding. Mostrado en el **panel Static** (`panels/static.ts::_renderSecurityFindings`, una sección nueva arriba de la tabla Big-O) y en el **hover** de Python (`_build_hover_python`, Rust primero vía `parse_python_rich` con el mismo fallback a Python por función que ya usa cada otro clasificador acá) — **todavía no en el Problems Panel**: ese tab se alimenta de markers de lint por cada tecla, y los findings de seguridad corren hoy sobre el mismo pase pesado `/static/parse` que ya usan los WASM hints, que viven en Static, no en Problems
+- [x] **2 bugs reales encontrados y corregidos la misma semana que esto se shippeó**, ambos por una auditoría independiente, no autodetectados: (1) reasignar una variable tainted a un literal seguro (`cmd = request.args.get("x"); cmd = "ls -la"`) no limpiaba su taint, produciendo un falso positivo de confianza Alta sobre código defensivo ordinario; (2) una función anidada que reusaba el nombre de una variable externa filtraba taint entre scopes. Los dos se corrigieron haciendo que el recorrido de taint sea scope-aware (`_own_scope_nodes` en Python, `walk_stmts_own_scope` en Rust — una variante del walker genérico de AST que se detiene en los límites de `FunctionDef`/`Lambda` anidados en vez de descender a ellos), con tests de regresión en ambos lenguajes.
+- [ ] Explícitamente fuera de alcance, permanentemente: análisis de exploits completo (ROP, heap spray, use-after-free) — ya correctamente cercado bajo Execution Intelligence (Fase 23 de abajo) como "compite directamente con herramientas SAST maduras"; esta fase se queda dentro de ese mismo límite, solo que estática y más acotada
+
+**Native Analysis Core, aplicado de verdad**: esta es la primera porción de la Fase 18 portada a Rust la misma semana en que se escribió en Python, no puesta en cola para "después" — una respuesta directa a hacer la migración de verdad en vez de solo planearla. Benchmarkeado con Criterion contra el tiempo real de Python (`_parse_python()`, que ahora también corre el mismo pase de seguridad) sobre los mismos archivos sintéticos usados en cada benchmark previo de este proyecto: 10 funciones — 0.52ms vs 11.97ms (23×); 100 — 6.37ms vs 129.0ms (20.3×); 1000 — 191.7ms vs 1316.9ms (6.9×). Agregar el pase de taint hizo a `analyze_rich()` mismo medible más lento (Criterion marcó una regresión de 2.7–8% contra su propio baseline previo) — reportado con honestidad en vez de mostrar solo la ganancia contra Python.
+
+### 🔴 Fase 22 — Code Quality Intelligence *(el Maintainability Index que la Fase 11 ya shippea, desglosado en sus partes auditables, más los smells que un solo número de MI no puede expresar)*
+
+El Maintainability Index de `complexity-engine` (Fase 11) ya calcula un Volumen de Halstead internamente (`maintainability.rs::Halstead::volume()`) pero solo lo expone precocinado dentro de una fórmula. Esta fase muestra los componentes de los que esa fórmula está hecha, y agrega los smells estructurales/de nombres/arquitectura que un solo número de MI no puede capturar por sí solo:
+
+- [ ] **Métricas de Halstead, desglosadas**: Vocabulario (η1+η2), Longitud (N1+N2), Volumen (ya calculado para el MI), Dificultad, Esfuerzo — su propia tabla junto al score de MI existente en vez de quedarse como un input opaco de una sola fórmula
+- [ ] **Smells estructurales**: función larga, clase grande, anidamiento profundo, exceso de parámetros, lógica duplicada (comparación de forma de AST, no diff textual), god object — mismo estándar de "por qué, no solo qué" que ya se exige el motor de Big-O, cada smell trayendo su umbral y su razonamiento, no una etiqueta sola
+- [ ] **Smells de nombres**: nombres de una sola letra fuera de scopes de loop ajustado, casing inconsistente dentro de un mismo archivo, shadowing de un nombre de scope externo — intencionalmente conservador, marca solo casos mecánicamente verificables en vez de juicios de "nombre poco claro" que necesitarían un LLM para arbitrar
+- [ ] **Smells de arquitectura**: coupling/cohesion por módulo, construido sobre el import graph que ya existe (Fase 6/14) — conteos de acoplamiento aferente/eferente, inestabilidad, el detector de dependencias circulares ya shippeado reformulado como una instancia de un chequeo general de violación de capas
+- [ ] **Dashboard de calidad** — una vista de resumen (Security/Quality/Performance/Architecture) que junta números de las Fases 21/22/13/14, no un modelo de scoring nuevo inventado solo para el dashboard
+
+### 🔴 Fase 23 — Execution Intelligence *(instrumentación en runtime — un tipo de herramienta distinto a todo lo de arriba)*
+
+Todo en las Fases 1–22 es análisis estático: texto fuente entra, hechos salen, sin necesidad de ejecución. Esta fase es arquitectónicamente distinta — necesita un proceso corriendo, ptrace/eBPF, o captura de paquetes en vivo, por eso se quedó como idea "de largo plazo" no comprometida durante mucho tiempo. Numerada acá para ser honestos de que es un destino real, no para afirmar que está cerca:
 
 - [ ] Visualizador de memoria (stack/heap/data/bss) — requiere un proceso corriendo para inspeccionar, no texto fuente
 - [ ] Analizador de concurrencia (race conditions, deadlocks, mal uso de mutex/atomic) — necesita ejecución real o herramientas como ThreadSanitizer, no inspección de AST
 - [ ] Motor de SO (threads, paging, scheduling, IPC) — necesita tracing a nivel de kernel
 - [ ] Analizador de redes (TCP/TLS/QUIC/WebSocket) — necesita captura de paquetes; esto es una herramienta con forma de Wireshark, no un analizador estático
-- [ ] Analizador de seguridad más allá de detección de patrones (ROP, heap spray, use-after-free) — compite directamente con herramientas SAST maduras (Semgrep, CodeQL, Bandit); la versión realista se integra al CS Engine de arriba como "detectar el patrón + explicar el CWE", no un motor de análisis de exploits completo
+- [ ] Analizador de seguridad más allá de detección de patrones (ROP, heap spray, use-after-free) — compite directamente con herramientas SAST maduras (Semgrep, CodeQL, Bandit); la versión realista se integra a la Fase 21 de arriba como "detectar el patrón + explicar el CWE", no un motor de análisis de exploits completo
 
-### 🔴 Fase 22 — Sythrall Platform *(cómo el producto llega a la gente, una vez que el CS Engine tiene algo para mostrar)*
+### 🔴 Fase 24 — Extensibility Platform *(el límite de API que dejaría crecer las Fases 13–23 sin que cada feature termine en `apps/api` — una herramienta interna, no un marketplace público, hasta que haya demanda real de terceros)*
 
-Todo acá es ortogonal a las fases de teoría de arriba — trabajo de ingeniería/distribución que no depende de que las Fases 13–21 aterricen primero, cerrando el roadmap con cómo se usa Sythrall en vez de qué sabe:
+Cada fase de arriba se agrega directamente al código propio de Sythrall — razonable mientras lo mantiene una sola persona, pero cada una de las Fases 13–23 es realistamente del tamaño de un plugin por sí sola. Esta fase es el límite que dejaría que ese trabajo pase afuera del core sin que cada analizador termine siendo un archivo de `routers/` que Sythrall tiene que mantener para siempre. Deliberadamente acotada para una primera porción — sin marketplace, sin sandboxing, sin modelo de confianza para terceros — porque nada de eso tiene razón de existir antes de que un segundo plugin real, más allá de los que Sythrall mismo shippea, lo necesite de verdad:
+
+- [ ] **Manifest de plugin + interfaz de capability** — un plugin declara qué analiza (`language`, `security`, `performance`, ...) y qué necesita (`ast`, `metrics`, `source`) en un manifest chico y tipado; los propios parsers de Python/JS/TS de Sythrall se vuelven las primeras implementaciones "built-in" de esa misma interfaz, probando que el límite es real antes de que un tercero lo toque
+- [ ] **Un tipo de plugin shippeado de punta a punta** — la prueba concreta de si la interfaz es realmente usable, no un segundo sistema paralelo construido al lado. El trabajo de Fortran de la Fase 20 es el candidato natural: análisis numérico/científico como "plugin de lenguaje" en vez de otra rama hardcodeada en `static_parser.py`
+- [ ] **Separación extension vs. plugin**, siguiendo una distinción que ya está implícita en cómo está organizado `apps/web` hoy: un *plugin* agrega un analizador (nuevos tipos de finding, nuevo lenguaje, nueva regla) y solo necesita la interfaz de capability de arriba; una *extension* agrega UI (un panel nuevo, de la misma forma en que el tab de Problems de la Fase 12 ya es uno) y consume la salida de un plugin sobre la misma forma JSON que ya lee cada panel — sin arquitectura nueva para las extensions, solo un nombre documentado para una costura que ya existe de manera informal
+- [ ] **IA como capa de explicación opcional, nunca como el detector** — una interfaz `AIProvider` (ONNX/GGUF local, API remota, o ninguna configurada) que un plugin puede llamar para convertir `Evidence` (la ruta de flujo de datos de la Fase 21, el razonamiento de Big-O de la Fase 13) en prosa, con el finding determinista producido y completamente usable con cero IA configurada — la misma forma que ya tiene hoy el campo `reason` del Big-O, solo que opcionalmente pasado a un modelo en vez de solo strings de template
+- [ ] Explícitamente diferido, sin fecha: registry/marketplace público, ejecución sandboxed/WASM de terceros, un SDK de plugins multi-lenguaje más allá de lo que el propio core de Sythrall ya usa — compromisos de infraestructura real que solo tienen sentido una vez que existan plugins construidos *para* Sythrall por alguien que no sea su autor, para justificarlos
+
+La regla que sobrevive a todo lo de arriba: `apps/api` sigue funcionando con cero plugins instalados — siempre lo hizo, esta fase solo agrega una forma documentada de construir encima, nunca un requisito para hacerlo.
+
+### 🔴 Fase 25 — Sythrall Platform *(cómo el producto llega a la gente, una vez que el CS Engine tiene algo para mostrar)*
+
+Todo acá es ortogonal a las fases de teoría de arriba — trabajo de ingeniería/distribución que no depende de que las Fases 13–24 aterricen primero, cerrando el roadmap con cómo se usa Sythrall en vez de qué sabe:
 
 - [ ] **Native Toolchain (Zig)** — build standalone (Zig, o PyInstaller/Nuitka + Tauri), un binario portable sin depender de Docker/Node/Python; cross-compilación para los binarios nativos que este proyecto ya shippea (`terminal-server`, `complexity-engine`), un solo toolchain en vez de matrices de CI por plataforma *(deliberadamente no compite con el rol de Rust en la Fase 18 — el trabajo de Zig es llevar a Sythrall hacia una máquina, no analizar lo que hay en ella)*
 - [ ] **Integración Cython & WASM** — detección automática de candidatos Cython desde el análisis Big-O (funciones O(n²)+), generación de stubs `.pyx` desde firmas Python, compilación en Docker (MSVC/GCC), benchmark lado a lado Python-vs-Cython, speedup estimado en el hover provider, ruta de compilación WASM vía Emscripten

@@ -511,6 +511,47 @@ class TestHoverPython:
         # Debe tener uno de los emojis de severity
         assert any(e in data["markdown"] for e in ["🟢", "🟡", "🔴", "⚪"])
 
+    def test_hover_notation_reference_footnote(self):
+        data = client.post(
+            "/intel/hover",
+            json={
+                "filename": "test.py",
+                "content": PY_ISSUES,
+                "line": 5,
+                "column": 1,
+                "symbol_name": "bubble_sort",
+            },
+        ).json()
+        # Fase 13: pie de nota con la referencia de notación asintótica (O/Θ/Ω/o/ω)
+        assert "cota superior" in data["markdown"].lower()
+        assert "o (cota superior estricta)" in data["markdown"].lower()
+
+    def test_hover_security_finding_shown(self):
+        code = """
+def get_user(request):
+    username = request.args["username"]
+    db.execute("SELECT * FROM users WHERE name=" + username)
+"""
+        data = client.post(
+            "/intel/hover",
+            json={"filename": "test.py", "content": code, "line": 2, "column": 1, "symbol_name": "get_user"},
+        ).json()
+        assert "CWE-89" in data["markdown"]
+        assert "SQL Injection" in data["markdown"]
+
+    def test_hover_no_security_section_when_clean(self):
+        data = client.post(
+            "/intel/hover",
+            json={
+                "filename": "test.py",
+                "content": PY_ISSUES,
+                "line": 5,
+                "column": 1,
+                "symbol_name": "bubble_sort",
+            },
+        ).json()
+        assert "CWE-" not in data["markdown"]
+
     def test_hover_range_present(self):
         data = client.post(
             "/intel/hover",

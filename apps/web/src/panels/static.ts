@@ -21,6 +21,8 @@ interface ParsedFunction {
   big_o_reason: string
   big_o_theta?: string
   big_o_omega?: string
+  space_complexity?: string
+  space_reason?: string
   is_recursive?: boolean
   is_tail_recursive?: boolean
   recursion_note?: string | null
@@ -61,6 +63,18 @@ interface WasmHint {
   estimated_speedup: string
 }
 
+interface SecurityFinding {
+  cwe: string
+  category: string
+  severity: 'High' | 'Medium' | 'Low'
+  confidence: 'High' | 'Medium' | 'Low'
+  source: string
+  sink: string | null
+  line: number
+  function: string | null
+  recommendation: string
+}
+
 interface StaticResult {
   filename: string
   language: string
@@ -73,6 +87,7 @@ interface StaticResult {
   dead_code: Array<{ type: string; name?: string; module: string; line: number }>
   call_graph: Array<{ from: string; to: string }>
   wasm_hints: WasmHint[]
+  security_findings: SecurityFinding[]
   summary: Record<string, number | string>
   error?: string
 }
@@ -236,6 +251,9 @@ function _renderResult(r: StaticResult): void {
     <!-- Resumen -->
     ${_renderSummaryCards(r)}
 
+    <!-- Security findings -->
+    ${r.security_findings?.length ? _renderSecurityFindings(r.security_findings) : ''}
+
     <!-- Big O table -->
     ${_renderBigOTable(r.functions)}
 
@@ -307,6 +325,7 @@ function _renderBigOTable(functions: ParsedFunction[]): string {
       <td><span class="bigo-badge" style="color:${color};border-color:${color}">${esc(f.big_o)}</span></td>
       <td class="bigo-thetaomega">${f.big_o_theta ? esc(f.big_o_theta) : '—'} / ${f.big_o_omega ? esc(f.big_o_omega) : '—'}</td>
       <td class="bigo-reason">${esc(f.big_o_reason)}</td>
+      <td class="bigo-space">${f.space_complexity ? `<span class="bigo-badge" style="color:${BIG_O_COLOR[f.space_complexity] ?? 'var(--muted)'};border-color:${BIG_O_COLOR[f.space_complexity] ?? 'var(--muted)'}" title="${esc(f.space_reason ?? '')}">${esc(f.space_complexity)}</span>` : '—'}</td>
       <td class="bigo-cc" style="color:${f.complexity >= 10 ? 'var(--err)' : f.complexity >= 5 ? 'var(--warn)' : 'var(--ok)'}">${f.complexity}</td>
       <td class="bigo-loc">${f.loc ?? '—'}</td>
       <td class="bigo-line">:${f.line}</td>
@@ -317,12 +336,25 @@ function _renderBigOTable(functions: ParsedFunction[]): string {
   return `
   <div class="metric-section">
     <div class="ms-title">📊 Algorithm Complexity — Big O</div>
+    <details class="bigo-notation-ref">
+      <summary>📐 Notación asintótica — referencia</summary>
+      <table class="bigo-notation-table">
+        <tbody>
+          <tr><td><code>O</code></td><td>Cota superior (peor caso)</td><td>El caso más lento que Sythrall detecta</td></tr>
+          <tr><td><code>Θ</code></td><td>Cota ajustada — mismo orden en el mejor y el peor caso</td><td>Se infiere comparando O y Ω</td></tr>
+          <tr><td><code>Ω</code></td><td>Cota inferior (mejor caso)</td><td>El caso más rápido que Sythrall detecta (ej. salida temprana)</td></tr>
+          <tr><td><code>o</code></td><td>Cota superior <em>estricta</em> — crece más rápido, nunca al mismo orden</td><td>No calculado — sin heurística estática confiable para distinguirlo de O</td></tr>
+          <tr><td><code>ω</code></td><td>Cota inferior <em>estricta</em></td><td>No calculado — mismo motivo</td></tr>
+        </tbody>
+      </table>
+    </details>
     <div class="table-scroll">
       <table class="bigo-table">
         <thead><tr>
           <th>Función</th><th title="Peor caso">Big O</th>
-          <th title="Cota ajustada (Θ) / Mejor caso (Ω)">Θ / Ω</th>
+          <th title="Cota ajustada (Θ) / Mejor caso (Ω) — ver referencia arriba">Θ / Ω</th>
           <th>Razón</th>
+          <th class="bigo-space" title="Espacio auxiliar — estructuras creadas, no solo tiempo de ejecución (Fase 13)">Space</th>
           <th title="Complejidad ciclomática McCabe">CC</th>
           <th title="Líneas de código">LOC</th>
           <th>Línea</th>
@@ -488,6 +520,35 @@ function _renderWasmHints(hints: WasmHint[]): string {
           ${h.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}
         </ul>
         <div class="st-wasm-rec">💡 ${esc(h.recommendation)}</div>
+      </div>`
+      })
+      .join('')}
+  </div>`
+}
+
+function _renderSecurityFindings(findings: SecurityFinding[]): string {
+  const sevColor = (s: string) => (s === 'High' ? 'var(--err)' : s === 'Medium' ? 'var(--warn)' : 'var(--muted)')
+  const confLabel = (c: string) => (c === 'High' ? 'Alta' : c === 'Medium' ? 'Media' : 'Baja')
+
+  return `
+  <div class="metric-section">
+    <div class="ms-title">🔐 Security & Taint (${findings.length}) <span class="sec-disclaimer">— patrones heurísticos, no un reemplazo de SAST</span></div>
+    ${findings
+      .map((f) => {
+        const color = sevColor(f.severity)
+        return `<div class="st-wasm-item sec-finding">
+        <div class="st-fn-head">
+          <span class="st-fn-name">${esc(f.category)}</span>
+          <span class="sec-cwe">${esc(f.cwe)}</span>
+          <span style="font-size:.65rem;color:${color};font-family:var(--mono)">${esc(f.severity)}</span>
+          <span class="sec-confidence">confianza ${confLabel(f.confidence)}</span>
+          ${f.function ? `<span class="st-fn-line">${esc(f.function)}()</span>` : ''}
+          <span class="st-fn-line" style="margin-left:auto">línea ${f.line}</span>
+        </div>
+        <div class="sec-flow">
+          <code>${esc(f.source)}</code>${f.sink ? ` → <code>${esc(f.sink)}</code>` : ''}
+        </div>
+        <div class="st-wasm-rec">💡 ${esc(f.recommendation)}</div>
       </div>`
       })
       .join('')}

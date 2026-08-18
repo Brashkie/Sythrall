@@ -14,12 +14,38 @@ where
     F: FnMut(&Stmt),
     G: FnMut(&Expr),
 {
+    walk_stmts_impl(body, on_stmt, on_expr, true)
+}
+
+/// Como `walk_stmts`, pero NO desciende a los cuerpos de `FunctionDef`/
+/// `AsyncFunctionDef` anidados — esas son su propio scope, con su propia
+/// línea de tiempo de ejecución (pueden llamarse después, varias veces, o
+/// nunca). Mezclar sus statements con el análisis lineal del scope padre
+/// produce falsos positivos reales (ej. taint tracking: una función anidada
+/// que reusa un nombre de variable puede filtrar taint al scope externo —
+/// bug encontrado y corregido primero en `static_parser.py`, ver
+/// `security.rs`). Los otros clasificadores (`classifiers.rs`, `recursion.rs`)
+/// siguen usando `walk_stmts` a propósito: ahí el scope-bleed solo afecta un
+/// booleano/label agregado, no un finding puntual con línea y severidad.
+pub fn walk_stmts_own_scope<F, G>(body: &[Stmt], on_stmt: &mut F, on_expr: &mut G)
+where
+    F: FnMut(&Stmt),
+    G: FnMut(&Expr),
+{
+    walk_stmts_impl(body, on_stmt, on_expr, false)
+}
+
+fn walk_stmts_impl<F, G>(body: &[Stmt], on_stmt: &mut F, on_expr: &mut G, descend_into_funcs: bool)
+where
+    F: FnMut(&Stmt),
+    G: FnMut(&Expr),
+{
     for stmt in body {
-        walk_stmt(stmt, on_stmt, on_expr);
+        walk_stmt(stmt, on_stmt, on_expr, descend_into_funcs);
     }
 }
 
-fn walk_stmt<F, G>(stmt: &Stmt, on_stmt: &mut F, on_expr: &mut G)
+fn walk_stmt<F, G>(stmt: &Stmt, on_stmt: &mut F, on_expr: &mut G, descend_into_funcs: bool)
 where
     F: FnMut(&Stmt),
     G: FnMut(&Expr),
@@ -28,65 +54,73 @@ where
     match stmt {
         Stmt::If(s) => {
             walk_expr(&s.test, on_expr);
-            walk_stmts(&s.body, on_stmt, on_expr);
-            walk_stmts(&s.orelse, on_stmt, on_expr);
+            walk_stmts_impl(&s.body, on_stmt, on_expr, descend_into_funcs);
+            walk_stmts_impl(&s.orelse, on_stmt, on_expr, descend_into_funcs);
         }
         Stmt::For(s) => {
             walk_expr(&s.target, on_expr);
             walk_expr(&s.iter, on_expr);
-            walk_stmts(&s.body, on_stmt, on_expr);
-            walk_stmts(&s.orelse, on_stmt, on_expr);
+            walk_stmts_impl(&s.body, on_stmt, on_expr, descend_into_funcs);
+            walk_stmts_impl(&s.orelse, on_stmt, on_expr, descend_into_funcs);
         }
         Stmt::AsyncFor(s) => {
             walk_expr(&s.target, on_expr);
             walk_expr(&s.iter, on_expr);
-            walk_stmts(&s.body, on_stmt, on_expr);
-            walk_stmts(&s.orelse, on_stmt, on_expr);
+            walk_stmts_impl(&s.body, on_stmt, on_expr, descend_into_funcs);
+            walk_stmts_impl(&s.orelse, on_stmt, on_expr, descend_into_funcs);
         }
         Stmt::While(s) => {
             walk_expr(&s.test, on_expr);
-            walk_stmts(&s.body, on_stmt, on_expr);
-            walk_stmts(&s.orelse, on_stmt, on_expr);
+            walk_stmts_impl(&s.body, on_stmt, on_expr, descend_into_funcs);
+            walk_stmts_impl(&s.orelse, on_stmt, on_expr, descend_into_funcs);
         }
         Stmt::With(s) => {
             for item in &s.items {
                 walk_expr(&item.context_expr, on_expr);
             }
-            walk_stmts(&s.body, on_stmt, on_expr);
+            walk_stmts_impl(&s.body, on_stmt, on_expr, descend_into_funcs);
         }
         Stmt::AsyncWith(s) => {
             for item in &s.items {
                 walk_expr(&item.context_expr, on_expr);
             }
-            walk_stmts(&s.body, on_stmt, on_expr);
+            walk_stmts_impl(&s.body, on_stmt, on_expr, descend_into_funcs);
         }
         Stmt::Try(s) => {
-            walk_stmts(&s.body, on_stmt, on_expr);
+            walk_stmts_impl(&s.body, on_stmt, on_expr, descend_into_funcs);
             for h in &s.handlers {
                 let ast::ExceptHandler::ExceptHandler(h) = h;
-                walk_stmts(&h.body, on_stmt, on_expr);
+                walk_stmts_impl(&h.body, on_stmt, on_expr, descend_into_funcs);
             }
-            walk_stmts(&s.orelse, on_stmt, on_expr);
-            walk_stmts(&s.finalbody, on_stmt, on_expr);
+            walk_stmts_impl(&s.orelse, on_stmt, on_expr, descend_into_funcs);
+            walk_stmts_impl(&s.finalbody, on_stmt, on_expr, descend_into_funcs);
         }
         Stmt::TryStar(s) => {
-            walk_stmts(&s.body, on_stmt, on_expr);
+            walk_stmts_impl(&s.body, on_stmt, on_expr, descend_into_funcs);
             for h in &s.handlers {
                 let ast::ExceptHandler::ExceptHandler(h) = h;
-                walk_stmts(&h.body, on_stmt, on_expr);
+                walk_stmts_impl(&h.body, on_stmt, on_expr, descend_into_funcs);
             }
-            walk_stmts(&s.orelse, on_stmt, on_expr);
-            walk_stmts(&s.finalbody, on_stmt, on_expr);
+            walk_stmts_impl(&s.orelse, on_stmt, on_expr, descend_into_funcs);
+            walk_stmts_impl(&s.finalbody, on_stmt, on_expr, descend_into_funcs);
         }
         Stmt::Match(s) => {
             walk_expr(&s.subject, on_expr);
             for case in &s.cases {
-                walk_stmts(&case.body, on_stmt, on_expr);
+                walk_stmts_impl(&case.body, on_stmt, on_expr, descend_into_funcs);
             }
         }
-        Stmt::FunctionDef(s) => walk_stmts(&s.body, on_stmt, on_expr),
-        Stmt::AsyncFunctionDef(s) => walk_stmts(&s.body, on_stmt, on_expr),
-        Stmt::ClassDef(s) => walk_stmts(&s.body, on_stmt, on_expr),
+        Stmt::FunctionDef(s) => {
+            if descend_into_funcs {
+                walk_stmts_impl(&s.body, on_stmt, on_expr, descend_into_funcs);
+            }
+        }
+        Stmt::AsyncFunctionDef(s) => {
+            if descend_into_funcs {
+                walk_stmts_impl(&s.body, on_stmt, on_expr, descend_into_funcs);
+            }
+        }
+        Stmt::ClassDef(s) => walk_stmts_impl(&s.body, on_stmt, on_expr, descend_into_funcs),
         Stmt::Assign(s) => {
             for t in &s.targets {
                 walk_expr(t, on_expr);

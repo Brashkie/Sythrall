@@ -196,7 +196,7 @@ function showTerminalView(view: TerminalView): void {
   }
 }
 
-export function openTerminalPanel(): void {
+function openTerminalPanel(): void {
   const panel = document.getElementById('terminal-panel')
   if (!panel) return
   panel.style.display = 'flex'
