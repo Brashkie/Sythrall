@@ -5,15 +5,15 @@ edition = "2021"
 
 [[bin]]
 name = "terminal-server"
-path = "apps/terminal/src/main.rs"
+path = "services/terminal/src/main.rs"
 
 [[bin]]
 name = "complexity-engine"
-path = "apps/complexity/src/main.rs"
+path = "services/complexity/src/main.rs"
 
 [lib]
 name = "complexity_core"
-path = "apps/complexity/src/lib.rs"
+path = "services/complexity/src/lib.rs"
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "sync", "signal"] }
@@ -35,7 +35,12 @@ criterion = "0.5"
 
 [[bench]]
 name = "complexity_bench"
-path = "apps/complexity/benches/complexity_bench.rs"
+path = "services/complexity/benches/complexity_bench.rs"
+harness = false
+
+[[bench]]
+name = "parse_bench"
+path = "services/complexity/benches/parse_bench.rs"
 harness = false
 
 [profile.release]

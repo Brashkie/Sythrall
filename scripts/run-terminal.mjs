@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Lanza el sidecar de terminal (Rust, apps/terminal) con cwd=raíz del repo
+// Lanza el sidecar de terminal (Rust, services/terminal) con cwd=raíz del repo
 // (ahí vive Cargo.toml). `cargo run` compila si hace falta y cachea
 // incrementalmente — no requiere un paso de build aparte para desarrollo.
 

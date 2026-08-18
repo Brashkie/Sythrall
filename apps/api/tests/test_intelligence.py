@@ -282,10 +282,10 @@ class TestHeavyAnalyze:
         assert r.json()["big_o"] == []
 
     def test_analyze_complexity_metrics(self):
-        # El sidecar Rust (apps/complexity) es una capacidad opcional — en CI
+        # El sidecar Rust (services/complexity) es una capacidad opcional — en CI
         # no está corriendo, así que esto ejercita el wiring (request → shape
         # de respuesta) y la degradación con gracia, no los valores en sí
-        # (eso lo cubre `cargo test` sobre apps/complexity/src/*.rs).
+        # (eso lo cubre `cargo test` sobre services/complexity/src/*.rs).
         data = client.post(
             "/intel/analyze",
             json={

@@ -41,7 +41,7 @@ services:
   terminal:
     build:
       context: .
-      dockerfile: apps/terminal/Dockerfile
+      dockerfile: services/terminal/Dockerfile
     container_name: sythrall-terminal
     restart: unless-stopped
     ports:
@@ -57,7 +57,7 @@ services:
   complexity:
     build:
       context: .
-      dockerfile: apps/complexity/Dockerfile
+      dockerfile: services/complexity/Dockerfile
     container_name: sythrall-complexity
     restart: unless-stopped
     ports:

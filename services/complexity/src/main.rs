@@ -25,7 +25,8 @@ async fn main() {
     // justifica el token en terminal-server (una shell real) no aplica acá.
     let app = Router::new()
         .route("/health", get(health))
-        .route("/metrics/complexity", post(metrics_complexity));
+        .route("/metrics/complexity", post(metrics_complexity))
+        .route("/parse/python", post(parse_python));
 
     let addr: std::net::SocketAddr = format!("{host}:{port}").parse().expect("host/puerto inválido");
     println!("🦀 Complexity engine escuchando en http://{addr}");
@@ -42,5 +43,14 @@ async fn health() -> Json<Value> {
 
 async fn metrics_complexity(Json(req): Json<ComplexityRequest>) -> Json<Value> {
     let result = complexity_core::analyze(&req.content);
+    Json(serde_json::to_value(result).unwrap_or_else(|_| json!({"error": "serialización falló"})))
+}
+
+/// Fase 1 de la migración de `static_parser.py` a Rust — functions/classes/
+/// imports/summary para un archivo Python, mismo shape que `_parse_python()`.
+/// Deliberadamente no incluye call_graph/circular_deps/wasm_hints/dead_code
+/// (fase siguiente) — el backend Python sigue calculando esas piezas.
+async fn parse_python(Json(req): Json<ComplexityRequest>) -> Json<Value> {
+    let result = complexity_core::analyze_rich(&req.content);
     Json(serde_json::to_value(result).unwrap_or_else(|_| json!({"error": "serialización falló"})))
 }

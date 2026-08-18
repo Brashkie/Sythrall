@@ -7,12 +7,17 @@ ejercitan la degradación con gracia real (sin mocks): el sidecar está
 genuinamente no-disponible en este entorno, igual que le pasaría a un usuario
 que corre `pytest` sin haber hecho `npm run dev`. La corrección de los
 números (complejidad/MI/raw) se prueba aparte con `cargo test` sobre
-apps/complexity/src/*.rs, que sí corre el código real.
+services/complexity/src/*.rs, que sí corre el código real.
 """
 
 import asyncio
 
-from services.complexity_client import analyze_complexity, check_complexity_engine_sync, check_complexity_engine
+from services.complexity_client import (
+    analyze_complexity,
+    check_complexity_engine_sync,
+    check_complexity_engine,
+    parse_python_rich,
+)
 
 
 class TestComplexityClientUnavailable:
@@ -29,3 +34,18 @@ class TestComplexityClientUnavailable:
     def test_analyze_complexity_does_not_raise_on_empty_content(self):
         result = asyncio.run(analyze_complexity("empty.py", ""))
         assert result["functions"] == []
+
+
+class TestParsePythonRichUnavailable:
+    """Fase 1 de la migración a Rust (services/complexity_client.py::parse_python_rich).
+    Mismo espíritu que TestComplexityClientUnavailable — sin el sidecar corriendo
+    en este entorno, `None` es el resultado correcto (el caller decide caer en
+    `_parse_python()`), no una excepción."""
+
+    def test_returns_none_when_unreachable(self):
+        result = asyncio.run(parse_python_rich("f.py", "def f():\n    return 1\n"))
+        assert result is None
+
+    def test_does_not_raise_on_empty_content(self):
+        result = asyncio.run(parse_python_rich("empty.py", ""))
+        assert result is None

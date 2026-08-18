@@ -1,7 +1,15 @@
+pub mod bigo;
+pub mod classifiers;
 pub mod complexity;
 pub mod maintainability;
 pub mod parser;
 pub mod raw;
+pub mod recursion;
+pub mod rich;
+pub mod structure;
+pub mod walk;
+
+pub use rich::analyze_rich;
 
 use serde::Serialize;
 

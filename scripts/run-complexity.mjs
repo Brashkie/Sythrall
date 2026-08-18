@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Lanza el sidecar de complejidad (Rust, apps/complexity) con cwd=raíz del
+// Lanza el sidecar de complejidad (Rust, services/complexity) con cwd=raíz del
 // repo (ahí vive Cargo.toml). `cargo run` compila si hace falta y cachea
 // incrementalmente — no requiere un paso de build aparte para desarrollo.
 

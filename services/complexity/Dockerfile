@@ -5,8 +5,8 @@ COPY Cargo.toml Cargo.lock ./
 # El manifiesto de la raíz declara los dos sidecars (terminal-server y
 # complexity-engine) en un solo Cargo.toml — cargo necesita que ambos paths
 # existan para poder resolverlo, aunque acá solo se compile uno.
-COPY apps/terminal/ apps/terminal/
-COPY apps/complexity/ apps/complexity/
+COPY services/terminal/ services/terminal/
+COPY services/complexity/ services/complexity/
 RUN cargo build --release --bin complexity-engine
 
 # Runtime stage — solo el binario, imagen chica

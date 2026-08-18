@@ -62,8 +62,7 @@ fn function_entry(
     body: &[Stmt],
     in_class: bool,
 ) -> FunctionComplexity {
-    let mut complexity = 1u32;
-    walk_body(body, &mut complexity);
+    let complexity = cyclomatic(body);
     FunctionComplexity {
         name: name.to_string(),
         kind: if in_class { "method" } else { "function" },
@@ -71,6 +70,16 @@ fn function_entry(
         complexity,
         rank: cc_rank(complexity),
     }
+}
+
+/// McCabe cyclomatic complexity de un cuerpo de función — factorizado de
+/// `function_entry` así `rich.rs` lo puede reusar sin pasar por todo el
+/// pipeline de `/metrics/complexity` (que arma `FunctionComplexity`, no el
+/// dict más rico que necesita `/parse/python`).
+pub fn cyclomatic(body: &[Stmt]) -> u32 {
+    let mut complexity = 1u32;
+    walk_body(body, &mut complexity);
+    complexity
 }
 
 fn walk_body(body: &[Stmt], cx: &mut u32) {

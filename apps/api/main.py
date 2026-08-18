@@ -27,7 +27,7 @@ except ImportError:
 
 # A diferencia del resto (import-based: la lib está instalada o no), esto es
 # un chequeo de red — el sidecar Rust `complexity-engine` es un proceso
-# aparte (ver apps/complexity), puede estar simplemente no-levantado todavía.
+# aparte (ver services/complexity), puede estar simplemente no-levantado todavía.
 LIB_FLAGS["HAS_COMPLEXITY_ENGINE"] = check_complexity_engine_sync()
 try:
     import numpy as np
@@ -153,7 +153,7 @@ async def lifespan(app: FastAPI):
     add_log("info", "🛑 Sythrall detenido.")
 
 
-app = FastAPI(title="Sythrall", version="4.7.0", lifespan=lifespan)
+app = FastAPI(title="Sythrall", version="4.7.1", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )

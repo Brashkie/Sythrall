@@ -1,6 +1,6 @@
 """
 complexity_client.py — Cliente HTTP del sidecar Rust `complexity-engine`
-(apps/complexity), que reemplaza a `radon` (complejidad ciclomática,
+(services/complexity), que reemplaza a `radon` (complejidad ciclomática,
 Maintainability Index, métricas raw de líneas).
 
 Mismo espíritu de degradación con gracia que ya existía para flake8/pylint/
@@ -32,6 +32,27 @@ async def analyze_complexity(filename: str, content: str) -> dict:
             return resp.json()
     except (httpx.HTTPError, ValueError):
         return dict(_EMPTY_RESULT)
+
+
+async def parse_python_rich(filename: str, content: str) -> dict | None:
+    """Fase 1 de la migración de `static_parser.py` a Rust: functions/classes/
+    imports/summary vía el sidecar (`POST /parse/python`), mismo shape que
+    `_parse_python()` salvo call_graph/circular_deps/wasm_hints/dead_code
+    (todavía no calculados en Rust — quedan en el path Python). `None` en
+    cualquier falla, para que el caller decida el fallback (no hay un shape
+    "vacío" razonable acá como en `analyze_complexity`, porque el caller
+    necesita saber si tiene que recurrir a `_parse_python()` entero)."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(
+                f"{COMPLEXITY_ENGINE_URL}/parse/python",
+                json={"filename": filename, "content": content},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return None if data.get("error") else data
+    except (httpx.HTTPError, ValueError):
+        return None
 
 
 def check_complexity_engine_sync() -> bool:

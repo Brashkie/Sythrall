@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from services.static_parser import parse_file, HAS_TREESITTER, HAS_NX
 from services.project_service import read_project_files
+from services.complexity_client import parse_python_rich
 
 router = APIRouter()
 
@@ -175,8 +176,23 @@ async def parse_project(req: ParseProjectRequest) -> dict[str, Any]:
 
 @router.post("/bigO")
 async def analyze_big_o(req: BigORequest) -> dict[str, Any]:
-    """Extrae solo el análisis Big O de un archivo."""
-    parsed = parse_file(req.filename, req.content)
+    """Extrae solo el análisis Big O de un archivo.
+
+    Fase 1 de la migración a Rust (ver CHANGELOG): para `.py`, primero intenta
+    `parse_python_rich()` (sidecar `complexity-engine`, 6-20x más rápido medido
+    con Criterion vs. `_parse_python()`) — este endpoint es un subset genuino
+    (solo lee `functions`), así que no pierde nada si el sidecar responde. Si
+    no está disponible, cae en el `parse_file()` de siempre — sin gate de flag
+    cacheado (misma lección de la condición de carrera del sidecar anterior):
+    se intenta en vivo cada vez, no se asume disponibilidad de una foto vieja.
+    """
+    parsed = None
+    if Path(req.filename).suffix.lower() == ".py":
+        rich = await parse_python_rich(req.filename, req.content)
+        if rich is not None:
+            parsed = {"language": "python", "functions": rich["functions"]}
+    if parsed is None:
+        parsed = parse_file(req.filename, req.content)
     functions = parsed.get("functions", [])
 
     big_o_table = [
