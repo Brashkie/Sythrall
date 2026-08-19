@@ -17,11 +17,40 @@
 use std::collections::HashMap;
 
 use rustpython_parser::ast::{self as ast, Expr, Stmt};
+use serde::Serialize;
 
 #[derive(Default)]
 struct Halstead {
     operators: HashMap<&'static str, u32>,
     operands: HashMap<String, u32>,
+}
+
+/// Los 5 componentes estándar de las métricas de Halstead (Fase 22) —
+/// `maintainability.rs` ya calculaba el Volumen internamente para el MI,
+/// pero solo lo pasaba pre-cocinado a la fórmula de Coleman-Oman. Esto
+/// expone el desglose completo, mismos operadores/operandos que ya cuenta
+/// `Halstead` para el MI — no un recorrido nuevo, solo más campos del mismo
+/// conteo.
+#[derive(Serialize, Clone, Copy, Default)]
+pub struct HalsteadMetrics {
+    /// η1 — operadores distintos
+    pub distinct_operators: u32,
+    /// η2 — operandos distintos
+    pub distinct_operands: u32,
+    /// N1 — total de operadores
+    pub total_operators: u32,
+    /// N2 — total de operandos
+    pub total_operands: u32,
+    /// η = η1 + η2
+    pub vocabulary: u32,
+    /// N = N1 + N2
+    pub length: u32,
+    /// V = N · log2(η)
+    pub volume: f64,
+    /// D = (η1/2) · (N2/η2) — qué tan propenso a error es escribir el código
+    pub difficulty: f64,
+    /// E = D · V — esfuerzo mental estimado para escribir/entender el código
+    pub effort: f64,
 }
 
 impl Halstead {
@@ -32,28 +61,55 @@ impl Halstead {
         *self.operands.entry(key).or_insert(0) += 1;
     }
 
-    fn volume(&self) -> f64 {
-        let eta1 = self.operators.len() as f64;
-        let eta2 = self.operands.len() as f64;
+    fn metrics(&self) -> HalsteadMetrics {
+        let eta1 = self.operators.len() as u32;
+        let eta2 = self.operands.len() as u32;
         let n1: u32 = self.operators.values().sum();
         let n2: u32 = self.operands.values().sum();
         let vocabulary = eta1 + eta2;
-        if vocabulary == 0.0 {
-            return 0.0;
+        let length = n1 + n2;
+        let volume = if vocabulary == 0 { 0.0 } else { length as f64 * (vocabulary as f64).log2() };
+        let difficulty = if eta2 == 0 { 0.0 } else { (eta1 as f64 / 2.0) * (n2 as f64 / eta2 as f64) };
+        HalsteadMetrics {
+            distinct_operators: eta1,
+            distinct_operands: eta2,
+            total_operators: n1,
+            total_operands: n2,
+            vocabulary,
+            length,
+            volume,
+            difficulty,
+            effort: difficulty * volume,
         }
-        (n1 + n2) as f64 * vocabulary.log2()
     }
 }
 
-pub fn compute(suite: &[Stmt], avg_complexity: f64, sloc: usize, comment_ratio: f64, multi: bool) -> Option<f64> {
-    if sloc == 0 {
-        return None;
-    }
+/// Desglosa los 5 componentes de Halstead para un archivo completo (mismo
+/// scope que `compute()` — a nivel de módulo, no por función, porque el MI
+/// que ambos alimentan tampoco es por función).
+pub fn halstead_metrics(suite: &[Stmt]) -> Option<HalsteadMetrics> {
     let mut h = Halstead::default();
     for stmt in suite {
         walk_stmt(stmt, &mut h);
     }
-    let volume = h.volume();
+    let metrics = h.metrics();
+    if metrics.volume <= 0.0 {
+        return None;
+    }
+    Some(metrics)
+}
+
+/// Toma `halstead` ya calculado en vez de recorrer el AST de nuevo — antes
+/// `compute()` armaba su propio `Halstead` y lo recorría por separado del
+/// que `halstead_metrics()` ya calculaba para exponer el desglose (Fase 22),
+/// duplicando el recorrido completo del archivo en cada análisis. El caller
+/// (`lib.rs::analyze()`) calcula `halstead_metrics()` una sola vez y se lo
+/// pasa a ambos.
+pub fn compute(halstead: Option<&HalsteadMetrics>, avg_complexity: f64, sloc: usize, comment_ratio: f64, multi: bool) -> Option<f64> {
+    if sloc == 0 {
+        return None;
+    }
+    let volume = halstead?.volume;
     if volume <= 0.0 {
         return None;
     }
@@ -375,7 +431,8 @@ mod tests {
     #[test]
     fn archivo_vacio_no_tiene_mi() {
         let suite = parse_module("").unwrap();
-        assert_eq!(compute(&suite, 1.0, 0, 0.0, true), None);
+        let h = halstead_metrics(&suite);
+        assert_eq!(compute(h.as_ref(), 1.0, 0, 0.0, true), None);
     }
 
     #[test]
@@ -383,7 +440,8 @@ mod tests {
         let src = "def f(x):\n    if x:\n        return 1\n    return 0\n";
         let suite = parse_module(src).unwrap();
         let raw_stats = raw::analyze(src, &suite);
-        let mi = compute(&suite, 2.0, raw_stats.sloc, 0.0, true).expect("archivo no vacío da MI");
+        let h = halstead_metrics(&suite);
+        let mi = compute(h.as_ref(), 2.0, raw_stats.sloc, 0.0, true).expect("archivo no vacío da MI");
         assert!((0.0..=100.0).contains(&mi));
     }
 
@@ -395,8 +453,60 @@ mod tests {
         let s2 = parse_module(complejo).unwrap();
         let r1 = raw::analyze(simple, &s1);
         let r2 = raw::analyze(complejo, &s2);
-        let mi1 = compute(&s1, 1.0, r1.sloc, 0.0, true).unwrap();
-        let mi2 = compute(&s2, 4.0, r2.sloc, 0.0, true).unwrap();
+        let h1 = halstead_metrics(&s1);
+        let h2 = halstead_metrics(&s2);
+        let mi1 = compute(h1.as_ref(), 1.0, r1.sloc, 0.0, true).unwrap();
+        let mi2 = compute(h2.as_ref(), 4.0, r2.sloc, 0.0, true).unwrap();
         assert!(mi2 < mi1, "MI de código más complejo ({mi2}) debería ser menor que el simple ({mi1})");
+    }
+
+    #[test]
+    fn archivo_vacio_sin_halstead() {
+        let suite = parse_module("").unwrap();
+        assert!(halstead_metrics(&suite).is_none());
+    }
+
+    #[test]
+    fn vocabulario_y_longitud_son_sumas_consistentes() {
+        let src = "def f(x):\n    return x + 1\n";
+        let suite = parse_module(src).unwrap();
+        let m = halstead_metrics(&suite).expect("archivo no vacío da Halstead");
+        assert_eq!(m.vocabulary, m.distinct_operators + m.distinct_operands);
+        assert_eq!(m.length, m.total_operators + m.total_operands);
+    }
+
+    #[test]
+    fn effort_es_dificultad_por_volumen() {
+        let src = "def f(x):\n    return x + 1\n";
+        let suite = parse_module(src).unwrap();
+        let m = halstead_metrics(&suite).unwrap();
+        assert!((m.effort - m.difficulty * m.volume).abs() < 1e-9);
+    }
+
+    #[test]
+    fn codigo_mas_largo_tiene_mayor_volumen() {
+        let simple = "def f(x):\n    return x\n";
+        let largo = "def f(x):\n    a = x + 1\n    b = a * 2\n    c = b - a\n    return c + a * b\n";
+        let s1 = parse_module(simple).unwrap();
+        let s2 = parse_module(largo).unwrap();
+        let m1 = halstead_metrics(&s1).unwrap();
+        let m2 = halstead_metrics(&s2).unwrap();
+        assert!(m2.volume > m1.volume);
+        assert!(m2.length > m1.length);
+    }
+
+    #[test]
+    fn halstead_metrics_consistente_con_volumen_de_compute() {
+        // El Volumen que ve compute() (interno a la fórmula de MI) tiene que
+        // ser exactamente el mismo que el que expone halstead_metrics() —
+        // ambos cuentan sobre el mismo AST, no debería haber divergencia.
+        let src = "def f(x, y):\n    if x > y:\n        return x\n    return y\n";
+        let suite = parse_module(src).unwrap();
+        let m = halstead_metrics(&suite).unwrap();
+        let mut h = Halstead::default();
+        for stmt in &suite {
+            walk_stmt(stmt, &mut h);
+        }
+        assert!((h.metrics().volume - m.volume).abs() < 1e-9);
     }
 }

@@ -25,7 +25,6 @@ const NOTEBOOK_ENVS: NotebookEnv[] = [
     npmPackage: 'thebe',
     version: '0.9.3',
     color: '#e86e4d',
-    icon: '🔥',
     useCases: ['Documentación interactiva', 'Notebooks en sitios web', 'Tutoriales ejecutables'],
   },
   {
@@ -35,7 +34,6 @@ const NOTEBOOK_ENVS: NotebookEnv[] = [
     npmPackage: 'pyodide',
     version: '0.29.3',
     color: '#3572a5',
-    icon: '🐍',
     useCases: ['Python offline en browser', 'Ejecución de numpy/pandas en cliente', 'Apps web Python-first'],
   },
   {
@@ -46,7 +44,6 @@ const NOTEBOOK_ENVS: NotebookEnv[] = [
     npmPackage: 'starboard-notebook',
     version: '0.15.7',
     color: '#f5a623',
-    icon: '⭐',
     useCases: ['Notebooks embebidos', 'Celdas JS/Python/SQL', 'Dashboards reactivos'],
   },
 ]
@@ -97,7 +94,7 @@ export function renderMLResults(data: MLAnalysisResult, container: HTMLElement):
     mlLibs.length
       ? `
   <div class="metric-section">
-    <div class="ms-title">📦 Librerías ML/DL detectadas</div>
+    <div class="ms-title">Librerías ML/DL detectadas</div>
     <div style="display:flex;flex-wrap:wrap;gap:7px;padding:4px 0">
       ${mlLibs
         .map(
@@ -120,7 +117,7 @@ export function renderMLResults(data: MLAnalysisResult, container: HTMLElement):
     perfLibs.length
       ? `
   <div class="metric-section">
-    <div class="ms-title">⚡ Librerías de rendimiento</div>
+    <div class="ms-title">Librerías de rendimiento</div>
     <div style="display:flex;flex-wrap:wrap;gap:7px;padding:4px 0">
       ${perfLibs
         .map(
@@ -143,7 +140,7 @@ export function renderMLResults(data: MLAnalysisResult, container: HTMLElement):
     pipeline.length
       ? `
   <div class="metric-section">
-    <div class="ms-title">🔄 Pipeline ML (${pipeline.length} etapas)</div>
+    <div class="ms-title">Pipeline ML (${pipeline.length} etapas)</div>
     ${pipeline
       .map(
         (step, i) => `
@@ -162,7 +159,7 @@ export function renderMLResults(data: MLAnalysisResult, container: HTMLElement):
         ? `
     <div style="margin-top:12px">
       <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" data-ml-diagram='${JSON.stringify(diagram).replace(/'/g, "\\'")}'>
-        🔀 Ver diagrama del pipeline
+        Ver diagrama del pipeline
       </button>
     </div>`
         : ''
@@ -175,12 +172,11 @@ export function renderMLResults(data: MLAnalysisResult, container: HTMLElement):
     models.length
       ? `
   <div class="metric-section">
-    <div class="ms-title">🧠 Modelos detectados</div>
+    <div class="ms-title">Modelos detectados</div>
     ${models
       .map(
         (m) => `
       <div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid var(--b0)">
-        <span style="font-size:13px">🔷</span>
         <div style="flex:1">
           <div style="font-size:.78rem;font-weight:600">${m.name}</div>
           <div style="font-size:.63rem;color:var(--muted);font-family:var(--mono)">${m.type} · ${m.family} · ${m.framework}</div>
@@ -196,7 +192,7 @@ export function renderMLResults(data: MLAnalysisResult, container: HTMLElement):
     Object.keys(metrics).length
       ? `
   <div class="metric-section">
-    <div class="ms-title">📊 Métricas de entrenamiento</div>
+    <div class="ms-title">Métricas de entrenamiento</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:7px">
       ${Object.entries(metrics)
         .map(
@@ -217,7 +213,7 @@ export function renderMLResults(data: MLAnalysisResult, container: HTMLElement):
     issues.length
       ? `
   <div class="metric-section">
-    <div class="ms-title">⚠️ Issues ML/DL (${issues.length})</div>
+    <div class="ms-title">Issues ML/DL (${issues.length})</div>
     ${issues
       .map(
         (iss) => `
@@ -227,19 +223,19 @@ export function renderMLResults(data: MLAnalysisResult, container: HTMLElement):
           ${iss.category ? `<span style="font-size:.6rem;font-family:var(--mono);color:${iss.category === 'cython' ? '#ffd43b' : 'var(--muted)'}">${iss.category}</span>` : ''}
         </div>
         <div class="ii-msg">${iss.message}</div>
-        ${iss.suggestion ? `<div style="font-size:.65rem;color:var(--ok);margin-top:3px;font-family:var(--mono)">💡 ${iss.suggestion}</div>` : ''}
+        ${iss.suggestion ? `<div style="font-size:.65rem;color:var(--ok);margin-top:3px;font-family:var(--mono)">${iss.suggestion}</div>` : ''}
       </div>`,
       )
       .join('')}
   </div>`
-      : `<div style="padding:8px 0;color:var(--ok);font-family:var(--mono);font-size:.7rem">✅ Sin issues ML</div>`
+      : `<div style="padding:8px 0;color:var(--ok);font-family:var(--mono);font-size:.7rem">Sin issues ML</div>`
   }
 
   ${
     suggestions.length
       ? `
   <div class="metric-section">
-    <div class="ms-title">💡 Sugerencias</div>
+    <div class="ms-title">Sugerencias</div>
     ${suggestions
       .map(
         (s, i) => `
@@ -261,7 +257,7 @@ export function renderMLResults(data: MLAnalysisResult, container: HTMLElement):
 function _renderNotebookSection(): string {
   return `
   <div class="metric-section">
-    <div class="ms-title">🌐 Entornos de notebook disponibles</div>
+    <div class="ms-title">Entornos de notebook disponibles</div>
     <div style="font-size:.65rem;color:var(--muted);margin-bottom:10px;font-family:var(--mono)">
       Instalados vía npm — listos para integrar en el frontend
     </div>
@@ -269,7 +265,6 @@ function _renderNotebookSection(): string {
       (env) => `
     <div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:10px 12px;margin-bottom:8px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <span style="font-size:15px">${env.icon}</span>
         <span style="font-size:.82rem;font-weight:600;color:${env.color}">${env.name}</span>
         <span style="font-family:var(--mono);font-size:.6rem;color:var(--muted);margin-left:auto">v${env.version}</span>
         <code style="font-family:var(--mono);font-size:.6rem;background:var(--bg);padding:1px 6px;border-radius:4px;color:var(--muted)">${env.npmPackage}</code>
@@ -342,7 +337,7 @@ export function clientMLAnalysis(f: CodeFile): MLAnalysisResult {
   const nbSuggestions = notebookUsed.length
     ? notebookUsed.map((id) => {
         const env = NOTEBOOK_ENVS.find((e) => e.id === id)!
-        return `${env.icon} ${env.name} detectado — úsalo con: npm install ${env.npmPackage}`
+        return `${env.name} detectado — úsalo con: npm install ${env.npmPackage}`
       })
     : []
 

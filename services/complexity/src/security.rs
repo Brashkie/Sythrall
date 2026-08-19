@@ -49,6 +49,7 @@ const CREDENTIAL_NAME_NEEDLES: &[&str] = &[
     "password", "passwd", "pwd", "secret", "api_key", "apikey", "access_key", "accesskey", "auth_token",
     "authtoken", "private_key", "privatekey",
 ];
+const UNSAFE_DESERIALIZE_DOTTED: &[&str] = &["pickle.loads", "pickle.load", "marshal.loads"];
 
 // ─── Taint sources ───────────────────────────────────────────────────────────
 
@@ -231,17 +232,110 @@ fn check_command_injection(call: &rustpython_parser::ast::ExprCall, tainted: &Ha
     })
 }
 
+/// CWE-22. `open(path)` only fires when the path is *built* via concatenation/
+/// f-string/`.format()` with a tainted value — same "built" signal as SQL
+/// injection, so `open(f"uploads/{name}")` fires but `open(config_path)`
+/// (a plain variable, not concatenated) doesn't. `os.path.join(base, seg)`
+/// fires on any tainted non-first segment, built or not — joining a raw
+/// tainted `"../etc/passwd"` is already the traversal, no concatenation
+/// needed to make it dangerous.
+fn check_path_traversal(call: &rustpython_parser::ast::ExprCall, tainted: &HashMap<String, (String, bool)>, source: &str) -> Option<SecurityFinding> {
+    if let Expr::Name(n) = &*call.func {
+        if n.id.as_str() == "open" {
+            let path_expr = call.args.first()?;
+            let (found_source, built) = expr_taint_info(path_expr, tainted)?;
+            if !built {
+                return None;
+            }
+            return Some(SecurityFinding {
+                cwe: "CWE-22",
+                category: "Path Traversal",
+                severity: "High",
+                confidence: "High",
+                source: found_source,
+                sink: Some("open(...)".to_string()),
+                line: line_of_offset(source, call.range.start().to_usize()),
+                function: None,
+                recommendation: "Validate/normalize the path against an allow-listed base directory (e.g. `Path(base).joinpath(name).resolve()` and check it's still under `base`) before opening it.",
+            });
+        }
+    }
+    if node_name(&call.func) == "os.path.join" && call.args.len() > 1 {
+        for arg in &call.args[1..] {
+            if let Some((found_source, _built)) = expr_taint_info(arg, tainted) {
+                return Some(SecurityFinding {
+                    cwe: "CWE-22",
+                    category: "Path Traversal",
+                    severity: "High",
+                    confidence: "High",
+                    source: found_source,
+                    sink: Some("os.path.join(...)".to_string()),
+                    line: line_of_offset(source, call.range.start().to_usize()),
+                    function: None,
+                    recommendation: "Validate/normalize the joined path against an allow-listed base directory before using it — `os.path.join` doesn't strip `..` segments.",
+                });
+            }
+        }
+    }
+    None
+}
+
+/// CWE-502. `pickle.loads`/`pickle.load`/`marshal.loads` are unsafe by
+/// construction — they can execute arbitrary code when deserializing,
+/// regardless of whether the input is provably tainted (unlike SQL/command
+/// injection, no "safe form" exists for these calls). `yaml.load` is only
+/// unsafe without an explicit `Loader=yaml.SafeLoader`/`CSafeLoader`.
+/// Confidence is High when the argument traces to a known taint source,
+/// Medium otherwise — using these functions at all is a real risk, tainted
+/// input flowing into them is worse.
+fn check_insecure_deserialization(call: &rustpython_parser::ast::ExprCall, tainted: &HashMap<String, (String, bool)>, source: &str) -> Option<SecurityFinding> {
+    let dotted = node_name(&call.func);
+    let is_pickle_marshal = UNSAFE_DESERIALIZE_DOTTED.contains(&dotted.as_str());
+    let is_unsafe_yaml = dotted == "yaml.load"
+        && !call.keywords.iter().any(|kw| {
+            kw.arg.as_ref().is_some_and(|a| a.as_str() == "Loader")
+                && matches!(&kw.value, Expr::Attribute(a) if a.attr.as_str().contains("SafeLoader"))
+        });
+    if !(is_pickle_marshal || is_unsafe_yaml) {
+        return None;
+    }
+    let arg_taint = call.args.first().and_then(|a| expr_taint_info(a, tainted));
+    let (confidence, found_source) = match arg_taint {
+        Some((src, _)) => ("High", src),
+        None => ("Medium", "unvalidated deserialization call".to_string()),
+    };
+    let recommendation = if is_unsafe_yaml {
+        "Use `yaml.safe_load()` (or `Loader=yaml.SafeLoader`) instead of the default `yaml.load`, which can construct arbitrary Python objects."
+    } else {
+        "Avoid deserializing untrusted data with `pickle`/`marshal` — use a safe format (JSON) or a schema-validated serializer instead."
+    };
+    Some(SecurityFinding {
+        cwe: "CWE-502",
+        category: "Insecure Deserialization",
+        severity: "High",
+        confidence,
+        source: found_source,
+        sink: Some(format!("{dotted}(...)")),
+        line: line_of_offset(source, call.range.start().to_usize()),
+        function: None,
+        recommendation,
+    })
+}
+
 /// Taint tracking + catálogo de sinks conocidos, dentro de una sola función.
+/// A diferencia de v1 (solo SQLi/command injection, ambos requieren taint),
+/// ya no corta temprano si `tainted` está vacío — la deserialización insegura
+/// (CWE-502) dispara aunque el argumento no sea provably tainted.
 pub fn security_findings(name: &str, body: &[Stmt], source: &str) -> Vec<SecurityFinding> {
     let tainted = taint_propagation(body);
-    if tainted.is_empty() {
-        return Vec::new();
-    }
     let mut findings = Vec::new();
     let mut on_stmt = |_: &Stmt| {};
     let mut on_expr = |expr: &Expr| {
         if let Expr::Call(call) = expr {
-            let finding = check_sql_injection(call, &tainted, source).or_else(|| check_command_injection(call, &tainted, source));
+            let finding = check_sql_injection(call, &tainted, source)
+                .or_else(|| check_command_injection(call, &tainted, source))
+                .or_else(|| check_path_traversal(call, &tainted, source))
+                .or_else(|| check_insecure_deserialization(call, &tainted, source));
             if let Some(mut f) = finding {
                 f.function = Some(name.to_string());
                 findings.push(f);
@@ -428,5 +522,54 @@ mod tests {
     fn funcion_limpia_sin_findings() {
         let src = "def add(a, b):\n    return a + b\n";
         assert!(findings(src).is_empty());
+    }
+
+    #[test]
+    fn path_traversal_open_concatenado_detectado() {
+        let src = "def read_file(request):\n    name = request.args[\"name\"]\n    with open(\"uploads/\" + name) as f:\n        return f.read()\n";
+        let f = findings(src);
+        assert!(f.iter().any(|x| x.cwe == "CWE-22" && x.sink.as_deref() == Some("open(...)")));
+    }
+
+    #[test]
+    fn path_traversal_open_variable_simple_no_dispara() {
+        let src = "def read_file(config_path):\n    with open(config_path) as f:\n        return f.read()\n";
+        let f = findings(src);
+        assert!(!f.iter().any(|x| x.cwe == "CWE-22"));
+    }
+
+    #[test]
+    fn path_traversal_os_path_join_detectado() {
+        let src = "import os\ndef read_file(request):\n    name = request.args[\"name\"]\n    path = os.path.join(\"uploads\", name)\n    open(path)\n";
+        let f = findings(src);
+        assert!(f.iter().any(|x| x.cwe == "CWE-22" && x.sink.as_deref() == Some("os.path.join(...)")));
+    }
+
+    #[test]
+    fn insecure_deserialization_pickle_loads_tainted_high_confidence() {
+        let src = "import pickle\ndef load(request):\n    data = request.args[\"data\"]\n    return pickle.loads(data)\n";
+        let f = findings(src);
+        assert!(f.iter().any(|x| x.cwe == "CWE-502" && x.confidence == "High"));
+    }
+
+    #[test]
+    fn insecure_deserialization_pickle_loads_untainted_medium_confidence() {
+        let src = "import pickle\ndef load(raw_bytes):\n    return pickle.loads(raw_bytes)\n";
+        let f = findings(src);
+        assert!(f.iter().any(|x| x.cwe == "CWE-502" && x.confidence == "Medium"));
+    }
+
+    #[test]
+    fn insecure_deserialization_yaml_load_default_loader_detectado() {
+        let src = "import yaml\ndef load(raw):\n    return yaml.load(raw)\n";
+        let f = findings(src);
+        assert!(f.iter().any(|x| x.cwe == "CWE-502"));
+    }
+
+    #[test]
+    fn insecure_deserialization_yaml_safe_load_no_dispara() {
+        let src = "import yaml\ndef load(raw):\n    return yaml.load(raw, Loader=yaml.SafeLoader)\n";
+        let f = findings(src);
+        assert!(!f.iter().any(|x| x.cwe == "CWE-502"));
     }
 }

@@ -185,3 +185,88 @@ class TestSpaceComplexity:
             "    return counts\n"
         )
         assert self._space_of(src, "contar") == "O(n)"
+
+
+class TestProjectHealth:
+    """Fase 2 del rediseño UX: /static/parse-project agrega security_findings/
+    structural_smells a nivel de proyecto (antes solo per-archivo) y computa
+    4 scores de Project Health, cada uno con sus números crudos al lado."""
+
+    SQLI_FILE = (
+        "def run_query(request):\n"
+        "    username = request.args.get('username')\n"
+        "    query = \"SELECT * FROM users WHERE name = '\" + username + \"'\"\n"
+        "    cursor.execute(query)\n"
+    )
+    LONG_FN_FILE = "def big(a, b, c, d, e, f):\n" + "    x = 1\n" * 55 + "    return x\n"
+
+    def _parse_project(self, files: list[dict]) -> dict:
+        r = client.post("/static/parse-project", json={"files": files})
+        assert r.status_code == 200
+        return r.json()
+
+    def test_clean_project_has_all_scores_at_100(self):
+        data = self._parse_project([{"filename": "clean.py", "content": "def add(a, b):\n    return a + b\n"}])
+        h = data["health"]
+        assert h["security"]["score"] == 100
+        assert h["quality"]["score"] == 100
+        assert h["complexity"]["score"] == 100
+        assert h["architecture"]["score"] == 100
+
+    def test_empty_project_does_not_crash_and_scores_100(self):
+        data = self._parse_project([])
+        assert data["health"]["complexity"]["avg_complexity"] == 0.0
+        assert data["health"]["complexity"]["score"] == 100
+
+    def test_security_findings_aggregated_with_file(self):
+        data = self._parse_project(
+            [
+                {"filename": "sqli.py", "content": self.SQLI_FILE},
+                {"filename": "clean.py", "content": "def add(a, b):\n    return a + b\n"},
+            ]
+        )
+        findings = data["security_findings"]
+        assert len(findings) == 1
+        assert findings[0]["file"] == "sqli.py"
+        assert findings[0]["severity"] == "High"
+        assert data["health"]["security"]["high"] == 1
+        assert data["health"]["security"]["score"] == 85  # 100 - 15
+        assert data["summary"]["security_findings"] == 1
+
+    def test_structural_smells_aggregated_with_file(self):
+        data = self._parse_project([{"filename": "long.py", "content": self.LONG_FN_FILE}])
+        smells = data["structural_smells"]
+        assert {s["kind"] for s in smells} == {"long_function", "excessive_parameters"}
+        assert all(s["file"] == "long.py" for s in smells)
+        assert data["health"]["quality"]["smells"] == len(smells)
+        assert data["health"]["quality"]["score"] < 100
+        assert data["summary"]["structural_smells"] == len(smells)
+
+    def test_circular_dependency_penalizes_architecture_score(self):
+        data = self._parse_project(
+            [
+                {"filename": "circular_a.py", "content": "import circular_b\n"},
+                {"filename": "circular_b.py", "content": "import circular_a\n"},
+            ]
+        )
+        assert data["health"]["architecture"]["cycles"] >= 1
+        assert data["health"]["architecture"]["score"] < 100
+
+    def test_project_wide_avg_complexity_flattens_all_functions(self):
+        # 1 archivo con 1 función O(1) + 1 archivo con función de loop anidado
+        # (CC mayor) — el promedio debe combinar TODAS las funciones, no
+        # promediar primero por archivo.
+        data = self._parse_project(
+            [
+                {"filename": "simple.py", "content": "def f():\n    return 1\n"},
+                {"filename": "loops.py", "content": PY_NESTED_LOOPS},
+            ]
+        )
+        assert data["health"]["complexity"]["avg_complexity"] > 1.0
+
+    def test_health_scores_never_negative(self):
+        # Muchos findings High + muchos smells — el clamp a 0 no debe fallar.
+        files = [{"filename": f"vuln{i}.py", "content": self.SQLI_FILE} for i in range(10)]
+        data = self._parse_project(files)
+        for key in ("security", "quality", "complexity", "architecture"):
+            assert data["health"][key]["score"] >= 0

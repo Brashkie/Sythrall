@@ -5,10 +5,7 @@
    ══════════════════════════════════════════ */
 
 /* ── File Tree ── */
-.exp-empty {
-  padding: 12px; text-align: center;
-  color: var(--muted); font-size: .68rem; font-family: var(--mono);
-}
+/* Empty state: clase compartida .empty/.empty-icon (main.css) */
 
 .exp-group { margin-bottom: 2px; }
 

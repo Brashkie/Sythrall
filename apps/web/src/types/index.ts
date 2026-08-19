@@ -1,6 +1,8 @@
 // ══════════════════════════════════════════
 //  Sythrall — Types
 // ══════════════════════════════════════════
+import type { ProjectHealth } from '../api/client'
+
 export type Severity = 'error' | 'warning' | 'info'
 export type Status = 'ok' | 'warning' | 'down' | 'unknown' | 'error'
 export type StepState = 'idle' | 'run' | 'ok' | 'err' | 'warn'
@@ -76,10 +78,23 @@ export interface HistoryEntry {
   code?: string | number | null
 }
 
+export interface HalsteadMetrics {
+  distinct_operators: number
+  distinct_operands: number
+  total_operators: number
+  total_operands: number
+  vocabulary: number
+  length: number
+  volume: number
+  difficulty: number
+  effort: number
+}
+
 export interface FileMetrics {
   pylint_score?: number
   complexity?: ComplexityEntry[]
   mi?: number
+  halstead?: HalsteadMetrics | null
   raw?: RawStats
   tools_used?: string[]
 }
@@ -152,6 +167,7 @@ export interface AnalysisResult {
   metrics: { pylint_score?: number }
   complexity: ComplexityEntry[]
   maintainability: number | null
+  halstead: HalsteadMetrics | null
   raw_stats: RawStats
   tools_used: string[]
 }
@@ -175,6 +191,7 @@ export interface AppState {
     apis: ApiResult[]
     issues: Issue[]
     logErrors: LogError[]
+    projectHealth: ProjectHealth | null
   }
   running: boolean
   autoOn: boolean
@@ -230,6 +247,5 @@ export interface NotebookEnv {
   npmPackage: string
   version: string
   color: string
-  icon: string
   useCases: string[]
 }

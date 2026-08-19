@@ -63,6 +63,7 @@ async def analyze_code(req: AnalyzeCodeRequest):
         "metrics": {},
         "complexity": [],
         "maintainability": None,
+        "halstead": None,
         "raw_stats": {},
         "tools_used": [],
     }
@@ -86,9 +87,10 @@ async def analyze_code(req: AnalyzeCodeRequest):
             result["tools_used"].append("pylint")
 
         if ext == ".py" and "complexity" in tools:
-            cx, mi, raw = await _run_complexity(content, filename)
+            cx, mi, raw, halstead = await _run_complexity(content, filename)
             result["complexity"] = cx
             result["maintainability"] = mi
+            result["halstead"] = halstead
             result["raw_stats"] = raw
             result["tools_used"].append("complexity")
 
@@ -161,6 +163,7 @@ async def analyze_project(req: AnalyzeProjectRequest) -> dict[str, Any]:
             "metrics": {},
             "complexity": [],
             "maintainability": None,
+            "halstead": None,
             "raw_stats": {},
             "tools_used": [],
         }
@@ -176,9 +179,10 @@ async def analyze_project(req: AnalyzeProjectRequest) -> dict[str, Any]:
     if "complexity" in req.tools:
         for f in py_files:
             fname = f.get("filename", "unknown")
-            cx, mi, raw = await _run_complexity(f.get("content", ""), fname)
+            cx, mi, raw, halstead = await _run_complexity(f.get("content", ""), fname)
             results[fname]["complexity"] = cx
             results[fname]["maintainability"] = mi
+            results[fname]["halstead"] = halstead
             results[fname]["raw_stats"] = raw
             results[fname]["tools_used"].append("complexity")
 
@@ -490,12 +494,12 @@ def _run_pylint_batch(filepaths: list[str]) -> dict[str, list[dict]]:
     return by_path
 
 
-async def _run_complexity(content: str, filename: str) -> tuple[list, float | None, dict]:
+async def _run_complexity(content: str, filename: str) -> tuple[list, float | None, dict, dict | None]:
     data = await analyze_complexity(filename, content)
     raw_stats = data.get("raw") or {}
     if data.get("error"):
         raw_stats["error"] = data["error"]
-    return data.get("functions") or [], data.get("mi"), raw_stats
+    return data.get("functions") or [], data.get("mi"), raw_stats, data.get("halstead")
 
 
 # ── /check/api ────────────────────────────────────────────────────────────────

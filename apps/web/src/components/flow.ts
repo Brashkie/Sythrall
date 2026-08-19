@@ -6,11 +6,11 @@ import { state } from '../store/state'
 import type { RunHistoryEntry, StepState } from '../types'
 
 const STEPS = [
-  { id: 'api', name: 'APIs', icon: '📡' },
-  { id: 'upload', name: 'Archivos', icon: '📤' },
-  { id: 'analyze', name: 'Análisis', icon: '🔬' },
-  { id: 'logs', name: 'Logs', icon: '📋' },
-  { id: 'report', name: 'Reporte', icon: '📄' },
+  { id: 'api', name: 'APIs' },
+  { id: 'upload', name: 'Archivos' },
+  { id: 'analyze', name: 'Análisis' },
+  { id: 'logs', name: 'Logs' },
+  { id: 'report', name: 'Reporte' },
 ]
 
 const ICONS: Record<StepState, string> = { idle: '·', run: '◌', ok: '✓', err: '✗', warn: '⚠' }
@@ -34,7 +34,7 @@ export function renderFlow(): void {
         ${!isLast ? `<div class="fline ${st === 'ok' ? 'ok' : ''}"></div>` : ''}
       </div>
       <div class="fcontent">
-        <div class="fname" style="color:${COLORS[st]}">${s.icon} ${s.name}</div>
+        <div class="fname" style="color:${COLORS[st]}">${s.name}</div>
         <div class="fdetail">${getDetail(s.id, st)}</div>
       </div>
     </div>`

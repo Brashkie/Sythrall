@@ -15,13 +15,17 @@ import httpx
 
 COMPLEXITY_ENGINE_URL = os.environ.get("COMPLEXITY_ENGINE_URL", "http://127.0.0.1:7682")
 
-_EMPTY_RESULT = {"functions": [], "mi": None, "raw": {}, "error": None}
+_EMPTY_RESULT = {"functions": [], "mi": None, "halstead": None, "raw": {}, "error": None}
 
 
 async def analyze_complexity(filename: str, content: str) -> dict:
     """POSTea el archivo al sidecar y devuelve su respuesta tal cual (shape:
-    functions/mi/raw/error). Ante cualquier falla de red devuelve el shape
-    vacío — el sidecar es una capacidad opcional, no una dependencia dura."""
+    functions/mi/halstead/raw/error). Ante cualquier falla de red devuelve el
+    shape vacío — el sidecar es una capacidad opcional, no una dependencia
+    dura. `halstead` (Fase 22) es Rust-only, sin fallback Python — mismo
+    límite que ya tenía `mi`/`functions`/`raw` desde la Fase 11
+    (`complexity-engine` reemplazó a `radon` sin dejar un cálculo Python
+    paralelo; degrada a `None`, no a una versión más lenta calculada acá)."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.post(

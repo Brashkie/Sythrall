@@ -23,7 +23,7 @@ from services.complexity_client import (
 class TestComplexityClientUnavailable:
     def test_analyze_complexity_returns_empty_shape_when_unreachable(self):
         result = asyncio.run(analyze_complexity("f.py", "def f():\n    return 1\n"))
-        assert result == {"functions": [], "mi": None, "raw": {}, "error": None}
+        assert result == {"functions": [], "mi": None, "halstead": None, "raw": {}, "error": None}
 
     def test_check_complexity_engine_sync_false_when_unreachable(self):
         assert check_complexity_engine_sync() is False
@@ -34,6 +34,12 @@ class TestComplexityClientUnavailable:
     def test_analyze_complexity_does_not_raise_on_empty_content(self):
         result = asyncio.run(analyze_complexity("empty.py", ""))
         assert result["functions"] == []
+
+    def test_analyze_complexity_halstead_key_present_when_unreachable(self):
+        """Fase 22: `halstead` es Rust-only (sin fallback Python, mismo límite
+        que `mi`) — el shape vacío tiene que traer la key igual, en None."""
+        result = asyncio.run(analyze_complexity("f.py", "def f():\n    return 1\n"))
+        assert result["halstead"] is None
 
 
 class TestParsePythonRichUnavailable:

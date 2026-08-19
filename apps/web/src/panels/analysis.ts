@@ -3,12 +3,28 @@
 // ══════════════════════════════════════════
 // panels/analysis.ts
 import { state } from '../store/state'
-import type { CodeFile } from '../types'
+import type { CodeFile, HalsteadMetrics } from '../types'
 import { languageBadge } from '../utils/icons'
 
 // ── Helper
 const mr = (k: string, v: unknown, color?: string) =>
   `<div class="metric-row"><span class="mr-k">${k}</span><span class="mr-v"${color ? ` style="color:${color}"` : ''}>${v ?? '—'}</span></div>`
+
+// Fase 22: desglose de las métricas de Halstead que ya alimentan el MI de
+// arriba — antes solo se usaba el Volumen, cocinado dentro de la fórmula de
+// Coleman-Oman; esto muestra los 5 componentes por separado.
+function _renderHalstead(h: HalsteadMetrics): string {
+  return `<details style="margin-top:8px">
+    <summary style="font-size:.6rem;color:var(--muted);cursor:pointer;user-select:none">Halstead — desglose</summary>
+    <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-family:var(--mono);font-size:.65rem">
+      <span style="color:var(--muted)">Vocabulario (η)</span><span>${h.vocabulary}</span>
+      <span style="color:var(--muted)">Longitud (N)</span><span>${h.length}</span>
+      <span style="color:var(--muted)">Volumen (V)</span><span>${h.volume.toFixed(1)}</span>
+      <span style="color:var(--muted)">Dificultad (D)</span><span>${h.difficulty.toFixed(1)}</span>
+      <span style="color:var(--muted)">Esfuerzo (E)</span><span>${h.effort.toFixed(0)}</span>
+    </div>
+  </details>`
+}
 
 // ══ File Analysis (Right panel)
 export function renderFileAnalysis(f: CodeFile): void {
@@ -36,6 +52,7 @@ export function renderFileAnalysis(f: CodeFile): void {
       <div style="font-size:.58rem;color:var(--muted);margin-bottom:2px">MAINTAINABILITY INDEX</div>
       <div style="font-family:var(--mono);font-size:1.4rem;color:${miColor}">${mi}<span style="font-size:.7rem;color:var(--muted)">/100</span></div>
       <div class="complexity-bar" style="margin-top:5px"><div class="cb-fill" style="width:${mi}%;background:${miColor}"></div></div>
+      ${m.halstead ? _renderHalstead(m.halstead) : ''}
     </div>`
         : ''
     }
@@ -72,7 +89,7 @@ export function renderFileAnalysis(f: CodeFile): void {
       <div class="ms-title">Problemas (${f.issues.length})</div>
       ${
         f.issues.length === 0
-          ? '<div class="empty" style="padding:8px">✅ Sin problemas</div>'
+          ? '<div class="empty" style="padding:8px;color:var(--ok)">Sin problemas</div>'
           : f.issues
               .slice(0, 15)
               .map(
@@ -86,8 +103,8 @@ export function renderFileAnalysis(f: CodeFile): void {
       }
     </div>
     <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
-      <button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center" data-action="diagram" data-fid="${f.id}">🔀 Diagrama</button>
-      ${f.ext === '.py' ? `<button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center" data-action="ml" data-fid="${f.id}">🤖 ML/DL</button>` : ''}
+      <button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center" data-action="diagram" data-fid="${f.id}">Diagrama</button>
+      ${f.ext === '.py' ? `<button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center" data-action="ml" data-fid="${f.id}">ML/DL</button>` : ''}
     </div>`
 }
 
@@ -111,7 +128,7 @@ export function renderMetrics(): void {
         </div>`
       return
     }
-    el.innerHTML = `<div class="empty"><span class="empty-icon">📈</span>${state.activeProjectId ? 'Corré "Análisis completo" para ver métricas' : 'Sube archivos, o elegí un proyecto activo en Proyectos'}</div>`
+    el.innerHTML = `<div class="empty">${state.activeProjectId ? 'Corré "Análisis completo" para ver métricas' : 'Sube archivos, o elegí un proyecto activo en Proyectos'}</div>`
     return
   }
   const analyzed = state.files.filter((f) => f.analyzed)

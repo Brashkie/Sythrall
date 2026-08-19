@@ -7,20 +7,19 @@ import { api } from '../api/client'
 import { renderRTChart } from '../components/charts'
 import { state } from '../store/state'
 import { toast } from '../utils/helpers'
+import { icon } from '../utils/icons'
 
 export function renderAPICards(): void {
   const el = document.getElementById('api-cards')
   if (!el) return
   if (!state.results.apis.length) {
-    el.innerHTML = '<div class="empty"><span class="empty-icon">📡</span>Agrega URLs</div>'
+    el.innerHTML = '<div class="empty">Agrega URLs</div>'
     return
   }
   el.innerHTML = state.results.apis
     .map((a) => {
       const colorMap: Record<string, string> = { ok: 'var(--ok)', warning: 'var(--warn)', down: 'var(--err)' }
-      const iconMap: Record<string, string> = { ok: '✅', warning: '⚠️', down: '❌' }
       const c = colorMap[a.status] ?? 'var(--muted)'
-      const icon = iconMap[a.status] ?? '❓'
       const hist = (a.history ?? []).slice(-10)
       const bars = hist
         .map((h) => {
@@ -32,7 +31,7 @@ export function renderAPICards(): void {
 
       return `<div class="api-card">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <span style="font-size:15px">${icon}</span>
+        <span style="width:8px;height:8px;border-radius:50%;background:${c};flex-shrink:0"></span>
         <span class="ac-url" style="color:${c}" title="${a.url}">${a.url}</span>
         <button class="btn btn-ghost btn-sm" data-recheck="${a.url}">↺</button>
       </div>
@@ -41,7 +40,7 @@ export function renderAPICards(): void {
         <div class="acm"><div class="acm-k">Respuesta</div><div class="acm-v" style="color:var(--info)">${a.ms != null ? a.ms + 'ms' : '—'}</div></div>
         <div class="acm"><div class="acm-k">HTTP</div><div class="acm-v">${a.code ?? '—'}</div></div>
       </div>
-      ${a.error ? `<div style="margin-top:7px;font-family:var(--mono);font-size:.65rem;color:var(--err);background:rgba(255,51,102,.07);padding:6px;border-radius:5px">⚠ ${a.error}</div>` : ''}
+      ${a.error ? `<div style="margin-top:7px;font-family:var(--mono);font-size:.65rem;color:var(--err);background:rgba(255,51,102,.07);padding:6px;border-radius:5px">${icon('warning', 12)} ${a.error}</div>` : ''}
       ${hist.length ? `<div style="display:flex;align-items:flex-end;gap:2px;margin-top:8px;height:24px">${bars}</div>` : ''}
     </div>`
     })
@@ -94,7 +93,17 @@ export function renderIssuesList(list?: Issue[]): void {
   if (issueFilter.sev !== 'all') items = items.filter((i) => i.severity === issueFilter.sev)
   if (issueFilter.tool) items = items.filter((i) => i.tool === issueFilter.tool)
   if (!items.length) {
-    el.innerHTML = '<div class="empty"><span class="empty-icon">✅</span>Sin problemas</div>'
+    if (!state.files.length) {
+      el.innerHTML = `<div class="empty">
+        Todavía no cargaste archivos para analizar
+        <button class="btn btn-ghost btn-sm" id="issues-empty-cta">+ Código</button>
+      </div>`
+      document.getElementById('issues-empty-cta')?.addEventListener('click', () => {
+        document.getElementById('btn-add-code')?.click()
+      })
+    } else {
+      el.innerHTML = '<div class="empty" style="color:var(--ok)">Sin problemas detectados</div>'
+    }
     return
   }
   el.innerHTML = items

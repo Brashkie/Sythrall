@@ -227,6 +227,15 @@ class TestHeavyAnalyze:
         assert "big_o" in data
         assert len(data["big_o"]) >= 2
 
+    def test_analyze_halstead_key_present_without_sidecar(self):
+        """Fase 22: sin sidecar (no corre en pytest), `halstead` tiene que
+        seguir presente en metrics, en None — no faltar la key."""
+        data = client.post(
+            "/intel/analyze", json={"filename": "test.py", "content": PY_ISSUES, "tools": ["ast", "complexity"]}
+        ).json()
+        assert "halstead" in data["metrics"]
+        assert data["metrics"]["halstead"] is None
+
     def test_analyze_big_o_bubble(self):
         data = client.post(
             "/intel/analyze", json={"filename": "test.py", "content": PY_ISSUES, "tools": ["ast"]}

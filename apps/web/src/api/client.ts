@@ -184,6 +184,41 @@ export interface WasmHint {
   estimated_speedup: string
 }
 
+export interface SecurityFinding {
+  cwe: string
+  category: string
+  severity: 'High' | 'Medium' | 'Low'
+  confidence: 'High' | 'Medium' | 'Low'
+  source: string
+  sink: string | null
+  line: number
+  function: string | null
+  recommendation: string
+  /** Solo presente en resultados a nivel de proyecto (parse-project) — el
+   * archivo de origen, ausente en resultados de un solo archivo. */
+  file?: string
+}
+
+export interface StructuralSmell {
+  kind: 'long_function' | 'excessive_parameters' | 'deep_nesting' | 'large_class' | 'god_object'
+  name: string
+  line: number
+  message: string
+  /** Solo presente a nivel de proyecto, ver SecurityFinding.file. */
+  file?: string
+}
+
+export interface ProjectHealthMetric {
+  score: number
+}
+
+export interface ProjectHealth {
+  security: ProjectHealthMetric & { high: number; medium: number; low: number }
+  quality: ProjectHealthMetric & { smells: number }
+  complexity: ProjectHealthMetric & { avg_complexity: number }
+  architecture: ProjectHealthMetric & { cycles: number }
+}
+
 export interface StaticParseResult {
   filename: string
   language: string
@@ -196,17 +231,10 @@ export interface StaticParseResult {
   dead_code: Array<{ type: string; name?: string; module: string; line: number }>
   call_graph: Array<{ from: string; to: string }>
   wasm_hints: WasmHint[]
+  security_findings: SecurityFinding[]
+  structural_smells: StructuralSmell[]
   summary: Record<string, number | string>
   error?: string
-}
-
-export interface BigOResult {
-  filename: string
-  language: string
-  functions: Array<{ function: string; line: number; big_o: string; reason: string; complexity: number; loc: number }>
-  distribution: Record<string, number>
-  hot_paths: Array<{ function: string; big_o: string }>
-  total: number
 }
 
 export interface StaticProjectResult {
@@ -219,82 +247,13 @@ export interface StaticProjectResult {
     unused_imports: number
     big_o_distribution: Record<string, number>
     wasm_candidates: number
+    security_findings: number
+    structural_smells: number
   }
   wasm_candidates: Array<{ file: string; hints: WasmHint[] }>
-}
-
-// ─── Tipos Intelligence ───────────────────────────────────────────────────────
-
-export interface IntelMarker {
-  startLineNumber: number
-  startColumn: number
-  endLineNumber: number
-  endColumn: number
-  message: string
-  severity: number // 1=Hint 2=Info 4=Warning 8=Error (Monaco compatible)
-  source: string
-  code: string
-}
-
-export interface IntelLintResult {
-  markers: IntelMarker[]
-  ms: number
-  source: 'fast'
-}
-
-export interface IntelAnalyzeResult {
-  markers: IntelMarker[]
-  metrics: {
-    pylint_score?: number
-    complexity?: Array<{ name: string; line: number; complexity: number; rank: string }>
-    maintainability?: number
-  }
-  big_o: Array<{
-    name: string
-    line: number
-    big_o: string
-    reason: string
-    complexity: number
-  }>
-  ms: number
-  source: 'heavy'
-}
-
-export interface IntelHoverResult {
-  markdown: string
-  range: {
-    startLineNumber: number
-    startColumn?: number
-    endLineNumber: number
-    endColumn?: number
-  } | null
-}
-
-export interface IntelDefinitionResult {
-  found: boolean
-  symbol: string
-  filename: string
-  definitions: Array<{
-    line: number
-    column: number
-    end_line?: number
-    kind: string
-    signature: string
-    docstring: string
-  }>
-}
-
-export interface IntelReferencesResult {
-  symbol: string
-  filename: string
-  references: Array<{
-    line: number
-    column: number
-    kind: string
-    preview: string
-  }>
-  definition_line: number | null
-  total: number
+  security_findings: SecurityFinding[]
+  structural_smells: StructuralSmell[]
+  health: ProjectHealth
 }
 
 // ─── Tipos Code Graph ─────────────────────────────────────────────────────────
@@ -512,70 +471,4 @@ export const api = {
   /** Igual que staticParseProject, pero para un proyecto ya subido (Proyectos). */
   staticParseProjectById: (projectId: string) =>
     post<StaticProjectResult>('/static/parse-project', { project_id: projectId }),
-
-  staticBigO: (filename: string, content: string) => post<BigOResult>('/static/bigO', { filename, content }),
-
-  staticWasm: (filename: string, content: string) =>
-    post<{
-      filename: string
-      language: string
-      hints: WasmHint[]
-      total: number
-      critical: WasmHint[]
-      summary: string
-    }>('/static/wasm', { filename, content }),
-
-  staticLanguages: () =>
-    get<{
-      languages: Record<string, { extensions: string[]; parser: string; features: string[]; available: boolean }>
-      capabilities: Record<string, boolean>
-    }>('/static/languages'),
-
-  // ── Editor Intelligence (v4.1) ────────────────────────────────────────────
-
-  intelLint: (filename: string, content: string) => post<IntelLintResult>('/intel/lint', { filename, content }),
-
-  intelAnalyze: (filename: string, content: string, tools = ['ast', 'flake8', 'complexity']) =>
-    post<IntelAnalyzeResult>('/intel/analyze', { filename, content, tools }),
-
-  intelHover: (filename: string, content: string, line: number, column: number, symbol_name: string) =>
-    post<IntelHoverResult>('/intel/hover', { filename, content, line, column, symbol_name }),
-
-  intelDefinition: (filename: string, content: string, line: number, column: number, symbol_name: string) =>
-    post<IntelDefinitionResult>('/intel/definition', { filename, content, line, column, symbol_name }),
-
-  intelReferences: (filename: string, content: string, symbol_name: string) =>
-    post<IntelReferencesResult>('/intel/references', { filename, content, symbol_name }),
-
-  intelCompletions: (filename: string, content: string, prefix = '') =>
-    post<{
-      symbols: Array<{
-        label: string
-        kind: string
-        detail: string
-        documentation: string | null
-        insert_text: string
-        sort_text: string
-        line: number
-      }>
-      total: number
-      filename: string
-      prefix: string
-    }>('/intel/completions', { filename, content, prefix }),
-
-  intelRename: (filename: string, content: string, symbol_name: string, new_name: string) =>
-    post<{
-      valid: boolean
-      edits: Array<{
-        range: { startLineNumber: number; startColumn: number; endLineNumber: number; endColumn: number }
-        newText: string
-        kind: string
-        preview: string
-      }>
-      total: number
-      old_name: string
-      new_name: string
-      filename: string
-      error?: string
-    }>('/intel/rename', { filename, content, symbol_name, new_name }),
 }

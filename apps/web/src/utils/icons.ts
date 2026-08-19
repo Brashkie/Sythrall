@@ -32,6 +32,9 @@ export type IconName =
   | 'more'
   | 'search'
   | 'folder'
+  | 'warning'
+  | 'check'
+  | 'shield'
 
 const PATHS: Record<IconName, string> = {
   dashboard:
@@ -62,6 +65,10 @@ const PATHS: Record<IconName, string> = {
   more: '<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  warning:
+    '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  shield: '<path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5z"/>',
 }
 
 /** Devuelve un `<svg>` inline. `stroke="currentColor"` — hereda color de donde se use. */
@@ -117,4 +124,19 @@ const LANG: Record<string, LangDef> = {
 export function languageBadge(ext: string): string {
   const def = LANG[ext] ?? { label: '•', cls: 'lang-generic' }
   return `<span class="lang-badge ${def.cls}">${def.label}</span>`
+}
+
+/** Igual que languageBadge() pero por nombre de lenguaje (`r.language` del
+ * parser: 'python'/'c'/'cpp'/'javascript'/'typescript') en vez de extensión —
+ * usado por static.ts/graph.ts, que reciben el nombre, no el archivo. */
+const LANG_NAME_TO_EXT: Record<string, string> = {
+  python: '.py',
+  c: '.c',
+  cpp: '.cpp',
+  javascript: '.js',
+  typescript: '.ts',
+}
+
+export function languageBadgeByName(lang: string): string {
+  return languageBadge(LANG_NAME_TO_EXT[lang] ?? '')
 }

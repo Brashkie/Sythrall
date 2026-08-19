@@ -26,7 +26,7 @@ export function handleFolderPick(files: FileList | null): void {
   selectedPath = null
   currentRoot = buildTreeFromFileList(files)
   renderFolderTree()
-  appendLog('info', `📂 Carpeta explorada: ${currentRoot.name} (${files.length} archivos)`, 'fe')
+  appendLog('info', `Carpeta explorada: ${currentRoot.name} (${files.length} archivos)`, 'fe')
 
   // "+ Carpeta" también guarda en el proyecto activo (o crea uno nuevo) — la
   // navegación del árbol sigue siendo local/lazy, pero el contenido ya no se
@@ -79,8 +79,8 @@ function openTreeFile(path: string): void {
     updateStats()
     selectFile(file.id)
     renderFolderTree()
-    appendLog('info', `📁 ${path} (${fmtBytes(f.size)})`, 'fe')
-    toast('✅ ' + f.name, 'ok')
+    appendLog('info', `${path} (${fmtBytes(f.size)})`, 'fe')
+    toast(f.name, 'ok')
   }
   reader.readAsText(f)
 }
@@ -100,7 +100,6 @@ function renderNode(node: FolderTreeNode, depth: number): string {
       <div class="tree-dir">
         <div class="tree-row dir-row" style="padding-left:${pad + 6}px" data-tree-toggle="${esc(node.path)}">
           <span class="tree-expand">${isOpen ? '▾' : '▸'}</span>
-          <span>${isOpen ? '📂' : '📁'}</span>
           <span class="tree-name">${esc(node.name)}</span>
           ${node.children?.length ? `<span class="tree-count">${node.children.length}</span>` : ''}
         </div>

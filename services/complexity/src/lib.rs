@@ -7,10 +7,12 @@ pub mod raw;
 pub mod recursion;
 pub mod rich;
 pub mod security;
+pub mod smells;
 pub mod space;
 pub mod structure;
 pub mod walk;
 
+pub use maintainability::HalsteadMetrics;
 pub use rich::analyze_rich;
 
 use serde::Serialize;
@@ -19,6 +21,7 @@ use serde::Serialize;
 pub struct AnalysisResult {
     pub functions: Vec<complexity::FunctionComplexity>,
     pub mi: Option<f64>,
+    pub halstead: Option<HalsteadMetrics>,
     pub raw: raw::RawStats,
     pub error: Option<String>,
 }
@@ -33,6 +36,7 @@ pub fn analyze(content: &str) -> AnalysisResult {
             return AnalysisResult {
                 functions: Vec::new(),
                 mi: None,
+                halstead: None,
                 raw: raw::RawStats::default(),
                 error: Some(e),
             };
@@ -52,11 +56,13 @@ pub fn analyze(content: &str) -> AnalysisResult {
     } else {
         raw_stats.comments as f64 / raw_stats.loc as f64
     };
-    let mi = maintainability::compute(&suite, avg_complexity, raw_stats.sloc, comment_ratio, true);
+    let halstead = maintainability::halstead_metrics(&suite);
+    let mi = maintainability::compute(halstead.as_ref(), avg_complexity, raw_stats.sloc, comment_ratio, true);
 
     AnalysisResult {
         functions,
         mi,
+        halstead,
         raw: raw_stats,
         error: None,
     }

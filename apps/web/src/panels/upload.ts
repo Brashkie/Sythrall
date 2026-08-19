@@ -9,7 +9,7 @@ import { api } from '../api/client'
 import { addFile, setActiveProject, state } from '../store/state'
 import type { CodeFile } from '../types'
 import { appendLog, toast } from '../utils/helpers'
-import { languageBadge } from '../utils/icons'
+import { icon, languageBadge } from '../utils/icons'
 
 // ─── Estado del panel ─────────────────────────────────────────────────────────
 
@@ -39,21 +39,18 @@ const st: UploadPanelState = {
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
 
-const TABS: Record<UploadTab, { icon: string; label: string; hint: string; dropText: string }> = {
+const TABS: Record<UploadTab, { label: string; hint: string; dropText: string }> = {
   files: {
-    icon: '📄',
     label: 'Archivos',
     hint: 'Cualquier extensión · Máx 50 MB c/u',
     dropText: 'Arrastra archivos aquí',
   },
   folder: {
-    icon: '📁',
     label: 'Carpeta',
     hint: 'Se preserva la estructura de carpetas',
     dropText: 'Arrastra una carpeta aquí',
   },
   zip: {
-    icon: '🗜️',
     label: 'ZIP',
     hint: 'Se descomprime automáticamente · Máx 200 MB',
     dropText: 'Arrastra un .zip aquí',
@@ -83,7 +80,7 @@ export function renderUploadPanel(): void {
         .map(
           ([id, t]) => `
         <button class="up-tab ${st.activeTab === id ? 'active' : ''}" data-up-tab="${id}">
-          ${t.icon} ${t.label}
+          ${t.label}
         </button>`,
         )
         .join('')}
@@ -95,7 +92,6 @@ export function renderUploadPanel(): void {
         !hasPending
           ? `
         <div class="up-drop-content">
-          <div class="up-drop-icon">${tab.icon}</div>
           <div class="up-drop-primary">${tab.dropText}</div>
           <div class="up-drop-secondary">o haz clic para seleccionar</div>
           <div class="up-drop-hint">${tab.hint}</div>
@@ -103,7 +99,6 @@ export function renderUploadPanel(): void {
       `
           : `
         <div class="up-pending">
-          <div class="up-drop-icon">${tab.icon}</div>
           <div class="up-pending-count">
             <strong>${st.pendingFiles.length || (st.pendingZip ? 1 : 0)}</strong>
             archivo${(st.pendingFiles.length || 1) !== 1 ? 's' : ''} listo${(st.pendingFiles.length || 1) !== 1 ? 's' : ''}
@@ -134,7 +129,7 @@ export function renderUploadPanel(): void {
     <!-- Botón de subida -->
     <button class="btn btn-primary" id="up-submit-btn" style="width:100%;justify-content:center"
       ${!hasPending || st.isUploading ? 'disabled' : ''}>
-      ${st.isUploading ? `<span class="up-spinner"></span> Subiendo... ${st.uploadPct}%` : '🚀 Subir Proyecto'}
+      ${st.isUploading ? `<span class="up-spinner"></span> Subiendo... ${st.uploadPct}%` : 'Subir Proyecto'}
     </button>
 
     <!-- Progress bar -->
@@ -164,7 +159,7 @@ function renderResult(r: UploadResult): string {
   const errHtml =
     (r.errors?.length ?? 0) > 0
       ? `<div class="up-partial-errors">
-        <div class="up-partial-title">⚠️ ${r.errors!.length} archivo(s) con problemas:</div>
+        <div class="up-partial-title">${icon('warning', 12)} ${r.errors!.length} archivo(s) con problemas:</div>
         <ul>${r.errors!.map((e) => `<li>${esc(e.file)}: ${esc(e.reason)}</li>`).join('')}</ul>
        </div>`
       : ''
@@ -174,14 +169,13 @@ function renderResult(r: UploadResult): string {
 
   return `
     <div class="up-result">
-      <div class="up-result-header">
-        <span>✅</span>
+      <div class="up-result-header" style="color:var(--ok)">
         <div>
           <strong>${esc(r.project_name)}</strong>
           <span class="up-result-meta">${r.total_files} archivos · tipo: ${r.type}${info ? ' · ' + info.total_size_fmt : ''}</span>
         </div>
         <button class="btn btn-ghost btn-sm" id="up-load-in-editor" data-project-id="${r.project_id}" style="margin-left:auto">
-          📂 Usar en editor
+          Usar en editor
         </button>
       </div>
       ${errHtml}
@@ -189,12 +183,12 @@ function renderResult(r: UploadResult): string {
         info
           ? `
         <div class="up-result-stats">
-          ${statChip('📄', info.total_files + ' archivos')}
-          ${statChip('💻', info.code_files + ' código')}
-          ${statChip('💾', info.total_size_fmt)}
+          ${statChip(info.total_files + ' archivos')}
+          ${statChip(info.code_files + ' código')}
+          ${statChip(info.total_size_fmt)}
           ${Object.entries(info.by_extension)
             .slice(0, 3)
-            .map(([ext, n]) => statChip('', `${ext} ×${n}`))
+            .map(([ext, n]) => statChip(`${ext} ×${n}`))
             .join('')}
         </div>
       `
@@ -205,8 +199,8 @@ function renderResult(r: UploadResult): string {
   `
 }
 
-function statChip(icon: string, label: string): string {
-  return `<span class="up-stat-chip">${icon ? icon + ' ' : ''}${esc(label)}</span>`
+function statChip(label: string): string {
+  return `<span class="up-stat-chip">${esc(label)}</span>`
 }
 
 // ─── Árbol de archivos ────────────────────────────────────────────────────────
@@ -240,7 +234,6 @@ function renderTree(node: ProjectTreeNode, depth: number): string {
       <div class="tree-dir">
         <div class="tree-row dir-row" style="padding-left:${pad + 6}px" data-tree-toggle="${esc(node.path)}">
           <span class="tree-expand">${isOpen ? '▾' : '▸'}</span>
-          <span>${isOpen ? '📂' : '📁'}</span>
           <span class="tree-name">${esc(node.name)}</span>
           ${node.children?.length ? `<span class="tree-count">${node.children.length}</span>` : ''}
         </div>
@@ -274,27 +267,25 @@ function renderRecentProjects(): string {
   if (!st.projects.length) {
     return `
       <div class="up-empty-hub">
-        <div class="up-empty-icon">📂</div>
         <div class="up-empty-title">Todavía no creaste ningún proyecto</div>
         <div class="up-empty-sub">Subí archivos, una carpeta o un ZIP arriba para crear el primero — queda activo automáticamente.</div>
       </div>`
   }
   return `
     <div class="metric-section" style="margin-top:10px">
-      <div class="ms-title">📋 Proyectos recientes</div>
+      <div class="ms-title">Proyectos recientes</div>
       ${st.projects
         .slice(0, 5)
         .map((p) => {
           const isActive = p.project_id === state.activeProjectId
           return `
         <div class="up-recent-item${isActive ? ' up-recent-active' : ''}">
-          <span>📁</span>
           <div class="up-recent-info">
-            <span class="up-recent-id">${esc(p.project_id.slice(0, 8))}…${isActive ? ' <span class="pill pill-ok up-active-badge">● Activo</span>' : ''}</span>
+            <span class="up-recent-id">${esc(p.project_id.slice(0, 8))}…${isActive ? ' <span class="pill pill-ok up-active-badge">Activo</span>' : ''}</span>
             <span class="up-recent-meta">${p.total_files} archivos · ${p.total_size_fmt}</span>
           </div>
-          <button class="btn btn-ghost btn-sm" data-load-project="${esc(p.project_id)}" title="Usar como proyecto activo">📂</button>
-          <button class="btn btn-danger btn-sm" data-del-project="${esc(p.project_id)}" title="Eliminar">🗑️</button>
+          <button class="btn btn-ghost btn-sm" data-load-project="${esc(p.project_id)}" title="Usar como proyecto activo">Usar</button>
+          <button class="btn btn-danger btn-sm" data-del-project="${esc(p.project_id)}" title="Eliminar">${icon('trash', 13)}</button>
         </div>
       `
         })
@@ -407,10 +398,7 @@ function attachUploadEvents(el: HTMLElement): void {
     if (useBtn) {
       e.stopPropagation()
       if (st.activeResult) setActiveProject(st.activeResult.project_id)
-      toast(
-        '✅ Proyecto activo — Issues/Diagrama/Static/ML/DL ya lo usan. Click un archivo del árbol para abrirlo.',
-        'ok',
-      )
+      toast('Proyecto activo — Issues/Diagrama/Static/ML/DL ya lo usan. Click un archivo del árbol para abrirlo.', 'ok')
       return
     }
   })
@@ -461,7 +449,7 @@ function handleDrop(e: DragEvent): void {
     if (files[0].name.toLowerCase().endsWith('.zip')) {
       st.pendingZip = files[0]
     } else {
-      toast('❌ Solo se acepta un archivo .zip en este modo', 'err')
+      toast('Solo se acepta un archivo .zip en este modo', 'err')
       return
     }
   } else {
@@ -485,7 +473,7 @@ async function doUpload(): Promise<void> {
     const bar = document.querySelector<HTMLElement>('.up-progress-bar')
     const label = document.querySelector<HTMLElement>('#up-submit-btn')
     if (bar) bar.style.width = p.percent + '%'
-    if (label) label.textContent = `⏳ Subiendo... ${p.percent}%`
+    if (label) label.textContent = `Subiendo... ${p.percent}%`
   }
 
   try {
@@ -496,17 +484,17 @@ async function doUpload(): Promise<void> {
       result = await api.uploadZip(st.pendingZip, st.projectName, onProgress)
       appendLog(
         'ok',
-        `🗜️ ZIP subido: ${result.project_name} — ${result.extracted ?? result.total_files} archivos extraídos`,
+        `ZIP subido: ${result.project_name} — ${result.extracted ?? result.total_files} archivos extraídos`,
         'be',
       )
     } else if (st.activeTab === 'folder') {
       if (!st.pendingFiles.length) throw new Error('No hay archivos.')
       result = await api.uploadFolder(st.pendingFiles, st.projectName, onProgress)
-      appendLog('ok', `📁 Carpeta subida: ${result.project_name} — ${result.total_files} archivos`, 'be')
+      appendLog('ok', `Carpeta subida: ${result.project_name} — ${result.total_files} archivos`, 'be')
     } else {
       if (!st.pendingFiles.length) throw new Error('No hay archivos.')
       result = await api.uploadFiles(st.pendingFiles, st.projectName, onProgress)
-      appendLog('ok', `📄 ${result.total_files} archivo(s) subido(s) al proyecto ${result.project_name}`, 'be')
+      appendLog('ok', `${result.total_files} archivo(s) subido(s) al proyecto ${result.project_name}`, 'be')
     }
 
     st.activeResult = result
@@ -514,13 +502,13 @@ async function doUpload(): Promise<void> {
     st.pendingFiles = []
     st.pendingZip = null
     st.projectName = ''
-    toast(`✅ ${result.total_files} archivos subidos — proyecto activo`, 'ok')
+    toast(`${result.total_files} archivos subidos — proyecto activo`, 'ok')
 
     // Refrescar lista de proyectos
     await loadRecentProjects()
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error al subir.'
-    toast('❌ ' + msg, 'err')
+    toast(msg, 'err')
     appendLog('err', 'Upload error: ' + msg, 'fe')
   } finally {
     st.isUploading = false
@@ -570,9 +558,9 @@ export async function openProjectFile(projectId: string, filePath: string): Prom
     const { selectFile } = await import('../components/app')
     selectFile(id)
 
-    appendLog('ok', `📄 ${filePath} abierto en editor`, 'be')
+    appendLog('ok', `${filePath} abierto en editor`, 'be')
   } catch (err) {
-    toast('❌ Error al abrir archivo: ' + (err instanceof Error ? err.message : ''), 'err')
+    toast('Error al abrir archivo: ' + (err instanceof Error ? err.message : ''), 'err')
   }
 }
 
@@ -593,9 +581,9 @@ async function loadProject(projectId: string): Promise<void> {
     expanded.clear()
     selectedPath = null
     renderUploadPanel()
-    toast('📂 Proyecto cargado — activo', 'ok')
+    toast('Proyecto cargado — activo', 'ok')
   } catch (err) {
-    toast('❌ Error al cargar: ' + (err instanceof Error ? err.message : ''), 'err')
+    toast('Error al cargar: ' + (err instanceof Error ? err.message : ''), 'err')
   }
 }
 
@@ -606,11 +594,11 @@ async function removeProject(projectId: string): Promise<void> {
     await api.deleteProject(projectId)
     if (st.activeResult?.project_id === projectId) st.activeResult = null
     if (state.activeProjectId === projectId) setActiveProject(null)
-    toast('🗑️ Proyecto eliminado', 'warn')
+    toast('Proyecto eliminado', 'warn')
     appendLog('info', `Proyecto ${projectId.slice(0, 8)} eliminado`, 'fe')
     await loadRecentProjects()
   } catch (err) {
-    toast('❌ Error: ' + (err instanceof Error ? err.message : ''), 'err')
+    toast('Error: ' + (err instanceof Error ? err.message : ''), 'err')
   }
 }
 

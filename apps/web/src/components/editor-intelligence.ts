@@ -157,7 +157,7 @@ async function _runHeavyAnalyze(): Promise<void> {
     _applyMarkers()
     const hot = data.big_o.filter((f) => ['O(n²)', 'O(n³)', 'O(2^n)'].includes(f.big_o))
     if (hot.length) {
-      appendLog('warn', `🔴 Hot paths en ${_currentFile}: ${hot.map((f) => `${f.name}(${f.big_o})`).join(', ')}`, 'be')
+      appendLog('warn', `Hot paths en ${_currentFile}: ${hot.map((f) => `${f.name}(${f.big_o})`).join(', ')}`, 'be')
     }
   } catch (e) {
     if ((e as Error).name !== 'AbortError') {

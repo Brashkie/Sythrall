@@ -4,7 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sythrall</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%233d9eff'/><text y='22' x='4' font-size='18'>🛰</text></svg>" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="/favicon-64.png" />
+  <link rel="apple-touch-icon" sizes="128x128" href="/favicon-128.png" />
 </head>
 <body>
 <div id="pbar"></div>
@@ -14,25 +16,40 @@
 
   <!-- ══ NAV RAIL ══ -->
   <nav class="nav-rail" id="nav-rail" aria-label="Navegación principal">
-    <div class="nav-rail-logo"><div class="logo-ring">🛰</div></div>
+    <div class="nav-rail-logo"><img class="logo-ring" src="/sythrall-logo.png" alt="Sythrall" /></div>
+    <!-- OVERVIEW -->
     <div class="tab active" id="t-dashboard" data-tab="dashboard" title="Dashboard">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
       <span class="tab-label">Dashboard</span>
     </div>
+
+    <div class="nav-rail-divider"></div>
+
+    <!-- PROJECT -->
     <div class="tab" id="t-editor" data-tab="editor" title="Editor">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M9 13h6M9 17h4"/></svg>
       <span class="tab-label">Editor</span>
       <span class="tbadge tbadge-ok" id="tb-files" style="display:none">0</span>
     </div>
-    <div class="tab" id="t-apis" data-tab="apis" title="APIs">
-      <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 14 0M2 9.5a15 15 0 0 1 20 0"/></svg>
-      <span class="tab-label">APIs</span>
-      <span class="tbadge tbadge-err" id="tb-apis" style="display:none">!</span>
+    <div class="tab" id="t-upload" data-tab="upload" title="Proyectos">
+      <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      <span class="tab-label">Proyectos</span>
     </div>
-    <div class="tab" id="t-issues" data-tab="issues" title="Issues">
-      <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v5M12 16h.01"/></svg>
-      <span class="tab-label">Issues</span>
-      <span class="tbadge tbadge-err" id="tb-issues" style="display:none">0</span>
+    <div class="tab" id="t-diff" data-tab="diff" title="Diff">
+      <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg>
+      <span class="tab-label">Diff</span>
+    </div>
+
+    <div class="nav-rail-divider"></div>
+
+    <!-- ANALYSIS -->
+    <div class="tab" id="t-static" data-tab="static" title="Static Analysis">
+      <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="M14.5 14.5 20 20"/></svg>
+      <span class="tab-label">Static</span>
+    </div>
+    <div class="tab" id="t-metrics" data-tab="metrics" title="Métricas">
+      <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+      <span class="tab-label">Métricas</span>
     </div>
     <div class="tab" id="t-diagram" data-tab="diagram" title="Diagrama">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M8.6 7.6 15.4 10.4M8.6 16.4 15.4 13.6"/></svg>
@@ -44,25 +61,27 @@
       <span class="tab-label">ML/DL</span>
       <span class="tbadge tbadge-ok" id="tb-ml" style="display:none">✓</span>
     </div>
-    <div class="tab" id="t-metrics" data-tab="metrics" title="Métricas">
-      <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
-      <span class="tab-label">Métricas</span>
+
+    <div class="nav-rail-divider"></div>
+
+    <!-- FINDINGS -->
+    <div class="tab" id="t-issues" data-tab="issues" title="Issues">
+      <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v5M12 16h.01"/></svg>
+      <span class="tab-label">Issues</span>
+      <span class="tbadge tbadge-err" id="tb-issues" style="display:none">0</span>
     </div>
-    <div class="tab" id="t-diff" data-tab="diff" title="Diff">
-      <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg>
-      <span class="tab-label">Diff</span>
+
+    <div class="nav-rail-divider"></div>
+
+    <!-- SYSTEM -->
+    <div class="tab" id="t-apis" data-tab="apis" title="APIs">
+      <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 14 0M2 9.5a15 15 0 0 1 20 0"/></svg>
+      <span class="tab-label">APIs</span>
+      <span class="tbadge tbadge-err" id="tb-apis" style="display:none">!</span>
     </div>
     <div class="tab" id="t-logs" data-tab="logs" title="Logs">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
       <span class="tab-label">Logs</span>
-    </div>
-    <div class="tab" id="t-upload" data-tab="upload" title="Proyectos">
-      <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-      <span class="tab-label">Proyectos</span>
-    </div>
-    <div class="tab" id="t-static" data-tab="static" title="Static Analysis">
-      <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="M14.5 14.5 20 20"/></svg>
-      <span class="tab-label">Static</span>
     </div>
   </nav>
 
@@ -74,6 +93,7 @@
       <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
     <div class="logo">
+      <img class="logo-ring" src="/sythrall-logo.png" alt="Sythrall" />
       <div>
         <div class="logo-text">Sythrall</div>
         <div class="logo-sub">VITE · TS · FASTAPI · PYLINT · ML/DL</div>
@@ -181,10 +201,14 @@
       <div class="tab-panel active" id="panel-dashboard">
         <div class="dash-scroll">
           <div class="stats-row">
-            <div class="stat-card"><div class="sc-lbl">📡 APIs activas</div><div class="sc-val" id="sv-api" style="color:var(--ok)">—</div><div class="sc-sub" id="ss-api">endpoints</div></div>
-            <div class="stat-card"><div class="sc-lbl">📁 Archivos</div><div class="sc-val" id="sv-files" style="color:var(--info)">—</div><div class="sc-sub">cargados</div></div>
-            <div class="stat-card"><div class="sc-lbl">🐛 Problemas</div><div class="sc-val" id="sv-issues" style="color:var(--err)">—</div><div class="sc-sub" id="ss-issues">errores</div></div>
-            <div class="stat-card"><div class="sc-lbl">⚗️ Pylint</div><div class="sc-val" id="sv-score" style="color:var(--warn)">—</div><div class="sc-sub">/10 promedio</div></div>
+            <div class="stat-card"><div class="sc-lbl">APIs activas</div><div class="sc-val" id="sv-api" style="color:var(--ok)">—</div><div class="sc-sub" id="ss-api">endpoints</div></div>
+            <div class="stat-card"><div class="sc-lbl">Archivos</div><div class="sc-val" id="sv-files" style="color:var(--info)">—</div><div class="sc-sub">cargados</div></div>
+            <div class="stat-card"><div class="sc-lbl">Problemas</div><div class="sc-val" id="sv-issues" style="color:var(--err)">—</div><div class="sc-sub" id="ss-issues">errores</div></div>
+            <div class="stat-card"><div class="sc-lbl">Pylint</div><div class="sc-val" id="sv-score" style="color:var(--warn)">—</div><div class="sc-sub">/10 promedio</div></div>
+          </div>
+          <div class="chart-card wide" style="background:var(--s1);border:1px solid var(--b0);border-radius:var(--radius);padding:14px">
+            <div class="cc-head">PROJECT HEALTH <span class="cc-head-sub" style="color:var(--muted);font-size:.58rem;font-family:var(--mono)">security · quality · complexity · architecture</span></div>
+            <div id="dash-health" style="padding-top:8px"></div>
           </div>
           <div class="charts-row">
             <div class="chart-card"><div class="cc-head"><span>RESPUESTA APIs (ms)</span><span id="rt-avg" style="color:var(--ok);font-family:var(--mono);font-size:.62rem"></span></div><div class="chart-wrap"><canvas id="chart-rt"></canvas></div></div>
@@ -205,9 +229,9 @@
           <div id="ed-fname" style="font-family:var(--mono);font-size:.67rem;color:var(--info);display:none"></div>
           <div style="flex:1"></div>
           <span id="ed-errs" style="font-family:var(--mono);font-size:.65rem;color:var(--err)"></span>
-          <button class="btn btn-ghost btn-sm" id="btn-analyze-file">🔍 Analizar</button>
-          <button class="btn btn-ghost btn-sm" id="btn-diagram-file">🔀 Diagrama</button>
-          <button class="btn btn-ghost btn-sm" id="btn-copy-editor">📋 Copiar</button>
+          <button class="btn btn-ghost btn-sm" id="btn-analyze-file">Analizar</button>
+          <button class="btn btn-ghost btn-sm" id="btn-diagram-file">Diagrama</button>
+          <button class="btn btn-ghost btn-sm" id="btn-copy-editor">Copiar</button>
         </div>
         <div id="editor-container" style="flex:1;min-height:0"></div>
       </div>
@@ -215,7 +239,7 @@
       <!-- APIs -->
       <div class="tab-panel" id="panel-apis">
         <div style="padding:9px 14px;border-bottom:1px solid var(--b0);display:flex;gap:8px;background:var(--s0);flex-shrink:0;flex-wrap:wrap">
-          <input class="search-input" id="api-search" placeholder="🔍 Filtrar...">
+          <input class="search-input" id="api-search" placeholder="Filtrar...">
           <button class="btn btn-ghost btn-sm" id="btn-recheck-all">▶ Re-verificar</button>
         </div>
         <div class="api-scroll" id="api-cards"></div>
@@ -224,11 +248,11 @@
       <!-- ISSUES -->
       <div class="tab-panel" id="panel-issues">
         <div class="issues-toolbar">
-          <input class="search-input" id="issue-search" placeholder="🔍 Buscar...">
+          <input class="search-input" id="issue-search" placeholder="Buscar...">
           <button class="btn btn-ghost btn-sm" data-sev="all">Todos</button>
-          <button class="btn btn-ghost btn-sm" data-sev="error">🔴 Error</button>
-          <button class="btn btn-ghost btn-sm" data-sev="warning">🟡 Warn</button>
-          <button class="btn btn-ghost btn-sm" data-sev="info">🔵 Info</button>
+          <button class="btn btn-ghost btn-sm" data-sev="error"><span class="ui-dot" style="background:var(--err);display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px"></span>Error</button>
+          <button class="btn btn-ghost btn-sm" data-sev="warning"><span class="ui-dot" style="background:var(--warn);display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px"></span>Warn</button>
+          <button class="btn btn-ghost btn-sm" data-sev="info"><span class="ui-dot" style="background:var(--info);display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px"></span>Info</button>
           <select class="search-input" id="tool-filter" style="max-width:130px">
             <option value="">Todas las tools</option>
             <option>flake8</option><option>pylint</option><option>radon</option><option>ast</option>
@@ -256,9 +280,9 @@
               <option value="centrality">Centralidad / Hubs</option>
             </optgroup>
           </select>
-          <button class="btn btn-run btn-sm" id="btn-gen-diagram">🔀 Generar</button>
+          <button class="btn btn-run btn-sm" id="btn-gen-diagram">Generar</button>
           <button class="btn btn-ghost btn-sm" id="btn-export-svg">⬇ SVG</button>
-          <button class="btn btn-ghost btn-sm" id="btn-copy-mermaid">📋 Código</button>
+          <button class="btn btn-ghost btn-sm" id="btn-copy-mermaid">Código</button>
           <div class="zoom-controls" id="zoom-controls">
             <button class="zoom-btn" id="btn-zoom-out" title="Alejar (−)">−</button>
             <span class="zoom-level" id="zoom-level">100%</span>
@@ -272,7 +296,7 @@
         <div class="diag-scroll">
           <div class="diag-viewport" id="diag-viewport">
             <div class="diag-canvas" id="diag-canvas">
-              <div id="mermaid-output"><div class="empty"><span class="empty-icon">🔀</span>Selecciona archivo y genera el diagrama</div></div>
+              <div id="mermaid-output"><div class="empty">Selecciona archivo y genera el diagrama</div></div>
             </div>
           </div>
           <div id="mermaid-code-container" style="display:none;padding:0 16px 16px">
@@ -286,13 +310,12 @@
       <div class="tab-panel" id="panel-ml">
         <div class="ml-toolbar">
           <select id="ml-file-sel" class="diag-sel" style="min-width:180px"><option value="">— Selecciona archivo .py —</option></select>
-          <button class="btn btn-run btn-sm" id="btn-run-ml">🤖 Analizar ML/DL</button>
+          <button class="btn btn-run btn-sm" id="btn-run-ml">Analizar ML/DL</button>
           <div style="flex:1"></div>
           <div id="ml-score-badge" style="display:none;font-family:var(--mono);font-size:.68rem"></div>
         </div>
         <div class="ml-scroll" id="ml-content">
           <div class="empty">
-            <span class="empty-icon">🤖</span>
             Sube un archivo .py con código ML/DL<br>
             <span style="font-size:.65rem;color:var(--muted)">sklearn · PyTorch · TensorFlow · Polars · LightGBM · spaCy · OpenCV · Plotly · IceCream...</span>
           </div>
@@ -302,7 +325,7 @@
       <!-- METRICS -->
       <div class="tab-panel" id="panel-metrics">
         <div class="metrics-scroll" id="metrics-content">
-          <div class="empty"><span class="empty-icon">📈</span>Ejecuta el análisis para ver métricas</div>
+          <div class="empty">Ejecuta el análisis para ver métricas</div>
         </div>
       </div>
 
@@ -317,7 +340,7 @@
             <div style="font-size:.6rem;color:var(--muted);margin-bottom:4px;font-family:var(--mono)">ARCHIVO B</div>
             <select id="diff-b" class="btn btn-ghost btn-sm" style="font-family:var(--mono)"><option value="">—</option></select>
           </div>
-          <div style="align-self:flex-end"><button class="btn btn-run" id="btn-diff">🔁 Comparar</button></div>
+          <div style="align-self:flex-end"><button class="btn btn-run" id="btn-diff">Comparar</button></div>
         </div>
         <div class="diff-scroll">
           <div id="diff-out" style="font-family:var(--mono);font-size:.68rem;line-height:1.85;background:var(--s1);border-radius:8px;border:1px solid var(--b0);padding:12px;white-space:pre-wrap">
@@ -332,7 +355,7 @@
           <span style="font-size:.58rem;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted)">LOG UNIFICADO</span>
           <div style="flex:1"></div>
           <button class="btn btn-ghost btn-sm" id="btn-fetch-logs">↺ Backend</button>
-          <button class="btn btn-ghost btn-sm" id="btn-clear-log">🗑 Limpiar</button>
+          <button class="btn btn-ghost btn-sm" id="btn-clear-log">Limpiar</button>
           <label style="display:flex;align-items:center;gap:4px;font-size:.68rem;color:var(--muted);cursor:pointer">
             <input type="checkbox" id="autoscroll" checked /> Scroll
           </label>
@@ -352,7 +375,6 @@
       <div class="tab-panel" id="panel-static">
         <div class="st-body" id="static-content">
           <div class="empty">
-            <span class="empty-icon">🔬</span>
             Selecciona un archivo y haz clic en Analizar
           </div>
         </div>
@@ -392,14 +414,14 @@
         <div class="run-meta-wrap" id="run-meta"></div>
       </div>
       <div class="rp-panel" id="rpp-analysis">
-        <div id="analysis-content"><div class="empty"><span class="empty-icon">🔬</span>Selecciona un archivo</div></div>
+        <div id="analysis-content"><div class="empty">Selecciona un archivo</div></div>
       </div>
       <div class="rp-panel" id="rpp-server">
         <div class="rp-section-title">INFO DEL SERVIDOR</div>
-        <div id="server-info"><div class="empty"><span class="empty-icon">🖥</span>Conecta al backend</div></div>
+        <div id="server-info"><div class="empty">Conecta al backend</div></div>
       </div>
       <div class="rp-panel" id="rpp-problems">
-        <div id="problems-content"><div class="empty"><span class="empty-icon">⚠</span>Selecciona un archivo</div></div>
+        <div id="problems-content"><div class="empty">Selecciona un archivo</div></div>
       </div>
     </div>
 
@@ -467,29 +489,32 @@
 </nav>
 
 <div id="bn-more-menu" class="bn-more-menu">
-  <button class="bn-more-item" data-bn-tab="apis">
-    <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 14 0M2 9.5a15 15 0 0 1 20 0"/></svg>
-    APIs
+  <div class="bn-more-section-label">Project</div>
+  <button class="bn-more-item" data-bn-tab="diff">
+    <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg>
+    Diff
   </button>
-  <button class="bn-more-item" data-bn-tab="diagram">
-    <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M8.6 7.6 15.4 10.4M8.6 16.4 15.4 13.6"/></svg>
-    Diagrama
+  <div class="bn-more-section-label">Analysis</div>
+  <button class="bn-more-item" data-bn-tab="static">
+    <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="M14.5 14.5 20 20"/></svg>
+    Static Analysis
   </button>
   <button class="bn-more-item" data-bn-tab="metrics">
     <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
     Métricas
   </button>
-  <button class="bn-more-item" data-bn-tab="diff">
-    <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg>
-    Diff
+  <button class="bn-more-item" data-bn-tab="diagram">
+    <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M8.6 7.6 15.4 10.4M8.6 16.4 15.4 13.6"/></svg>
+    Diagrama
+  </button>
+  <div class="bn-more-section-label">System</div>
+  <button class="bn-more-item" data-bn-tab="apis">
+    <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 14 0M2 9.5a15 15 0 0 1 20 0"/></svg>
+    APIs
   </button>
   <button class="bn-more-item" data-bn-tab="logs">
     <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
     Logs
-  </button>
-  <button class="bn-more-item" data-bn-tab="static">
-    <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="M14.5 14.5 20 20"/></svg>
-    Static Analysis
   </button>
 </div>
 

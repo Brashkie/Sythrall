@@ -41,7 +41,7 @@ function promptForToken(): Promise<string | null> {
       'position:fixed;inset:0;background:rgba(6,8,16,.7);z-index:2000;display:flex;align-items:center;justify-content:center'
     overlay.innerHTML = `
       <div style="background:var(--s1);border:1px solid var(--b1);border-radius:9px;padding:20px;width:min(420px,90vw);box-shadow:0 12px 40px rgba(0,0,0,.5)">
-        <div style="font-weight:700;margin-bottom:6px">🔑 Token de la terminal</div>
+        <div style="font-weight:700;margin-bottom:6px">Token de la terminal</div>
         <div style="font-size:.75rem;color:var(--muted);margin-bottom:12px;line-height:1.5">
           Mirá la consola donde corriste <code>npm run dev</code> (línea con prefijo "term") y pegá el token que imprimió al arrancar.
         </div>

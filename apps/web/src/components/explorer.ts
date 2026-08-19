@@ -10,7 +10,7 @@
 
 import { state } from '../store/state'
 import type { CodeFile } from '../types'
-import { languageBadge } from '../utils/icons'
+import { icon, languageBadge } from '../utils/icons'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -62,9 +62,9 @@ function _upgradeFileTree(): void {
   const sbHead = container.previousElementSibling as HTMLElement | null
   if (sbHead?.classList.contains('sb-head')) {
     sbHead.innerHTML = `
-      <span>📁 Archivos</span>
+      <span>Archivos</span>
       <div style="display:flex;gap:3px">
-        <button class="btn btn-ghost btn-sm" id="exp-search-btn" title="Buscar (Ctrl+Shift+F)" style="padding:2px 6px">🔍</button>
+        <button class="btn btn-ghost btn-sm" id="exp-search-btn" title="Buscar (Ctrl+Shift+F)" style="padding:2px 6px">${icon('search', 13)}</button>
         <button class="btn btn-ghost btn-sm" id="btn-add-code">+ Código</button>
         <button class="btn btn-ghost btn-sm" id="btn-add-log">+ Log</button>
       </div>
@@ -80,7 +80,13 @@ function _renderFileTree(): void {
   if (!container) return
 
   if (!state.files.length) {
-    container.innerHTML = '<div class="exp-empty">Sin archivos cargados</div>'
+    container.innerHTML = `<div class="empty">
+      Sin archivos cargados
+      <button class="btn btn-ghost btn-sm" id="exp-empty-cta">+ Código</button>
+    </div>`
+    document.getElementById('exp-empty-cta')?.addEventListener('click', () => {
+      document.getElementById('btn-add-code')?.click()
+    })
     return
   }
 
@@ -304,7 +310,7 @@ function _injectSearchOverlay(): void {
   overlay.innerHTML = `
     <div class="exp-search-modal">
       <div class="exp-search-header">
-        <span class="exp-search-icon">🔍</span>
+        <span class="exp-search-icon">${icon('search', 14)}</span>
         <input
           id="exp-search-input"
           class="exp-search-input"
@@ -471,7 +477,6 @@ function renderOutline(file: CodeFile): void {
   if (!items.length) {
     container.innerHTML = `
       <div class="exp-outline-empty">
-        <span style="font-size:1.2rem">📄</span>
         <div>${file.name}</div>
         <div style="color:var(--muted);font-size:.68rem;margin-top:4px">Sin símbolos detectados</div>
       </div>
@@ -494,12 +499,12 @@ function renderOutline(file: CodeFile): void {
   }
 
   const KIND_LABEL: Record<string, string> = {
-    function: '⚙️ Functions',
-    class: '🏛 Classes',
-    import: '📦 Imports',
-    interface: '📐 Interfaces',
-    type: '🔷 Types',
-    variable: '📌 Variables',
+    function: 'Functions',
+    class: 'Classes',
+    import: 'Imports',
+    interface: 'Interfaces',
+    type: 'Types',
+    variable: 'Variables',
   }
 
   let html = `

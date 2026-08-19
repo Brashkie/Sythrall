@@ -9,6 +9,7 @@ import { filterAPIs, filterIssues, renderIssuesList, setIssueFilter } from '../p
 import { state } from '../store/state'
 import type { TabId } from '../types'
 import { appendLog } from '../utils/helpers'
+import { icon } from '../utils/icons'
 import { toggleTheme } from '../utils/theme'
 import {
   addURL,
@@ -253,7 +254,7 @@ export function wireAllEvents(): void {
     document.getElementById('right-panel')?.classList.remove('drawer-open')
     overlay?.classList.remove('active')
     const fab = document.getElementById('rp-fab')
-    if (fab) fab.textContent = '⚡'
+    if (fab) fab.innerHTML = icon('metrics', 18)
   }
 
   overlay?.addEventListener('click', () => closeAllDrawers())
@@ -272,7 +273,7 @@ export function wireAllEvents(): void {
     const fab = e.currentTarget as HTMLElement
     const isOpen = rp.classList.toggle('drawer-open')
     overlay?.classList.toggle('active', isOpen)
-    fab.textContent = isOpen ? '✕' : '⚡'
+    fab.innerHTML = isOpen ? icon('close', 18) : icon('metrics', 18)
     if (isOpen) document.getElementById('sidebar')?.classList.remove('drawer-open')
   })
 

@@ -146,9 +146,7 @@ html, body {
 
 .logo { display: flex; align-items: center; gap: 9px; flex-shrink: 0; }
 .logo-ring {
-  width: 34px; height: 34px; border-radius: 8px; flex-shrink: 0;
-  background: linear-gradient(135deg, var(--info), var(--purple));
-  display: grid; place-items: center; font-size: 17px;
+  width: 34px; height: 34px; flex-shrink: 0; object-fit: contain; display: block;
 }
 .logo-text { font-size: .95rem; font-weight: 800; white-space: nowrap; }
 .logo-sub { font-size: .55rem; font-family: var(--mono); color: var(--muted); }
@@ -259,6 +257,7 @@ html, body {
 }
 .nav-rail::-webkit-scrollbar { width: 0; }
 .nav-rail-logo { display: flex; justify-content: center; padding: var(--space-1) 0 var(--space-3); }
+.nav-rail-divider { height: 1px; background: var(--b0); margin: var(--space-2) var(--space-3); flex-shrink: 0; }
 .nav-rail .tab {
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   padding: var(--space-2) var(--space-1);
@@ -571,6 +570,9 @@ html, body {
 
 /* ── Diff ── */
 .diff-scroll { overflow-y: auto; flex: 1; padding: 14px; }
+/* Líneas de diff pueden traer tokens sin espacios (código minificado, nombres
+ * largos) — sin esto, overflow-x silencioso en vez de wrap. */
+#diff-out { overflow-wrap: break-word; word-break: break-word; }
 
 /* ── Log stream ── */
 .log-stream  { flex: 1; overflow-y: auto; padding: 8px; font-family: var(--mono); font-size: .75rem; line-height: 1.75; }
@@ -579,6 +581,10 @@ html, body {
 .ls-src  { flex-shrink: 0; font-size: .58rem; padding: 0 4px; border-radius: 3px; }
 .src-be  { background: rgba(184,125,255,.12); color: var(--purple); }
 .src-fe  { background: rgba(61,158,255,.1);   color: var(--info);   }
+/* Mensaje (último span de logRowHtml, ver utils/helpers.ts) — sin min-width:0
+ * un flex item de texto largo empuja el ancho de .ls-row más allá del
+ * contenedor en vez de wrappear. */
+.ls-row > span:last-child { min-width: 0; overflow-wrap: break-word; flex: 1; }
 
 /* ── Right Panel ── */
 .rp-tabs { display: flex; border-bottom: 1px solid var(--b0); flex-shrink: 0; }
@@ -606,6 +612,7 @@ html, body {
 /* ── Misc ── */
 .empty       { text-align: center; padding: 24px; color: var(--muted); font-size: .75rem; font-family: var(--mono); }
 .empty-icon  { font-size: 26px; display: block; margin-bottom: 7px; }
+.empty .btn  { margin-top: 10px; pointer-events: auto; }
 .tag         { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 3px; font-family: var(--mono); font-size: .6rem; font-weight: 700; }
 .tg-ok   { background: rgba(0,245,160,.12);  color: var(--ok);   }
 .tg-err  { background: rgba(255,51,102,.12); color: var(--err);  }
@@ -754,7 +761,7 @@ input[type=file] { display: none; }
     gap: 8px;
   }
   .logo-sub                       { display: none; }
-  .logo-ring                      { width: 30px; height: 30px; font-size: 15px; }
+  .logo-ring                      { width: 30px; height: 30px; }
   .logo-text                      { font-size: .85rem; }
   .pill                           { display: none; }
   #caps-row                       { display: none; }
@@ -775,9 +782,14 @@ input[type=file] { display: none; }
   .charts-row { grid-template-columns: minmax(0,1fr); gap: 10px; }
   .chart-card.wide { grid-column: span 1; }
   .chart-wrap { height: 112px; }
+  /* "PROJECT HEALTH" + subtítulo no wrappean (cc-head es flex sin wrap) — a
+   * este ancho las dos partes juntas no entran y el subtítulo queda cortado
+   * por el overflow:hidden de .chart-card en vez de visible. */
+  .cc-head-sub { display: none; }
 
   /* Editor */
   .editor-bar { flex-wrap: wrap; gap: 6px; padding: 6px 10px; }
+  #editor-container { min-height: 280px; }
 
   /* Issues / Diag / ML / Log toolbars */
   .issues-toolbar, .diag-toolbar, .ml-toolbar, .log-toolbar { gap: 6px; }
@@ -785,6 +797,14 @@ input[type=file] { display: none; }
 
   /* API cards métrics en 2 cols */
   .ac-metrics { grid-template-columns: repeat(2, 1fr); }
+
+  /* Diff — los dos selectores de archivo ya wrappean (inline flex-wrap en
+   * index.html), acá solo se achica el contenido para no forzar scroll-x. */
+  .diff-scroll { padding: 10px; }
+  #diff-out    { font-size: .64rem; }
+
+  /* Logs — timestamp más angosto deja más lugar al mensaje. */
+  .ls-ts { min-width: 44px; }
 }
 
 /* ━━━ 480px: Móvil estándar — Bottom Navigation ━━━ */
@@ -800,7 +820,7 @@ input[type=file] { display: none; }
     gap: 6px;
   }
   .logo-text  { font-size: .78rem; }
-  .logo-ring  { width: 26px; height: 26px; font-size: 13px; }
+  .logo-ring  { width: 26px; height: 26px; }
   #run-btn    { padding: 5px 10px; font-size: .72rem; }
   .url-bar    { display: none; }
   .topbar [data-quick-url] { display: none; }
@@ -879,8 +899,9 @@ input[type=file] { display: none; }
   .issues-toolbar { padding: 8px 10px; gap: 4px; }
   .ii-head        { flex-wrap: wrap; }
 
-  /* API cards */
-  .ac-metrics { grid-template-columns: repeat(3,1fr); gap: 4px; }
+  /* API cards — se queda en 2 columnas (no revertir a 3 en una pantalla más
+   * angosta que la que ya lo redujo a 2 a 680px). */
+  .ac-metrics { grid-template-columns: repeat(2,1fr); gap: 4px; }
   .acm        { padding: 5px; }
   .acm-k      { font-size: .58rem; }
   .acm-v      { font-size: .78rem; }
@@ -894,6 +915,18 @@ input[type=file] { display: none; }
   .metric-section { padding: 10px; }
   .ms-title       { font-size: .62rem; }
   .metric-row     { font-size: .72rem; }
+
+  /* Editor */
+  #editor-container { min-height: 240px; }
+
+  /* Diff */
+  .diff-scroll { padding: 8px; }
+  #diff-out    { font-size: .6rem; line-height: 1.6; }
+
+  /* Logs */
+  .log-stream { font-size: .68rem; }
+  .ls-ts      { min-width: 38px; font-size: .58rem; }
+  .ls-src     { font-size: .55rem; }
 }
 
 /* More menu items */
@@ -915,6 +948,12 @@ input[type=file] { display: none; }
 }
 .bn-more-item:hover { background: var(--s2); }
 .bn-more-item:last-child { border-bottom: none; }
+.bn-more-section-label {
+  padding: 12px 20px 6px;
+  font-size: .62rem; font-weight: 700; letter-spacing: 1.2px;
+  text-transform: uppercase; color: var(--muted);
+}
+.bn-more-section-label:first-child { padding-top: 16px; }
 
 /* ━━━ 360px: Móvil pequeño ━━━ */
 @media (max-width: 360px) {

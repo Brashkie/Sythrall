@@ -1,6 +1,6 @@
 // ══════════════════════════════════════════
 //  Sythrall — Code Graph Visual
-//  Integrado en el tab 🔀 Diagrama
+//  Integrado en el tab Diagrama
 //  Fase 1: archivos del sidebar
 // ══════════════════════════════════════════
 
@@ -8,6 +8,7 @@ import type { GraphResult } from '../api/client'
 import { api } from '../api/client'
 import { state } from '../store/state'
 import { appendLog, toast } from '../utils/helpers'
+import { languageBadgeByName } from '../utils/icons'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -103,16 +104,16 @@ export async function generateCodeGraph(
       statusMsg = `${summary.total_functions ?? 0} funciones · ${summary.total_calls ?? 0} llamadas`
     } else if (graphType === 'circular') {
       const n = result.cycles?.length ?? 0
-      statusMsg = n > 0 ? `🔴 ${n} ciclo(s) detectado(s)` : '✅ Sin dependencias circulares'
+      statusMsg = n > 0 ? `${n} ciclo(s) detectado(s)` : 'Sin dependencias circulares'
     } else if (graphType === 'heatmap') {
       statusMsg = `${summary.total_functions ?? 0} fn · ${summary.hot_paths ?? 0} hot paths`
     } else if (graphType === 'centrality') {
       const hubs = Array.isArray(summary.hubs) ? summary.hubs.length : 0
-      statusMsg = hubs > 0 ? `🔥 ${hubs} hub(s) detectado(s)` : '✅ Sin hubs (grafo poco conectado)'
+      statusMsg = hubs > 0 ? `${hubs} hub(s) detectado(s)` : 'Sin hubs (grafo poco conectado)'
     }
 
     onStatus(statusMsg, !result.has_cycles)
-    appendLog('ok', `🕸 Graph ${graphType}: ${statusMsg}`, 'be')
+    appendLog('ok', `Graph ${graphType}: ${statusMsg}`, 'be')
   } catch (e) {
     const msg = (e as Error).message
     onStatus(`Error: ${msg}`, false)
@@ -157,7 +158,7 @@ export function renderForceGraph(
   const edges = result.edges ?? []
 
   if (!nodes.length) {
-    container.innerHTML = '<div class="empty"><span class="empty-icon">🕸</span>Sin nodos para mostrar</div>'
+    container.innerHTML = '<div class="empty">Sin nodos para mostrar</div>'
     return
   }
 
@@ -414,7 +415,7 @@ function _nodeMetaText(n: GraphNode, graphType: string): string {
     return `${n.big_o ?? ''} · CC=${n.cc ?? 1}`
   }
   if (graphType === 'circular') {
-    return n.in_cycle ? '🔴 En ciclo' : '✅ Sin ciclo'
+    return n.in_cycle ? 'En ciclo' : 'Sin ciclo'
   }
   return n.id
 }
@@ -476,19 +477,16 @@ export async function generateProjectGraph(
       msg = `${summary.total_functions ?? 0} funciones · ${summary.total_calls ?? 0} llamadas`
     } else if (graphType === 'circular') {
       const n = result.cycles?.length ?? 0
-      msg =
-        n > 0
-          ? `🔴 ${n} ciclo(s) — ${summary.affected_files ?? 0} archivos afectados`
-          : '✅ Sin dependencias circulares'
+      msg = n > 0 ? `${n} ciclo(s) — ${summary.affected_files ?? 0} archivos afectados` : 'Sin dependencias circulares'
     } else if (graphType === 'heatmap') {
       msg = `${summary.total_functions ?? 0} fn · ${summary.hot_paths ?? 0} hot paths · CC promedio ${summary.avg_cc ?? 0}`
     } else if (graphType === 'centrality') {
       const hubs = Array.isArray(summary.hubs) ? summary.hubs.length : 0
-      msg = hubs > 0 ? `🔥 ${hubs} hub(s) detectado(s)` : '✅ Sin hubs (grafo poco conectado)'
+      msg = hubs > 0 ? `${hubs} hub(s) detectado(s)` : 'Sin hubs (grafo poco conectado)'
     }
 
     onStatus(msg, !result.has_cycles)
-    appendLog('ok', `🕸 Graph proyecto ${graphType}: ${msg}`, 'be')
+    appendLog('ok', `Graph proyecto ${graphType}: ${msg}`, 'be')
   } catch (e) {
     const msg = (e as Error).message
     onStatus(`Error: ${msg}`, false)
@@ -511,14 +509,6 @@ export function renderDirTree(container: HTMLElement, tree: DirTreeNode, onFileC
     medium: 'var(--warn)',
     high: '#ff8a00',
     critical: 'var(--err)',
-  }
-
-  const LANG_ICONS: Record<string, string> = {
-    python: '🐍',
-    typescript: '🟦',
-    javascript: '🟨',
-    c: '⚙️',
-    cpp: '⚙️',
   }
 
   function buildNode(node: DirTreeNode, depth: number): HTMLElement {
@@ -547,15 +537,11 @@ export function renderDirTree(container: HTMLElement, tree: DirTreeNode, onFileC
       toggle.textContent = expanded ? '▾' : '▸'
       toggle.style.cssText = 'font-size:.6rem;color:var(--muted);width:10px;flex-shrink:0'
 
-      const icon = document.createElement('span')
-      icon.textContent = '📁'
-
       const name = document.createElement('span')
       name.textContent = node.name
       name.style.fontWeight = '600'
 
       row.appendChild(toggle)
-      row.appendChild(icon)
       row.appendChild(name)
 
       // Estadísticas de carpeta (agregadas)
@@ -587,12 +573,11 @@ export function renderDirTree(container: HTMLElement, tree: DirTreeNode, onFileC
       // Archivo
       const stats = node.stats
       const lang = stats?.language ?? ''
-      const icon = LANG_ICONS[lang] ?? '📄'
       const hotPath = (stats?.hot_paths ?? 0) > 0
 
       const iconEl = document.createElement('span')
-      iconEl.textContent = icon
-      iconEl.style.cssText = 'width:14px;flex-shrink:0'
+      iconEl.innerHTML = languageBadgeByName(lang)
+      iconEl.style.cssText = 'flex-shrink:0'
 
       const nameEl = document.createElement('span')
       nameEl.textContent = node.name
@@ -614,7 +599,6 @@ export function renderDirTree(container: HTMLElement, tree: DirTreeNode, onFileC
           white-space: nowrap;
         `
         badge.textContent = `${stats.functions}fn · CC${cc}`
-        if (hotPath) badge.textContent += ' 🔴'
         row.appendChild(badge)
       }
 
@@ -634,7 +618,7 @@ export function renderDirTree(container: HTMLElement, tree: DirTreeNode, onFileC
       root.appendChild(buildNode(child, 0))
     }
   } else {
-    root.innerHTML = '<div class="empty"><span class="empty-icon">📁</span>Sin archivos</div>'
+    root.innerHTML = '<div class="empty">Sin archivos</div>'
   }
 
   container.appendChild(root)
@@ -657,7 +641,7 @@ export async function openNodeInEditor(
       const ext = nodePath.split('.').pop() ?? ''
       const lang = _extToLanguage(ext)
       onContent(nodePath, fc.content, lang)
-      appendLog('ok', `📂 Abierto: ${nodePath}`, 'fe')
+      appendLog('ok', `Abierto: ${nodePath}`, 'fe')
     }
   } catch (e) {
     toast(`No se pudo abrir ${nodePath}: ${(e as Error).message}`, 'err')

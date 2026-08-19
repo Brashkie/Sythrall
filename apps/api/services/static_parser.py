@@ -71,6 +71,7 @@ def parse_file(filename: str, content: str) -> dict[str, Any]:
             "dead_code": [],
             "wasm_hints": [],
             "security_findings": [],
+            "structural_smells": [],
         }
 
 
@@ -86,6 +87,7 @@ def _parse_python(filename: str, content: str) -> dict:
     classes: list[dict] = []
     imports: list[dict] = []
     security_findings: list[dict] = []
+    structural_smells: list[dict] = []
 
     # ── Imports ───────────────────────────────────────────────────────────────
     for node in ast.walk(tree):
@@ -129,6 +131,16 @@ def _parse_python(filename: str, content: str) -> dict:
             grammar_info = _grammar_info_python(node, recursion["is_recursive"])
             graph_info = _graph_traversal_info_python(node, recursion["is_recursive"])
             security_findings.extend(_security_findings_python(node))
+
+            structural_smells.extend(
+                f
+                for f in (
+                    _check_long_function(node.name, node.lineno, loc),
+                    _check_excessive_parameters(node.name, node.lineno, len(node.args.args)),
+                    _check_deep_nesting(node.name, node.lineno, node),
+                )
+                if f is not None
+            )
 
             functions.append(
                 {
@@ -174,15 +186,29 @@ def _parse_python(filename: str, content: str) -> dict:
                         }
                     )
             bases = [_node_name(b) for b in node.bases]
+            class_end = _end_line(node)
+            class_loc = class_end - node.lineno + 1
+            attribute_count = _count_self_attributes_python(node)
             classes.append(
                 {
                     "name": node.name,
                     "line": node.lineno,
+                    "end_line": class_end,
+                    "loc": class_loc,
                     "bases": bases,
                     "methods": methods,
                     "decorators": [_decorator_name(d) for d in node.decorator_list],
                     "docstring": ast.get_docstring(node),
+                    "attribute_count": attribute_count,
                 }
+            )
+            structural_smells.extend(
+                f
+                for f in (
+                    _check_large_class(node.name, node.lineno, len(methods), class_loc),
+                    _check_god_object(node.name, node.lineno, len(methods), attribute_count),
+                )
+                if f is not None
             )
 
     # ── Imports no usados (heurística) ───────────────────────────────────────
@@ -215,6 +241,9 @@ def _parse_python(filename: str, content: str) -> dict:
     security_findings.extend(_hardcoded_credentials_python(tree))
     security_findings.sort(key=lambda f: f["line"])
 
+    # ── Structural Smells (Fase 22) ────────────────────────────────────────────
+    structural_smells.sort(key=lambda s: s["line"])
+
     return {
         "filename": filename,
         "language": "python",
@@ -227,6 +256,7 @@ def _parse_python(filename: str, content: str) -> dict:
         "circular_deps": circular,
         "wasm_hints": wasm_hints,
         "security_findings": security_findings,
+        "structural_smells": structural_smells,
         "summary": {
             "total_functions": len(functions),
             "total_classes": len(classes),
@@ -235,6 +265,7 @@ def _parse_python(filename: str, content: str) -> dict:
             "avg_complexity": round(sum(f["complexity"] for f in functions) / len(functions), 2) if functions else 0,
             "max_loc_function": max((f["loc"] for f in functions), default=0),
             "security_findings": len(security_findings),
+            "structural_smells": len(structural_smells),
         },
     }
 
@@ -270,6 +301,7 @@ def _parse_c(filename: str, content: str) -> dict:
         "call_graph": _build_call_graph(functions),
         "wasm_hints": wasm_hints,
         "security_findings": [],
+        "structural_smells": [],
         "summary": {
             "total_functions": len(functions),
             "total_structs": len(structs),
@@ -305,6 +337,7 @@ def _parse_cpp(filename: str, content: str) -> dict:
         "call_graph": _build_call_graph(functions),
         "wasm_hints": wasm_hints,
         "security_findings": [],
+        "structural_smells": [],
         "summary": {
             "total_functions": len(functions),
             "total_classes": len(classes),
@@ -594,6 +627,7 @@ def _parse_js_ts(filename: str, content: str, lang: str) -> dict:
         "call_graph": _build_call_graph(functions),
         "wasm_hints": wasm_hints,
         "security_findings": [],
+        "structural_smells": [],
         "summary": {
             "total_functions": len(functions),
             "total_classes": len(classes),
@@ -1136,6 +1170,7 @@ _SQL_SINK_METHODS = {"execute", "executemany"}
 _SHELL_CALL_DOTTED = {"os.system", "os.popen"}
 _SUBPROCESS_SHELL_FUNCS = {"call", "run", "Popen", "check_call", "check_output"}
 _CREDENTIAL_NAME_RE = re.compile(r"(password|passwd|pwd|secret|api_?key|access_?key|auth_?token|private_?key)", re.I)
+_UNSAFE_DESERIALIZE_DOTTED = {"pickle.loads", "pickle.load", "marshal.loads"}
 _PLACEHOLDER_VALUE_RE = re.compile(r"^(|changeme|xxx+|todo|your[-_]?\w*|<.*>|\{\{.*\}\}|\$\{.*\})$", re.I)
 
 
@@ -1305,18 +1340,108 @@ def _check_command_injection(call: ast.Call, tainted: dict[str, tuple[str, bool]
     }
 
 
+def _check_path_traversal(call: ast.Call, tainted: dict[str, tuple[str, bool]]) -> dict | None:
+    """CWE-22. `open(path)` solo dispara si el path se arma por concatenación/
+    f-string/`.format()` con un valor tainted — mismo criterio "construido"
+    que SQL injection, así que `open(f"uploads/{name}")` dispara pero
+    `open(config_path)` (una variable simple, no concatenada) no.
+    `os.path.join(base, seg)` dispara con cualquier segmento tainted más allá
+    del primero, construido o no — unir un `"../etc/passwd"` tainted crudo ya
+    es el traversal, no necesita concatenación para ser peligroso."""
+    if isinstance(call.func, ast.Name) and call.func.id == "open":
+        if not call.args:
+            return None
+        info = _expr_taint_info(call.args[0], tainted)
+        if not info or not info[1]:
+            return None
+        source, _built = info
+        return {
+            "cwe": "CWE-22",
+            "category": "Path Traversal",
+            "severity": "High",
+            "confidence": "High",
+            "source": source,
+            "sink": "open(...)",
+            "line": call.lineno,
+            "recommendation": "Validar/normalizar el path contra un directorio base permitido (ej. `Path(base).joinpath(name).resolve()` y chequear que siga bajo `base`) antes de abrirlo.",
+        }
+    if _node_name(call.func) == "os.path.join" and len(call.args) > 1:
+        for arg in call.args[1:]:
+            info = _expr_taint_info(arg, tainted)
+            if info:
+                source, _built = info
+                return {
+                    "cwe": "CWE-22",
+                    "category": "Path Traversal",
+                    "severity": "High",
+                    "confidence": "High",
+                    "source": source,
+                    "sink": "os.path.join(...)",
+                    "line": call.lineno,
+                    "recommendation": "Validar/normalizar el path unido contra un directorio base permitido antes de usarlo — `os.path.join` no elimina segmentos `..`.",
+                }
+    return None
+
+
+def _check_insecure_deserialization(call: ast.Call, tainted: dict[str, tuple[str, bool]]) -> dict | None:
+    """CWE-502. `pickle.loads`/`pickle.load`/`marshal.loads` son inseguras por
+    construcción — pueden ejecutar código arbitrario al deserializar, sin
+    importar si el input es provably tainted (a diferencia de SQL/command
+    injection, no existe una "forma segura" de estas llamadas). `yaml.load`
+    solo es insegura sin un `Loader=yaml.SafeLoader`/`CSafeLoader` explícito.
+    Confianza Alta si el argumento traza a una fuente de taint conocida,
+    Media si no — usar estas funciones ya es un riesgo real, que además
+    reciban input tainted es peor."""
+    dotted = _node_name(call.func)
+    is_pickle_marshal = dotted in _UNSAFE_DESERIALIZE_DOTTED
+    is_unsafe_yaml = dotted == "yaml.load" and not any(
+        kw.arg == "Loader" and isinstance(kw.value, ast.Attribute) and "SafeLoader" in kw.value.attr
+        for kw in call.keywords
+    )
+    if not (is_pickle_marshal or is_unsafe_yaml):
+        return None
+    arg_info = _expr_taint_info(call.args[0], tainted) if call.args else None
+    if arg_info:
+        confidence, source = "High", arg_info[0]
+    else:
+        confidence, source = "Medium", "llamada de deserialización sin validar"
+    recommendation = (
+        "Usar `yaml.safe_load()` (o `Loader=yaml.SafeLoader`) en vez del `yaml.load` por defecto, que puede "
+        "construir objetos Python arbitrarios."
+        if is_unsafe_yaml
+        else "Evitar deserializar datos no confiables con `pickle`/`marshal` — usar un formato seguro (JSON) o "
+        "un serializador validado por schema."
+    )
+    return {
+        "cwe": "CWE-502",
+        "category": "Insecure Deserialization",
+        "severity": "High",
+        "confidence": confidence,
+        "source": source,
+        "sink": f"{dotted}(...)",
+        "line": call.lineno,
+        "recommendation": recommendation,
+    }
+
+
 def _security_findings_python(func: ast.FunctionDef) -> list[dict]:
     """Taint tracking + catálogo de sinks conocidos, dentro de una sola
     función (scope propio, sin bajar a funciones anidadas — esas se analizan
     por separado cuando el loop principal las visita). Cada finding incluye
-    `function` con el nombre de la función donde se detectó."""
+    `function` con el nombre de la función donde se detectó. A diferencia de
+    v1 (solo SQLi/command injection, ambos requieren taint), ya no corta
+    temprano si no hay taint — la deserialización insegura (CWE-502) dispara
+    aunque el argumento no sea provably tainted."""
     tainted = _taint_propagation_python(func)
-    if not tainted:
-        return []
     findings: list[dict] = []
     calls = sorted((c for c in _own_scope_nodes(func) if isinstance(c, ast.Call)), key=lambda c: c.lineno)
     for call in calls:
-        finding = _check_sql_injection(call, tainted) or _check_command_injection(call, tainted)
+        finding = (
+            _check_sql_injection(call, tainted)
+            or _check_command_injection(call, tainted)
+            or _check_path_traversal(call, tainted)
+            or _check_insecure_deserialization(call, tainted)
+        )
         if finding:
             finding["function"] = func.name
             findings.append(finding)
@@ -1359,6 +1484,124 @@ def _hardcoded_credentials_python(tree: ast.Module) -> list[dict]:
                     }
                 )
     return findings
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  STRUCTURAL SMELLS (Fase 22, segundo ítem) — heurísticas de forma de AST
+# ══════════════════════════════════════════════════════════════════════════════
+#  Mismo estilo que el resto del CS Engine: cada smell trae su umbral y su
+#  razonamiento en el mensaje, nunca una etiqueta sola. Umbrales
+#  convencionales de la literatura de code smells (Fowler/Martin: long
+#  method ~50 LOC, large class ~15 métodos, long parameter list ~5, god
+#  object combina tamaño con cantidad de estado) — no configurables todavía.
+#
+#  Deliberadamente NO incluye "duplicated logic" (comparación de forma de
+#  AST entre funciones) — necesita un esquema de normalización/hashing que
+#  todavía no existe acá; queda para una porción siguiente, no silenciado.
+
+_LONG_FUNCTION_LOC = 50
+_EXCESSIVE_PARAMS = 5
+_DEEP_NESTING_DEPTH = 4
+_LARGE_CLASS_METHODS = 15
+_LARGE_CLASS_LOC = 300
+_GOD_OBJECT_METHODS = 20
+_GOD_OBJECT_ATTRS = 10
+
+
+def _check_long_function(name: str, line: int, loc: int) -> dict | None:
+    if loc <= _LONG_FUNCTION_LOC:
+        return None
+    return {
+        "kind": "long_function",
+        "name": name,
+        "line": line,
+        "message": f"{loc} líneas (> {_LONG_FUNCTION_LOC}) — considerar dividir en funciones más chicas y enfocadas",
+    }
+
+
+def _check_excessive_parameters(name: str, line: int, arg_count: int) -> dict | None:
+    if arg_count <= _EXCESSIVE_PARAMS:
+        return None
+    return {
+        "kind": "excessive_parameters",
+        "name": name,
+        "line": line,
+        "message": f"{arg_count} parámetros (> {_EXCESSIVE_PARAMS}) — considerar agrupar parámetros relacionados en un objeto/dataclass",
+    }
+
+
+def _max_nesting_depth_python(body: ast.FunctionDef) -> int:
+    """Profundidad máxima de anidamiento de CUALQUIER bloque (if/for/while/
+    with/try) — a diferencia de `_loop_analysis_python`, que solo cuenta
+    loops para el Big-O de tiempo, acá un `if` anidado en otro `if` anidado
+    en un `try` también cuenta: no afecta el tiempo de ejecución, pero sí
+    qué tan difícil es leer la función."""
+    BLOCK_TYPES = (ast.If, ast.For, ast.AsyncFor, ast.While, ast.With, ast.AsyncWith, ast.Try)
+    max_depth = [0]
+
+    def walk(n: ast.AST, depth: int) -> None:
+        for child in ast.iter_child_nodes(n):
+            is_block = isinstance(child, BLOCK_TYPES)
+            d = depth + 1 if is_block else depth
+            max_depth[0] = max(max_depth[0], d)
+            walk(child, d)
+
+    walk(body, 0)
+    return max_depth[0]
+
+
+def _check_deep_nesting(name: str, line: int, func: ast.FunctionDef) -> dict | None:
+    depth = _max_nesting_depth_python(func)
+    if depth <= _DEEP_NESTING_DEPTH:
+        return None
+    return {
+        "kind": "deep_nesting",
+        "name": name,
+        "line": line,
+        "message": f"{depth} niveles de bloques anidados (> {_DEEP_NESTING_DEPTH}) — considerar extraer bloques internos a funciones auxiliares o usar early returns",
+    }
+
+
+def _check_large_class(name: str, line: int, method_count: int, loc: int) -> dict | None:
+    if method_count <= _LARGE_CLASS_METHODS and loc <= _LARGE_CLASS_LOC:
+        return None
+    return {
+        "kind": "large_class",
+        "name": name,
+        "line": line,
+        "message": f"{method_count} métodos, {loc} líneas (umbrales: {_LARGE_CLASS_METHODS} métodos / {_LARGE_CLASS_LOC} líneas) — considerar dividir responsabilidades en clases más chicas",
+    }
+
+
+def _count_self_attributes_python(class_node: ast.ClassDef) -> int:
+    """Cuenta atributos únicos asignados vía `self.X = ...` en cualquier
+    método de la clase — proxy heurístico de cuánto estado mantiene la
+    clase. No distingue atributos "reales" de temporales reasignados en
+    cada llamada, ni sigue atributos heredados de una clase base."""
+    attrs: set[str] = set()
+    for item in class_node.body:
+        if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
+            for n in _own_scope_nodes(item):
+                if isinstance(n, ast.Assign):
+                    for t in n.targets:
+                        if (
+                            isinstance(t, ast.Attribute)
+                            and isinstance(t.value, ast.Name)
+                            and t.value.id == "self"
+                        ):
+                            attrs.add(t.attr)
+    return len(attrs)
+
+
+def _check_god_object(name: str, line: int, method_count: int, attribute_count: int) -> dict | None:
+    if method_count < _GOD_OBJECT_METHODS or attribute_count < _GOD_OBJECT_ATTRS:
+        return None
+    return {
+        "kind": "god_object",
+        "name": name,
+        "line": line,
+        "message": f"{method_count} métodos y {attribute_count} atributos (umbrales: {_GOD_OBJECT_METHODS}/{_GOD_OBJECT_ATTRS}) — esta clase probablemente hace demasiado; considerar dividirla por responsabilidad",
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1604,5 +1847,6 @@ def _unsupported(filename: str, ext: str, reason: str = "") -> dict:
         "call_graph": [],
         "wasm_hints": [],
         "security_findings": [],
+        "structural_smells": [],
         "summary": {},
     }

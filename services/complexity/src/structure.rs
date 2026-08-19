@@ -8,6 +8,7 @@ use rustpython_parser::ast::{Constant, Expr, Stmt};
 use serde::Serialize;
 
 use crate::parser::line_of_offset;
+use crate::smells;
 use crate::walk::walk_stmts;
 
 #[derive(Serialize, Clone)]
@@ -34,10 +35,16 @@ pub struct RichMethod {
 pub struct RichClass {
     pub name: String,
     pub line: usize,
+    pub end_line: usize,
+    pub loc: usize,
     pub bases: Vec<String>,
     pub methods: Vec<RichMethod>,
     pub decorators: Vec<String>,
     pub docstring: Option<String>,
+    /// Atributos únicos asignados vía `self.X = ...` en cualquier método —
+    /// proxy de cuánto estado mantiene la clase, usado por el check de
+    /// god object (Fase 22, `smells.rs`).
+    pub attribute_count: usize,
 }
 
 pub fn extract_imports(source: &str, suite: &[Stmt]) -> Vec<RichImport> {
@@ -106,13 +113,18 @@ fn collect_classes(source: &str, stmt: &Stmt, out: &mut Vec<RichClass>) {
             })
             .collect();
 
+        let line = line_of_offset(source, c.range.start().to_usize());
+        let end_line = line_of_offset(source, c.range.end().to_usize());
         out.push(RichClass {
             name: c.name.to_string(),
-            line: line_of_offset(source, c.range.start().to_usize()),
+            line,
+            end_line,
+            loc: end_line.saturating_sub(line) + 1,
             bases: c.bases.iter().map(node_name).collect(),
             methods,
             decorators: c.decorator_list.iter().map(decorator_name).collect(),
             docstring: docstring_of(&c.body),
+            attribute_count: smells::count_self_attributes(&c.body),
         });
     }
     // Clases anidadas adentro de funciones/otras clases también cuentan,

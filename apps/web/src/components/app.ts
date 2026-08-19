@@ -6,12 +6,14 @@
 import { api } from '../api/client'
 import { renderFileAnalysis, renderMetrics } from '../panels/analysis'
 import { renderAPICards, renderIssuesList } from '../panels/apis'
+import { renderProjectHealth } from '../panels/dashboard'
 import { generateCodeGraph, generateProjectGraph } from '../panels/graph'
 import { clientMLAnalysis, renderMLResults } from '../panels/ml'
 import { clearSession, restoreSession, saveSession } from '../panels/problems'
 import { loadPersistedActiveProject, setActiveProject, state } from '../store/state'
 import type { TabId } from '../types'
 import { appendLog, delay, fmtBytes, getExt, nowStr, setProgress, toast, uniqueId } from '../utils/helpers'
+import { icon, languageBadge } from '../utils/icons'
 import { createCollapseToggle, createResizer } from '../utils/resizer'
 import { initCharts, renderComplexityBars, renderDistChart, renderRTChart, updateHistChart } from './charts'
 import { applyMarkers, getEditorValue, initEditor, loadFileInEditor } from './editor'
@@ -65,6 +67,14 @@ export function switchTab(name: TabId): void {
     import('../panels/static').then(({ renderStaticPanel }) => {
       renderStaticPanel()
     })
+  }
+
+  // Re-render Project Health al volver al Dashboard — activar un proyecto
+  // desde Proyectos no re-renderiza el Dashboard reactivamente (mismo patrón
+  // "lazy check" que el resto de los paneles), así que sin esto el usuario
+  // vería el empty state viejo hasta disparar algo más.
+  if (name === 'dashboard') {
+    renderProjectHealth()
   }
 }
 
@@ -196,7 +206,7 @@ export async function checkBackend(): Promise<void> {
         ${mr('LightGBM', d.lightgbm ? '✓' : '✗')}
         ${mr('spaCy', d.spacy ? '✓' : '✗')}
       </div>`
-    appendLog('ok', '🖥 Backend OK — ' + d.server, 'be')
+    appendLog('ok', 'Backend OK — ' + d.server, 'be')
   } catch (e) {
     state.backendOk = false
     badge.className = 'be-badge be-err'
@@ -223,7 +233,7 @@ async function tryRestoreSession(): Promise<void> {
   try {
     await api.getProjectTree(projectId) // confirma que el proyecto sigue existiendo
     setActiveProject(projectId)
-    appendLog('ok', `📂 Proyecto activo restaurado (${projectId.slice(0, 8)}…)`, 'be')
+    appendLog('ok', `Proyecto activo restaurado (${projectId.slice(0, 8)}…)`, 'be')
 
     const lastFile = restoreSession()
     if (lastFile) {
@@ -265,8 +275,8 @@ export function handleCodeFiles(files: FileList | null): void {
       updateFileTree()
       updateSelectors()
       updateStats()
-      appendLog('info', `📁 ${f.name} (${fmtBytes(f.size)})`, 'fe')
-      toast('✅ ' + f.name, 'ok')
+      appendLog('info', `${f.name} (${fmtBytes(f.size)})`, 'fe')
+      toast(f.name, 'ok')
     }
     reader.readAsText(f)
   })
@@ -282,15 +292,15 @@ export async function persistFilesToProject(files: File[], mode: 'files' | 'fold
   try {
     if (state.activeProjectId) {
       await upload(files, '', undefined, state.activeProjectId)
-      appendLog('ok', `📦 ${files.length} archivo(s) guardado(s) en el proyecto activo`, 'be')
+      appendLog('ok', `${files.length} archivo(s) guardado(s) en el proyecto activo`, 'be')
       return
     }
     const name = window.prompt('Nombre del proyecto nuevo (cancelar = no guardar, solo en esta sesión):', '')
     if (name === null) return
     const result = await upload(files, name)
     setActiveProject(result.project_id)
-    appendLog('ok', `📦 Proyecto "${result.project_name}" creado y activo`, 'be')
-    toast('📂 Proyecto creado — activo', 'ok')
+    appendLog('ok', `Proyecto "${result.project_name}" creado y activo`, 'be')
+    toast('Proyecto creado — activo', 'ok')
   } catch (e) {
     appendLog('err', `Error guardando en el proyecto: ${(e as Error).message}`, 'fe')
   }
@@ -307,7 +317,7 @@ export function handleLogFiles(files: FileList | null): void {
         content: e.target!.result as string,
         projectId: state.activeProjectId,
       })
-      appendLog('info', '📋 Log: ' + f.name, 'fe')
+      appendLog('info', 'Log: ' + f.name, 'fe')
     }
     reader.readAsText(f)
   })
@@ -332,22 +342,8 @@ export function updateFileTree(): void {
         : f.analyzed
           ? `<span class="fn-badge fn-ok">✓</span>`
           : `<span class="fn-badge fn-pending">—</span>`
-      const icons: Record<string, string> = {
-        '.py': '🐍',
-        '.js': '🟨',
-        '.ts': '🔷',
-        '.json': '📋',
-        '.yaml': '⚙️',
-        '.html': '🌐',
-        '.css': '🎨',
-        '.go': '🐹',
-        '.sh': '💻',
-        '.java': '☕',
-        '.txt': '📄',
-        '.log': '📜',
-      }
       return `<div class="file-node ${cls}${f === state.currentFile ? ' active' : ''}" data-id="${f.id}">
-      <span style="font-size:13px">${icons[f.ext] ?? '📄'}</span>
+      ${languageBadge(f.ext)}
       <span class="fn-name" title="${f.name}">${f.name}</span>
       ${badge}
       <button class="btn btn-danger btn-sm" style="padding:2px 4px" data-remove="${f.id}">✕</button>
@@ -407,7 +403,7 @@ export function addURL(url?: string): void {
   const v = (url ?? inp.value).trim()
   if (!v) return
   if (!v.startsWith('http')) {
-    toast('❌ URL debe comenzar con http://', 'err')
+    toast('URL debe comenzar con http://', 'err')
     return
   }
   if (state.urls.includes(v)) {
@@ -418,7 +414,7 @@ export function addURL(url?: string): void {
   state.results.apis.push({ url: v, status: 'unknown', code: null, ms: null, error: null, ts: null, history: [] })
   inp.value = ''
   renderURLList()
-  appendLog('info', '🌐 ' + v, 'fe')
+  appendLog('info', v, 'fe')
 }
 
 function renderURLList(): void {
@@ -509,7 +505,7 @@ export async function runAll(): Promise<void> {
   appendLog('info', `✔ Completo en ${ms}ms — ${overallStatus().toUpperCase()}`, 'fe')
   state.running = false
   document.getElementById('run-btn')!.removeAttribute('disabled')
-  toast(`✅ Listo — ${state.results.issues.length} problemas`, state.results.issues.length ? 'warn' : 'ok')
+  toast(`Listo — ${state.results.issues.length} problemas`, state.results.issues.length ? 'warn' : 'ok')
 }
 
 async function runAPIChecks(): Promise<void> {
@@ -523,7 +519,7 @@ async function runAPIChecks(): Promise<void> {
       const idx = state.results.apis.findIndex((a) => a.url === res.url)
       if (idx >= 0) state.results.apis[idx] = res
     })
-    appendLog('info', `📡 ${state.results.apis.length} endpoints verificados`, 'be')
+    appendLog('info', `${state.results.apis.length} endpoints verificados`, 'be')
   } catch {
     appendLog('warn', 'Backend no disponible — fetch del browser', 'fe')
     for (const url of state.urls) {
@@ -551,7 +547,7 @@ async function analyzeAllFiles(): Promise<void> {
           state.results.issues.push(...r.issues.map((i) => ({ ...i, file: filename })))
         }
         renderIssuesList()
-        appendLog('ok', `🔍 Proyecto activo: ${state.results.issues.length} issue(s)`, 'be')
+        appendLog('ok', `Proyecto activo: ${state.results.issues.length} issue(s)`, 'be')
       } catch (e) {
         appendLog('err', `Error analizando proyecto activo: ${(e as Error).message}`, 'fe')
       }
@@ -573,12 +569,13 @@ async function analyzeAllFiles(): Promise<void> {
           pylint_score: r.metrics?.pylint_score,
           complexity: r.complexity ?? [],
           mi: r.maintainability ?? undefined,
+          halstead: r.halstead,
           raw: r.raw_stats,
           tools_used: r.tools_used ?? [],
         }
         f.analyzed = true
         state.results.issues.push(...f.issues.map((i) => ({ ...i, file: f.name })))
-        appendLog('ok', `🔍 ${f.name}: ${f.issues.length} issue(s)`, 'be')
+        appendLog('ok', `${f.name}: ${f.issues.length} issue(s)`, 'be')
       }
     } catch (e) {
       appendLog('err', `Error analizando proyecto: ${(e as Error).message}`, 'fe')
@@ -588,7 +585,7 @@ async function analyzeAllFiles(): Promise<void> {
       f.issues = clientAnalyze(f)
       f.analyzed = true
       state.results.issues.push(...f.issues.map((i) => ({ ...i, file: f.name })))
-      appendLog('warn', `🔍 ${f.name}: análisis básico`, 'fe')
+      appendLog('warn', `${f.name}: análisis básico`, 'fe')
     }
   }
   updateFileTree()
@@ -624,7 +621,7 @@ async function analyzeAllLogs(): Promise<void> {
         ...(res.errors as import('../types').LogError[]),
         ...(res.warnings as import('../types').LogError[]),
       ]
-      appendLog('ok', `📋 Logs: ${res.errors.length} errores`, 'be')
+      appendLog('ok', `Logs: ${res.errors.length} errores`, 'be')
     }
   } catch (e) {
     appendLog('err', 'Error logs: ' + (e as Error).message, 'fe')
@@ -648,6 +645,7 @@ export async function analyzeCurrentFile(): Promise<void> {
         pylint_score: res.metrics?.pylint_score,
         complexity: res.complexity ?? [],
         mi: res.maintainability ?? undefined,
+        halstead: res.halstead,
         raw: res.raw_stats,
         tools_used: res.tools_used ?? [],
       }
@@ -660,7 +658,7 @@ export async function analyzeCurrentFile(): Promise<void> {
     updateFileTree()
     setProgress(100)
     setTimeout(() => setProgress(0), 500)
-    toast(`🔍 ${f.name}: ${f.issues.length} issue(s)`, f.issues.length ? 'warn' : 'ok')
+    toast(`${f.name}: ${f.issues.length} issue(s)`, f.issues.length ? 'warn' : 'ok')
   } catch (e) {
     toast('Error: ' + (e as Error).message, 'err')
     setProgress(0)
@@ -684,16 +682,16 @@ export function toggleAuto(): void {
   const btn = document.getElementById('auto-btn')!
   if (state.autoOn) {
     btn.style.color = 'var(--ok)'
-    btn.textContent = '⏹ Auto ON'
+    btn.textContent = 'Auto ON'
     state.autoTimer = setInterval(() => {
       if (!state.running) runAll()
     }, 30000)
-    toast('⏱ Auto cada 30s', 'ok')
+    toast('Auto cada 30s', 'ok')
   } else {
     btn.style.color = ''
-    btn.textContent = '⏱ Auto'
+    btn.textContent = 'Auto'
     if (state.autoTimer) clearInterval(state.autoTimer)
-    toast('⏹ Auto OFF', 'warn')
+    toast('Auto OFF', 'warn')
   }
 }
 
@@ -702,17 +700,18 @@ export function clearAll(): void {
   state.files = []
   state.logFiles = []
   state.urls = []
-  state.results = { apis: [], issues: [], logErrors: [] }
+  state.results = { apis: [], issues: [], logErrors: [], projectHealth: null }
   updateFileTree()
   updateSelectors()
   renderURLList()
   updateStats()
+  renderProjectHealth()
   const apiCards = document.getElementById('api-cards')
   if (apiCards) apiCards.innerHTML = ''
   const issuesList = document.getElementById('issues-list')
   if (issuesList) issuesList.innerHTML = ''
   clearSession()
-  toast('🗑 Limpiado', 'warn')
+  toast('Limpiado', 'warn')
 }
 
 // ══════════════════════════════════════════
@@ -730,7 +729,7 @@ export async function runMLAnalysis(): Promise<void> {
     return
   }
   const el = document.getElementById('ml-content')!
-  el.innerHTML = '<div class="empty"><span class="empty-icon">⚙️</span>Analizando ML/DL...</div>'
+  el.innerHTML = '<div class="empty">Analizando ML/DL...</div>'
   try {
     const data = state.backendOk ? await api.analyzeML(f.name, f.content) : clientMLAnalysis(f)
     renderMLResults(data, el)
@@ -740,10 +739,10 @@ export async function runMLAnalysis(): Promise<void> {
     const sc = data.score ?? 0
     const c = sc >= 80 ? 'var(--ok)' : sc >= 50 ? 'var(--warn)' : 'var(--err)'
     badge.innerHTML = `<span style="color:${c};font-weight:700">Score: ${sc}/100</span>`
-    toast(`🤖 ML — score ${sc}/100`, sc >= 60 ? 'ok' : 'warn')
-    appendLog('ok', `🤖 ML: ${f.name} — score ${sc}`, 'be')
+    toast(`ML — score ${sc}/100`, sc >= 60 ? 'ok' : 'warn')
+    appendLog('ok', `ML: ${f.name} — score ${sc}`, 'be')
   } catch (e) {
-    el.innerHTML = `<div class="empty"><span class="empty-icon">❌</span>Error: ${(e as Error).message}</div>`
+    el.innerHTML = `<div class="empty" style="color:var(--err)">${icon('warning', 14)} Error: ${(e as Error).message}</div>`
     toast('Error ML: ' + (e as Error).message, 'err')
   }
 }
@@ -770,7 +769,7 @@ export async function generateDiagram(): Promise<void> {
   const outEl = document.getElementById('mermaid-output')!
   const statusEl = document.getElementById('diag-status')!
   statusEl.textContent = 'Generando...'
-  outEl.innerHTML = '<div class="empty"><span class="empty-icon">⚙️</span>Analizando...</div>'
+  outEl.innerHTML = '<div class="empty">Analizando...</div>'
   try {
     let code = ''
     if (state.backendOk) {
@@ -789,12 +788,12 @@ export async function generateDiagram(): Promise<void> {
       svgEl.style.maxWidth = '100%'
       svgEl.style.height = 'auto'
     }
-    statusEl.textContent = `✅ ${f.name}`
+    statusEl.textContent = f.name
     statusEl.style.color = 'var(--ok)'
     document.getElementById('tb-diagram')!.style.display = ''
-    toast('🔀 Diagrama generado', 'ok')
+    toast('Diagrama generado', 'ok')
   } catch (e) {
-    outEl.innerHTML = `<div class="empty"><span class="empty-icon">⚠️</span>Error: ${(e as Error).message}</div>`
+    outEl.innerHTML = `<div class="empty" style="color:var(--err)">${icon('warning', 14)} Error: ${(e as Error).message}</div>`
     statusEl.textContent = 'Error'
     statusEl.style.color = 'var(--err)'
   }
@@ -831,7 +830,7 @@ async function generateWholeProjectDiagram(graphType: string): Promise<void> {
     statusEl.style.color = ok ? 'var(--ok)' : 'var(--err)'
   }
 
-  outEl.innerHTML = '<div class="empty"><span class="empty-icon">⚙️</span>Analizando proyecto...</div>'
+  outEl.innerHTML = '<div class="empty">Analizando proyecto...</div>'
 
   if (state.activeProjectId) {
     await generateProjectGraph(
@@ -858,12 +857,12 @@ function generateMermaidFallback(name: string, content: string, _type: string): 
     const m = l.match(/^def\s+(\w+)/) ?? l.match(/function\s+(\w+)/)
     if (m) funcs.push(m[1])
   })
-  if (!funcs.length) return `flowchart TD\n    A[📄 ${name}]\n    B[Sin funciones]\n    A --> B`
-  let code = `flowchart TD\n    START([🚀 ${name}])\n`
+  if (!funcs.length) return `flowchart TD\n    A[${name}]\n    B[Sin funciones]\n    A --> B`
+  let code = `flowchart TD\n    START([${name}])\n`
   funcs.slice(0, 10).forEach((fn, i) => {
-    code += `    F${i}["⚙️ ${fn}()"]\n`
+    code += `    F${i}["${fn}()"]\n`
   })
-  code += `    END([🏁])\n    START --> F0\n`
+  code += `    END([END])\n    START --> F0\n`
   for (let i = 0; i < Math.min(funcs.length, 10) - 1; i++) code += `    F${i} --> F${i + 1}\n`
   code += `    F${Math.min(funcs.length - 1, 9)} --> END\n`
   return code
@@ -895,7 +894,7 @@ export async function runDiff(): Promise<void> {
       return `<span style="color:var(--muted)">${esc(l)}</span>`
     })
     .join('\n')
-  document.getElementById('diff-out')!.innerHTML = html || '<span style="color:var(--ok)">✅ Archivos idénticos</span>'
+  document.getElementById('diff-out')!.innerHTML = html || '<span style="color:var(--ok)">Archivos idénticos</span>'
 }
 
 // ══════════════════════════════════════════
@@ -960,6 +959,8 @@ export function initApp(): void {
     console.error('Editor init failed:', e)
   }
   initExplorer({ onFileOpen: (f) => selectFile(f.id) })
+  renderIssuesList()
+  renderProjectHealth()
   initMermaid()
   setTimeout(() => {
     try {
@@ -1005,7 +1006,7 @@ export function initApp(): void {
   // Wiring de eventos (tabs, drag&drop, inputs de archivo, etc.) vive en
   // events.ts (wireAllEvents, llamado desde main.ts) — no duplicar aquí.
 
-  appendLog('info', '🛰 Sythrall listo', 'fe')
+  appendLog('info', 'Sythrall listo', 'fe')
   checkBackend().then(() => void tryRestoreSession())
   setInterval(() => {
     if (state.backendOk && !state.running) checkBackend()

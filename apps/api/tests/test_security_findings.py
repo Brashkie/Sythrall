@@ -190,6 +190,109 @@ def make_token():
         assert not any(f["cwe"] == "CWE-798" for f in findings)
 
 
+class TestPathTraversal:
+    def test_open_concatenated_path_flagged(self):
+        code = """
+def read_file(request):
+    name = request.args["name"]
+    with open("uploads/" + name) as f:
+        return f.read()
+"""
+        findings = _findings(code)
+        cwe22 = [f for f in findings if f["cwe"] == "CWE-22"]
+        assert len(cwe22) == 1
+        assert cwe22[0]["sink"] == "open(...)"
+        assert cwe22[0]["confidence"] == "High"
+
+    def test_open_simple_variable_not_flagged(self):
+        code = """
+def read_file(config_path):
+    with open(config_path) as f:
+        return f.read()
+"""
+        findings = _findings(code)
+        assert not any(f["cwe"] == "CWE-22" for f in findings)
+
+    def test_os_path_join_tainted_segment_flagged(self):
+        code = """
+import os
+
+def read_file(request):
+    name = request.args["name"]
+    path = os.path.join("uploads", name)
+    open(path)
+"""
+        findings = _findings(code)
+        assert any(f["cwe"] == "CWE-22" and f["sink"] == "os.path.join(...)" for f in findings)
+
+    def test_os_path_join_untainted_not_flagged(self):
+        code = """
+import os
+
+def build_path(sub_dir):
+    return os.path.join("uploads", "static", "images")
+"""
+        findings = _findings(code)
+        assert not any(f["cwe"] == "CWE-22" for f in findings)
+
+
+class TestInsecureDeserialization:
+    def test_pickle_loads_tainted_high_confidence(self):
+        code = """
+import pickle
+
+def load(request):
+    data = request.args["data"]
+    return pickle.loads(data)
+"""
+        findings = _findings(code)
+        cwe502 = [f for f in findings if f["cwe"] == "CWE-502"]
+        assert len(cwe502) == 1
+        assert cwe502[0]["confidence"] == "High"
+
+    def test_pickle_loads_untainted_medium_confidence(self):
+        code = """
+import pickle
+
+def load(raw_bytes):
+    return pickle.loads(raw_bytes)
+"""
+        findings = _findings(code)
+        cwe502 = [f for f in findings if f["cwe"] == "CWE-502"]
+        assert len(cwe502) == 1
+        assert cwe502[0]["confidence"] == "Medium"
+
+    def test_marshal_loads_flagged(self):
+        code = """
+import marshal
+
+def load(raw_bytes):
+    return marshal.loads(raw_bytes)
+"""
+        findings = _findings(code)
+        assert any(f["cwe"] == "CWE-502" for f in findings)
+
+    def test_yaml_load_default_loader_flagged(self):
+        code = """
+import yaml
+
+def load(raw):
+    return yaml.load(raw)
+"""
+        findings = _findings(code)
+        assert any(f["cwe"] == "CWE-502" for f in findings)
+
+    def test_yaml_safe_load_loader_not_flagged(self):
+        code = """
+import yaml
+
+def load(raw):
+    return yaml.load(raw, Loader=yaml.SafeLoader)
+"""
+        findings = _findings(code)
+        assert not any(f["cwe"] == "CWE-502" for f in findings)
+
+
 class TestFindingShape:
     def test_findings_sorted_by_line(self):
         code = """

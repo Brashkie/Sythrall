@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from services.static_parser import parse_file, HAS_TREESITTER, HAS_NX
 from services.project_service import read_project_files
 from services.complexity_client import parse_python_rich
+from routers.graph import _build_circular_graph
 
 router = APIRouter()
 
@@ -143,6 +144,8 @@ async def parse_project(req: ParseProjectRequest) -> dict[str, Any]:
         files = req.files
 
     results: list[dict] = [parse_file(f.get("filename", "unknown"), f.get("content", "")) for f in files]
+    for r in results:
+        r["_filename"] = r["filename"]
 
     # ── Resumen global del proyecto ───────────────────────────────────────────
     total_funcs = sum(len(r.get("functions", [])) for r in results)
@@ -159,6 +162,46 @@ async def parse_project(req: ParseProjectRequest) -> dict[str, Any]:
         {"file": r["filename"], "hints": r.get("wasm_hints", [])} for r in results if r.get("wasm_hints")
     ]
 
+    # ── Project Health (Fase 2 del rediseño UX) ───────────────────────────────
+    # Agregación pura sobre resultados ya calculados (Rust-first desde las Fases
+    # 21/22) — mismo tipo de glue code que big_o_distribution/wasm_candidates
+    # arriba, no lógica de análisis nueva.
+    security_findings = [
+        {**f, "file": r["filename"]} for r in results for f in r.get("security_findings", [])
+    ]
+    structural_smells = [
+        {**s, "file": r["filename"]} for r in results for s in r.get("structural_smells", [])
+    ]
+    all_complexities = [fn.get("complexity", 1) for r in results for fn in r.get("functions", [])]
+    avg_complexity = round(sum(all_complexities) / len(all_complexities), 2) if all_complexities else 0.0
+
+    circular = _build_circular_graph(results)
+    total_cycles = circular["summary"]["total_cycles"]
+
+    sec_high = sum(1 for f in security_findings if f["severity"] == "High")
+    sec_medium = sum(1 for f in security_findings if f["severity"] == "Medium")
+    sec_low = sum(1 for f in security_findings if f["severity"] == "Low")
+    security_score = max(0, 100 - (sec_high * 15 + sec_medium * 5 + sec_low * 1))
+
+    # Normalizado por tamaño del proyecto — un proyecto grande con muchos
+    # archivos chicos no debe castigarse igual que uno chico con la misma
+    # cantidad absoluta de smells.
+    smells_count = len(structural_smells)
+    quality_denom = max(1, total_funcs + total_classes)
+    quality_score = max(0, 100 - min(100, round(smells_count / quality_denom * 300)))
+
+    # 5 = umbral "bueno" de CC, mismas bandas que radon usaba antes de la Fase 11.
+    complexity_score = max(0, min(100, round(100 - max(0.0, avg_complexity - 5) * 8)))
+
+    architecture_score = max(0, 100 - total_cycles * 15)
+
+    health = {
+        "security": {"score": security_score, "high": sec_high, "medium": sec_medium, "low": sec_low},
+        "quality": {"score": quality_score, "smells": smells_count},
+        "complexity": {"score": complexity_score, "avg_complexity": avg_complexity},
+        "architecture": {"score": architecture_score, "cycles": total_cycles},
+    }
+
     return {
         "files": results,
         "summary": {
@@ -169,8 +212,13 @@ async def parse_project(req: ParseProjectRequest) -> dict[str, Any]:
             "unused_imports": total_dead,
             "big_o_distribution": all_big_o,
             "wasm_candidates": len(wasm_candidates),
+            "security_findings": len(security_findings),
+            "structural_smells": smells_count,
         },
         "wasm_candidates": wasm_candidates,
+        "security_findings": security_findings,
+        "structural_smells": structural_smells,
+        "health": health,
     }
 
 

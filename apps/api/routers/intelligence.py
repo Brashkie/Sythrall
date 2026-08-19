@@ -277,11 +277,13 @@ async def heavy_analyze(req: AnalyzeRequest) -> dict[str, Any]:
                 if score is not None:
                     metrics["pylint_score"] = score
 
-            # complexity engine (Rust) — CC + MI
+            # complexity engine (Rust) — CC + MI + Halstead (Fase 22, Rust-only,
+            # sin fallback Python — mismo límite que MI desde la Fase 11)
             if "complexity" in req.tools:
-                cc_data, mi = await _run_complexity_metrics(req.content)
+                cc_data, mi, halstead = await _run_complexity_metrics(req.content)
                 metrics["complexity"] = cc_data
                 metrics["maintainability"] = mi
+                metrics["halstead"] = halstead
 
             # Big-O — Fase 18 (Native Intelligence): sidecar Rust primero
             # (parse_python_rich, benchmarkeado 5.6-20.6x más rápido que este
@@ -472,9 +474,9 @@ def _run_pylint_markers(filepath: str) -> tuple[list[dict], float | None]:
     return markers, score
 
 
-async def _run_complexity_metrics(content: str) -> tuple[list[dict], float | None]:
+async def _run_complexity_metrics(content: str) -> tuple[list[dict], float | None, dict | None]:
     data = await analyze_complexity("hover.py", content)
-    return data.get("functions") or [], data.get("mi")
+    return data.get("functions") or [], data.get("mi"), data.get("halstead")
 
 
 # ══════════════════════════════════════════════════════════════════════════════

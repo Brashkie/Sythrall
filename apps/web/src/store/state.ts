@@ -12,6 +12,7 @@ export const state: AppState = {
     apis: [],
     issues: [],
     logErrors: [],
+    projectHealth: null,
   },
   running: false,
   autoOn: false,
@@ -28,11 +29,6 @@ export function addFile(file: CodeFile): void {
   if (!state.files.find((f) => f.name === file.name)) {
     state.files.push(file)
   }
-}
-
-export function removeFile(id: string): void {
-  state.files = state.files.filter((f) => f.id !== id)
-  if (state.currentFile?.id === id) state.currentFile = null
 }
 
 // ─── Proyecto activo — persiste entre refrescos ───────────────────────────────

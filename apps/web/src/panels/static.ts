@@ -4,10 +4,12 @@
 //  Sin IA. Parsers: Python AST, tree-sitter C/C++, regex TS/JS
 // ══════════════════════════════════════════
 
-import type { StaticProjectResult } from '../api/client'
+import type { SecurityFinding, StaticProjectResult, StructuralSmell } from '../api/client'
 import { api } from '../api/client'
 import { state } from '../store/state'
+import { renderHealthCards } from '../utils/health'
 import { appendLog, toast } from '../utils/helpers'
+import { icon, languageBadgeByName } from '../utils/icons'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -63,18 +65,6 @@ interface WasmHint {
   estimated_speedup: string
 }
 
-interface SecurityFinding {
-  cwe: string
-  category: string
-  severity: 'High' | 'Medium' | 'Low'
-  confidence: 'High' | 'Medium' | 'Low'
-  source: string
-  sink: string | null
-  line: number
-  function: string | null
-  recommendation: string
-}
-
 interface StaticResult {
   filename: string
   language: string
@@ -88,6 +78,7 @@ interface StaticResult {
   call_graph: Array<{ from: string; to: string }>
   wasm_hints: WasmHint[]
   security_findings: SecurityFinding[]
+  structural_smells: StructuralSmell[]
   summary: Record<string, number | string>
   error?: string
 }
@@ -103,14 +94,6 @@ const BIG_O_COLOR: Record<string, string> = {
   'O(n³)': 'var(--err)',
   'O(2^n)': 'var(--err)',
 }
-const LANG_ICON: Record<string, string> = {
-  python: '🐍',
-  c: '⚙️',
-  cpp: '⚙️',
-  javascript: '🟨',
-  typescript: '🟦',
-}
-
 // ─── Estado del panel ─────────────────────────────────────────────────────────
 
 let _result: StaticResult | null = null
@@ -132,24 +115,24 @@ export function renderStaticPanel(): void {
         <option value="">— Selecciona un archivo —</option>
         ${fileOpts}
       </select>
-      <button class="btn btn-run btn-sm" id="st-run-btn">🔬 Analizar</button>
-      <button class="btn btn-ghost btn-sm" id="st-run-project-btn" title="Analizar todos los archivos cargados">📂 Analizar proyecto</button>
+      <button class="btn btn-run btn-sm" id="st-run-btn">Analizar</button>
+      <button class="btn btn-ghost btn-sm" id="st-run-project-btn" title="Analizar todos los archivos cargados">Analizar proyecto</button>
       <div style="flex:1"></div>
-      <span id="st-lang-badge" style="font-family:var(--mono);font-size:.68rem;color:var(--muted)"></span>
+      <span id="st-lang-badge"></span>
     </div>
 
     <!-- Contenido -->
     <div class="st-body" id="st-body">
       ${
         !state.files.length
-          ? `<div class="empty"><span class="empty-icon">🔬</span>
+          ? `<div class="empty">
             ${
               state.activeProjectId
-                ? 'Hay un proyecto activo — click "📂 Analizar proyecto" arriba'
+                ? 'Hay un proyecto activo — click "Analizar proyecto" arriba'
                 : 'Carga archivos .py .ts .js .c .cpp, o elegí un proyecto activo en Proyectos'
             }
            </div>`
-          : `<div class="empty"><span class="empty-icon">🔬</span>
+          : `<div class="empty">
             Selecciona un archivo y haz clic en Analizar
            </div>`
       }
@@ -187,7 +170,7 @@ async function _runSingle(): Promise<void> {
     const data = await api.staticParse(f.name, f.content)
     _result = data as StaticResult
     _renderResult(_result)
-    appendLog('ok', `🔬 Static: ${f.name} — ${data.functions?.length ?? 0} funciones`, 'be')
+    appendLog('ok', `Static: ${f.name} — ${data.functions?.length ?? 0} funciones`, 'be')
   } catch (e) {
     _showError((e as Error).message)
     toast('Error: ' + (e as Error).message, 'err')
@@ -198,6 +181,13 @@ async function _runSingle(): Promise<void> {
 
 // ─── Análisis del proyecto completo ──────────────────────────────────────────
 
+/** El Dashboard muestra las mismas 4 tarjetas de Project Health — un solo
+ * fetch acá las actualiza ahí también, sin pedir el análisis dos veces. */
+function _syncDashboardHealth(health: StaticProjectResult['health']): void {
+  state.results.projectHealth = health
+  import('./dashboard').then((m) => m.renderProjectHealth())
+}
+
 async function _runProject(): Promise<void> {
   // Sin archivos cargados a mano — si hay proyecto activo, se analiza directo
   // del disco (mismo patrón que Issues, ver analyzeAllFiles en components/app.ts).
@@ -206,7 +196,8 @@ async function _runProject(): Promise<void> {
     try {
       const data = await api.staticParseProjectById(state.activeProjectId)
       _renderProjectResult(data)
-      appendLog('ok', `🔬 Proyecto activo: ${data.summary.total_files} archivos analizados`, 'be')
+      _syncDashboardHealth(data.health)
+      appendLog('ok', `Proyecto activo: ${data.summary.total_files} archivos analizados`, 'be')
     } catch (e) {
       _showError((e as Error).message)
     } finally {
@@ -225,7 +216,8 @@ async function _runProject(): Promise<void> {
     const files = state.files.map((f) => ({ filename: f.name, content: f.content }))
     const data = await api.staticParseProject(files)
     _renderProjectResult(data)
-    appendLog('ok', `🔬 Proyecto: ${files.length} archivos analizados`, 'be')
+    _syncDashboardHealth(data.health)
+    appendLog('ok', `Proyecto: ${files.length} archivos analizados`, 'be')
   } catch (e) {
     _showError((e as Error).message)
   } finally {
@@ -240,10 +232,10 @@ function _renderResult(r: StaticResult): void {
 
   // Badge de lenguaje
   const badge = document.getElementById('st-lang-badge')!
-  badge.textContent = `${LANG_ICON[r.language] ?? '📄'} ${r.language}`
+  badge.innerHTML = `${languageBadgeByName(r.language)} <span style="font-family:var(--mono);font-size:.68rem;color:var(--muted)">${esc(r.language)}</span>`
 
   if (r.error) {
-    body.innerHTML = `<div class="st-error">⚠️ ${esc(r.error)}</div>`
+    body.innerHTML = `<div class="st-error">${icon('warning', 14)} ${esc(r.error)}</div>`
     return
   }
 
@@ -253,6 +245,9 @@ function _renderResult(r: StaticResult): void {
 
     <!-- Security findings -->
     ${r.security_findings?.length ? _renderSecurityFindings(r.security_findings) : ''}
+
+    <!-- Structural smells -->
+    ${r.structural_smells?.length ? _renderStructuralSmells(r.structural_smells) : ''}
 
     <!-- Big O table -->
     ${_renderBigOTable(r.functions)}
@@ -286,18 +281,17 @@ function _renderSummaryCards(r: StaticResult): string {
 
   return `
   <div class="st-summary-row">
-    ${sc('📐', String(s.total_functions ?? r.functions.length), 'Funciones')}
-    ${sc('🏛', String(s.total_classes ?? r.classes.length), 'Clases')}
-    ${sc('📦', String(s.total_imports ?? r.imports.length), 'Imports')}
-    ${sc('🗑️', String(s.unused_imports ?? r.dead_code.length), 'No usados', s.unused_imports ? 'var(--warn)' : undefined)}
-    ${sc('🧮', avg.toFixed(1), 'CC promedio', avgColor)}
-    ${sc('📏', String(s.max_loc_function ?? 0), 'Max LOC/fn')}
+    ${sc(String(s.total_functions ?? r.functions.length), 'Funciones')}
+    ${sc(String(s.total_classes ?? r.classes.length), 'Clases')}
+    ${sc(String(s.total_imports ?? r.imports.length), 'Imports')}
+    ${sc(String(s.unused_imports ?? r.dead_code.length), 'No usados', s.unused_imports ? 'var(--warn)' : undefined)}
+    ${sc(avg.toFixed(1), 'CC promedio', avgColor)}
+    ${sc(String(s.max_loc_function ?? 0), 'Max LOC/fn')}
   </div>`
 }
 
-function sc(icon: string, val: string, label: string, color?: string): string {
+function sc(val: string, label: string, color?: string): string {
   return `<div class="st-stat">
-    <div class="st-stat-icon">${icon}</div>
     <div class="st-stat-val"${color ? ` style="color:${color}"` : ''}>${esc(val)}</div>
     <div class="st-stat-lbl">${label}</div>
   </div>`
@@ -315,12 +309,12 @@ function _renderBigOTable(functions: ParsedFunction[]): string {
         ${f.is_async ? '<span class="bigo-async">async</span>' : ''}
         ${
           f.is_recursive
-            ? `<span class="bigo-recursion ${f.is_tail_recursive ? 'bigo-recursion-tail' : 'bigo-recursion-notail'}" title="${esc(f.recursion_note ?? '')}">🔁 ${f.is_tail_recursive ? 'tail-call' : 'recursión'}</span>`
+            ? `<span class="bigo-recursion ${f.is_tail_recursive ? 'bigo-recursion-tail' : 'bigo-recursion-notail'}" title="${esc(f.recursion_note ?? '')}">${f.is_tail_recursive ? 'tail-call' : 'recursión'}</span>`
             : ''
         }
-        ${f.regex_class ? `<span class="bigo-cs-badge bigo-regex" title="${esc(f.regex_note ?? '')}">🔤 Regex</span>` : ''}
-        ${f.grammar_class ? `<span class="bigo-cs-badge bigo-grammar" title="${esc(f.grammar_note ?? '')}">🌳 CFG</span>` : ''}
-        ${f.graph_traversal ? `<span class="bigo-cs-badge bigo-graph" title="${esc(f.graph_traversal_note ?? '')}">🕸️ ${esc(f.graph_traversal)}</span>` : ''}
+        ${f.regex_class ? `<span class="bigo-cs-badge bigo-regex" title="${esc(f.regex_note ?? '')}">Regex</span>` : ''}
+        ${f.grammar_class ? `<span class="bigo-cs-badge bigo-grammar" title="${esc(f.grammar_note ?? '')}">CFG</span>` : ''}
+        ${f.graph_traversal ? `<span class="bigo-cs-badge bigo-graph" title="${esc(f.graph_traversal_note ?? '')}">${esc(f.graph_traversal)}</span>` : ''}
       </td>
       <td><span class="bigo-badge" style="color:${color};border-color:${color}">${esc(f.big_o)}</span></td>
       <td class="bigo-thetaomega">${f.big_o_theta ? esc(f.big_o_theta) : '—'} / ${f.big_o_omega ? esc(f.big_o_omega) : '—'}</td>
@@ -335,9 +329,9 @@ function _renderBigOTable(functions: ParsedFunction[]): string {
 
   return `
   <div class="metric-section">
-    <div class="ms-title">📊 Algorithm Complexity — Big O</div>
+    <div class="ms-title">Algorithm Complexity — Big O</div>
     <details class="bigo-notation-ref">
-      <summary>📐 Notación asintótica — referencia</summary>
+      <summary>Notación asintótica — referencia</summary>
       <table class="bigo-notation-table">
         <tbody>
           <tr><td><code>O</code></td><td>Cota superior (peor caso)</td><td>El caso más lento que Sythrall detecta</td></tr>
@@ -370,7 +364,7 @@ function _renderFunctions(functions: ParsedFunction[]): string {
 
   return `
   <div class="metric-section">
-    <div class="ms-title">⚙️ Funciones (${functions.length})</div>
+    <div class="ms-title">Funciones (${functions.length})</div>
     ${functions
       .map((f) => {
         const color = BIG_O_COLOR[f.big_o] ?? 'var(--muted)'
@@ -395,7 +389,7 @@ function _renderFunctions(functions: ParsedFunction[]): string {
 }
 
 function _renderClasses(classes: ParsedClass[], lang: string): string {
-  const title = lang === 'c' ? '🏗 Structs/Unions' : lang === 'cpp' ? '🏛 Clases C++' : '🏛 Clases'
+  const title = lang === 'c' ? 'Structs/Unions' : lang === 'cpp' ? 'Clases C++' : 'Clases'
   return `
   <div class="metric-section">
     <div class="ms-title">${title} (${classes.length})</div>
@@ -427,8 +421,8 @@ function _renderClasses(classes: ParsedClass[], lang: string): string {
 function _renderImports(imports: ParsedImport[], dead: StaticResult['dead_code']): string {
   return `
   <div class="metric-section">
-    <div class="ms-title">📦 Imports (${imports.length})
-      ${dead.length ? `<span style="color:var(--warn);font-size:.65rem;margin-left:8px">⚠️ ${dead.length} no usados</span>` : ''}
+    <div class="ms-title">Imports (${imports.length})
+      ${dead.length ? `<span style="color:var(--warn);font-size:.65rem;margin-left:8px">${icon('warning', 12)} ${dead.length} no usados</span>` : ''}
     </div>
     <div class="st-import-grid">
       ${imports
@@ -454,7 +448,7 @@ function _renderInterfaces(
 ): string {
   return `
   <div class="metric-section">
-    <div class="ms-title">🔷 TypeScript — Interfaces & Types</div>
+    <div class="ms-title">TypeScript — Interfaces & Types</div>
     <div class="st-import-grid">
       ${interfaces
         .map(
@@ -483,7 +477,7 @@ function _renderInterfaces(
 function _renderCallGraph(edges: Array<{ from: string; to: string }>): string {
   return `
   <div class="metric-section">
-    <div class="ms-title">🔗 Call Graph (${edges.length} conexiones)</div>
+    <div class="ms-title">Call Graph (${edges.length} conexiones)</div>
     <div class="st-callgraph">
       ${edges
         .map(
@@ -501,11 +495,11 @@ function _renderCallGraph(edges: Array<{ from: string; to: string }>): string {
 
 function _renderWasmHints(hints: WasmHint[]): string {
   const priorityLabel = (p: number) =>
-    p >= 5 ? ['🔴 Crítico', 'var(--err)'] : p >= 3 ? ['🟠 Alto', '#ff8a00'] : ['🟡 Medio', 'var(--warn)']
+    p >= 5 ? ['Crítico', 'var(--err)'] : p >= 3 ? ['Alto', '#ff8a00'] : ['Medio', 'var(--warn)']
 
   return `
   <div class="metric-section">
-    <div class="ms-title">⚡ WASM / Cython — Hot Paths (${hints.length})</div>
+    <div class="ms-title">WASM / Cython — Hot Paths (${hints.length})</div>
     ${hints
       .map((h) => {
         const [label, color] = priorityLabel(h.priority)
@@ -514,12 +508,12 @@ function _renderWasmHints(hints: WasmHint[]): string {
           <span class="st-fn-name">${esc(h.function)}</span>
           <span style="font-size:.65rem;color:${color};font-family:var(--mono)">${label}</span>
           <span class="st-fn-line">línea ${h.line}</span>
-          <span style="margin-left:auto;font-size:.65rem;color:var(--ok)">⚡ ${esc(h.estimated_speedup)}</span>
+          <span style="margin-left:auto;font-size:.65rem;color:var(--ok)">${esc(h.estimated_speedup)}</span>
         </div>
         <ul class="st-wasm-reasons">
           ${h.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}
         </ul>
-        <div class="st-wasm-rec">💡 ${esc(h.recommendation)}</div>
+        <div class="st-wasm-rec">${esc(h.recommendation)}</div>
       </div>`
       })
       .join('')}
@@ -532,12 +526,13 @@ function _renderSecurityFindings(findings: SecurityFinding[]): string {
 
   return `
   <div class="metric-section">
-    <div class="ms-title">🔐 Security & Taint (${findings.length}) <span class="sec-disclaimer">— patrones heurísticos, no un reemplazo de SAST</span></div>
+    <div class="ms-title">${icon('shield', 14)} Security & Taint (${findings.length}) <span class="sec-disclaimer">— patrones heurísticos, no un reemplazo de SAST</span></div>
     ${findings
       .map((f) => {
         const color = sevColor(f.severity)
         return `<div class="st-wasm-item sec-finding">
         <div class="st-fn-head">
+          ${f.file ? `<span class="sec-cwe">${esc(f.file)}</span>` : ''}
           <span class="st-fn-name">${esc(f.category)}</span>
           <span class="sec-cwe">${esc(f.cwe)}</span>
           <span style="font-size:.65rem;color:${color};font-family:var(--mono)">${esc(f.severity)}</span>
@@ -548,11 +543,49 @@ function _renderSecurityFindings(findings: SecurityFinding[]): string {
         <div class="sec-flow">
           <code>${esc(f.source)}</code>${f.sink ? ` → <code>${esc(f.sink)}</code>` : ''}
         </div>
-        <div class="st-wasm-rec">💡 ${esc(f.recommendation)}</div>
+        <div class="st-wasm-rec">${esc(f.recommendation)}</div>
       </div>`
       })
       .join('')}
   </div>`
+}
+
+const SMELL_LABEL: Record<StructuralSmell['kind'], [string, string]> = {
+  long_function: ['Función larga', 'var(--warn)'],
+  excessive_parameters: ['Exceso de parámetros', 'var(--warn)'],
+  deep_nesting: ['Anidamiento profundo', 'var(--warn)'],
+  large_class: ['Clase grande', '#ff8a00'],
+  god_object: ['God object', 'var(--err)'],
+}
+
+function _renderStructuralSmells(smells: StructuralSmell[]): string {
+  return `
+  <div class="metric-section">
+    <div class="ms-title">Structural Smells (${smells.length})</div>
+    ${smells
+      .map((s) => {
+        const [label, color] = SMELL_LABEL[s.kind] ?? [s.kind, 'var(--muted)']
+        return `<div class="st-wasm-item">
+        <div class="st-fn-head">
+          ${s.file ? `<span class="sec-cwe">${esc(s.file)}</span>` : ''}
+          <span class="st-fn-name">${esc(s.name)}</span>
+          <span style="font-size:.65rem;color:${color};font-family:var(--mono)">${label}</span>
+          <span class="st-fn-line" style="margin-left:auto">línea ${s.line}</span>
+        </div>
+        <div class="st-wasm-rec">${esc(s.message)}</div>
+      </div>`
+      })
+      .join('')}
+  </div>`
+}
+
+const SEC_SEV_ORDER: Record<string, number> = { High: 0, Medium: 1, Low: 2 }
+const SMELL_KIND_ORDER: Record<StructuralSmell['kind'], number> = {
+  god_object: 0,
+  large_class: 1,
+  deep_nesting: 2,
+  long_function: 3,
+  excessive_parameters: 4,
 }
 
 // ─── Render proyecto ──────────────────────────────────────────────────────────
@@ -561,6 +594,12 @@ function _renderProjectResult(data: StaticProjectResult): void {
   const body = document.getElementById('st-body')!
   const s = data.summary
   const dist = s.big_o_distribution ?? {}
+  const projectFindings = [...(data.security_findings ?? [])].sort(
+    (a, b) => SEC_SEV_ORDER[a.severity] - SEC_SEV_ORDER[b.severity],
+  )
+  const projectSmells = [...(data.structural_smells ?? [])].sort(
+    (a, b) => SMELL_KIND_ORDER[a.kind] - SMELL_KIND_ORDER[b.kind],
+  )
 
   const distRows = Object.entries(dist)
     .sort((a, b) => {
@@ -584,20 +623,26 @@ function _renderProjectResult(data: StaticProjectResult): void {
   const candidates = data.wasm_candidates ?? []
 
   body.innerHTML = `
+    ${data.health ? renderHealthCards(data.health) : ''}
+
     <div class="st-summary-row">
-      ${sc('📁', String(s.total_files ?? 0), 'Archivos')}
-      ${sc('⚙️', String(s.total_functions ?? 0), 'Funciones')}
-      ${sc('🏛', String(s.total_classes ?? 0), 'Clases')}
-      ${sc('📦', String(s.total_imports ?? 0), 'Imports')}
-      ${sc('🗑️', String(s.unused_imports ?? 0), 'No usados', s.unused_imports ? 'var(--warn)' : undefined)}
-      ${sc('⚡', String(s.wasm_candidates ?? 0), 'WASM candidates', s.wasm_candidates ? 'var(--warn)' : undefined)}
+      ${sc(String(s.total_files ?? 0), 'Archivos')}
+      ${sc(String(s.total_functions ?? 0), 'Funciones')}
+      ${sc(String(s.total_classes ?? 0), 'Clases')}
+      ${sc(String(s.total_imports ?? 0), 'Imports')}
+      ${sc(String(s.unused_imports ?? 0), 'No usados', s.unused_imports ? 'var(--warn)' : undefined)}
+      ${sc(String(s.wasm_candidates ?? 0), 'WASM candidates', s.wasm_candidates ? 'var(--warn)' : undefined)}
     </div>
+
+    ${projectFindings.length ? _renderSecurityFindings(projectFindings) : ''}
+
+    ${projectSmells.length ? _renderStructuralSmells(projectSmells) : ''}
 
     ${
       distRows
         ? `
     <div class="metric-section">
-      <div class="ms-title">📊 Distribución Big O del proyecto</div>
+      <div class="ms-title">Distribución Big O del proyecto</div>
       <div style="padding:4px 0">${distRows}</div>
     </div>`
         : ''
@@ -607,12 +652,12 @@ function _renderProjectResult(data: StaticProjectResult): void {
       candidates.length
         ? `
     <div class="metric-section">
-      <div class="ms-title">⚡ WASM / Cython candidates</div>
+      <div class="ms-title">WASM / Cython candidates</div>
       ${candidates
         .map(
           (c) => `
         <div style="margin-bottom:8px">
-          <div style="font-size:.72rem;font-weight:600;color:var(--info);margin-bottom:4px">📄 ${esc(c.file)}</div>
+          <div style="font-size:.72rem;font-weight:600;color:var(--info);margin-bottom:4px">${esc(c.file)}</div>
           ${c.hints
             .map(
               (h) => `
@@ -620,7 +665,7 @@ function _renderProjectResult(data: StaticProjectResult): void {
               <div class="st-fn-head">
                 <span class="st-fn-name">${esc(h.function)}</span>
                 <span style="font-size:.65rem;color:var(--warn)">priority ${h.priority}</span>
-                <span style="margin-left:auto;font-size:.65rem;color:var(--ok)">⚡ ${esc(h.estimated_speedup)}</span>
+                <span style="margin-left:auto;font-size:.65rem;color:var(--ok)">${esc(h.estimated_speedup)}</span>
               </div>
             </div>`,
             )
@@ -647,16 +692,15 @@ function _setLoading(on: boolean): void {
   const body = document.getElementById('st-body')
   if (on) {
     btn?.setAttribute('disabled', '')
-    if (btn) btn.textContent = '⏳ Analizando...'
+    if (btn) btn.textContent = 'Analizando...'
     if (body)
       body.innerHTML = `
       <div class="empty">
-        <span class="empty-icon">⚙️</span>
         Parseando AST...
       </div>`
   } else {
     btn?.removeAttribute('disabled')
-    if (btn) btn.textContent = '🔬 Analizar'
+    if (btn) btn.textContent = 'Analizar'
   }
 }
 
@@ -664,7 +708,7 @@ function _showError(msg: string): void {
   const body = document.getElementById('st-body')
   if (body)
     body.innerHTML = `
-    <div class="st-error">⚠️ ${esc(msg)}</div>`
+    <div class="st-error">${icon('warning', 14)} ${esc(msg)}</div>`
 }
 
 function esc(s: string | number | undefined): string {

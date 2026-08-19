@@ -188,7 +188,17 @@ x = add(1, 2)
             },
         )
         data = res.json()
-        for key in ("filename", "ts", "issues", "metrics", "complexity", "maintainability", "raw_stats", "tools_used"):
+        for key in (
+            "filename",
+            "ts",
+            "issues",
+            "metrics",
+            "complexity",
+            "maintainability",
+            "halstead",
+            "raw_stats",
+            "tools_used",
+        ):
             assert key in data, f"Falta clave: {key}"
 
     def test_analyze_empty_content(self):

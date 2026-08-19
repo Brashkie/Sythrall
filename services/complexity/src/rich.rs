@@ -15,6 +15,7 @@ use crate::complexity::cyclomatic;
 use crate::parser::{line_of_offset, parse_module};
 use crate::recursion;
 use crate::security::{self, SecurityFinding};
+use crate::smells::{self, StructuralSmell};
 use crate::space;
 use crate::structure::{self, RichClass, RichImport};
 
@@ -63,6 +64,7 @@ pub struct RichAnalysisResult {
     pub classes: Vec<RichClass>,
     pub imports: Vec<RichImport>,
     pub security_findings: Vec<SecurityFinding>,
+    pub structural_smells: Vec<StructuralSmell>,
     pub summary: RichSummary,
     pub error: Option<String>,
 }
@@ -76,6 +78,7 @@ pub fn analyze_rich(content: &str) -> RichAnalysisResult {
                 classes: Vec::new(),
                 imports: Vec::new(),
                 security_findings: Vec::new(),
+                structural_smells: Vec::new(),
                 summary: RichSummary {
                     total_functions: 0,
                     total_classes: 0,
@@ -90,12 +93,19 @@ pub fn analyze_rich(content: &str) -> RichAnalysisResult {
 
     let mut functions = Vec::new();
     let mut security_findings = Vec::new();
-    collect_functions(content, &suite, &mut functions, &mut security_findings);
+    let mut structural_smells = Vec::new();
+    collect_functions(content, &suite, &mut functions, &mut security_findings, &mut structural_smells);
     security_findings.extend(security::hardcoded_credentials(content, &suite));
     security_findings.sort_by_key(|f| f.line);
 
     let classes = structure::extract_classes(content, &suite);
     let imports = structure::extract_imports(content, &suite);
+
+    for c in &classes {
+        structural_smells.extend(smells::check_large_class(&c.name, c.line, c.methods.len(), c.loc));
+        structural_smells.extend(smells::check_god_object(&c.name, c.line, c.methods.len(), c.attribute_count));
+    }
+    structural_smells.sort_by_key(|s| s.line);
 
     let total_functions = functions.len();
     let avg_complexity = if total_functions == 0 {
@@ -117,31 +127,53 @@ pub fn analyze_rich(content: &str) -> RichAnalysisResult {
         classes,
         imports,
         security_findings,
+        structural_smells,
         error: None,
     }
 }
 
-fn collect_functions(source: &str, body: &[Stmt], out: &mut Vec<RichFunction>, security_out: &mut Vec<SecurityFinding>) {
+fn collect_functions(
+    source: &str,
+    body: &[Stmt],
+    out: &mut Vec<RichFunction>,
+    security_out: &mut Vec<SecurityFinding>,
+    smells_out: &mut Vec<StructuralSmell>,
+) {
     for stmt in body {
         match stmt {
             Stmt::FunctionDef(f) => {
                 security_out.extend(security::security_findings(&f.name, &f.body, source));
-                out.push(build_function(source, &f.name, f.range, &f.body, &f.args, &f.decorator_list, f.returns.is_some(), false));
+                let rf = build_function(source, &f.name, f.range, &f.body, &f.args, &f.decorator_list, f.returns.is_some(), false);
+                smells_out.extend(function_smells(&rf, &f.body));
+                out.push(rf);
             }
             Stmt::AsyncFunctionDef(f) => {
                 security_out.extend(security::security_findings(&f.name, &f.body, source));
-                out.push(build_function(source, &f.name, f.range, &f.body, &f.args, &f.decorator_list, f.returns.is_some(), true));
+                let rf = build_function(source, &f.name, f.range, &f.body, &f.args, &f.decorator_list, f.returns.is_some(), true);
+                smells_out.extend(function_smells(&rf, &f.body));
+                out.push(rf);
             }
-            Stmt::ClassDef(c) => collect_functions(source, &c.body, out, security_out),
+            Stmt::ClassDef(c) => collect_functions(source, &c.body, out, security_out, smells_out),
             _ => {}
         }
         // Funciones anidadas dentro de otros statements (if/for/with/try a
         // nivel de módulo, poco común pero `ast.walk` las encontraría) — se
         // cubre recorriendo también los cuerpos anidados no-función.
         for child in nested(stmt) {
-            collect_functions(source, child, out, security_out);
+            collect_functions(source, child, out, security_out, smells_out);
         }
     }
+}
+
+/// Smells a nivel de función (Fase 22): función larga, exceso de parámetros,
+/// anidamiento profundo — los otros dos (large_class/god_object) se calculan
+/// aparte, a nivel de clase, en `analyze_rich`.
+fn function_smells(rf: &RichFunction, body: &[Stmt]) -> Vec<StructuralSmell> {
+    let mut out = Vec::new();
+    out.extend(smells::check_long_function(&rf.name, rf.line, rf.loc));
+    out.extend(smells::check_excessive_parameters(&rf.name, rf.line, rf.args.len()));
+    out.extend(smells::check_deep_nesting(&rf.name, rf.line, body));
+    out
 }
 
 fn nested(stmt: &Stmt) -> Vec<&[Stmt]> {

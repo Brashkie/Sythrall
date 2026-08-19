@@ -9,7 +9,7 @@
 
 import { getApiBase } from '../store/state'
 import type { CodeFile, Issue } from '../types'
-import { languageBadge } from '../utils/icons'
+import { icon, languageBadge } from '../utils/icons'
 
 // ─── Estado ───────────────────────────────────────────────────────────────────
 
@@ -80,7 +80,7 @@ function _ensureMetricsBar(): void {
     <span class="lm-item lm-parse" id="lm-parse" title="Parse time">—ms</span>
     <span class="lm-sep">·</span>
     <span class="lm-item lm-lang" id="lm-lang">—</span>
-    <span class="lm-safe" id="lm-safe" style="display:none" title="Safe mode: AST failed, using regex fallback">⚠ safe</span>
+    <span class="lm-safe" id="lm-safe" style="display:none" title="Safe mode: AST failed, using regex fallback">${icon('warning', 11)} safe</span>
   `
 
   // Insertar ANTES del panel de editor
@@ -163,7 +163,7 @@ export function updateProblems(file: CodeFile, liveMetrics?: LiveMetricsData): v
     <div class="pb-header">
       <span class="pb-filename">${_icon(file.ext)} ${file.name}</span>
       <div class="pb-counts">
-        ${errors.length ? `<span class="pb-count pb-err">⚠ ${errors.length} error${errors.length !== 1 ? 'es' : ''}</span>` : ''}
+        ${errors.length ? `<span class="pb-count pb-err">${icon('warning', 11)} ${errors.length} error${errors.length !== 1 ? 'es' : ''}</span>` : ''}
         ${warnings.length ? `<span class="pb-count pb-warn">△ ${warnings.length} warn</span>` : ''}
         ${infos.length ? `<span class="pb-count pb-info">ℹ ${infos.length} info</span>` : ''}
         ${!file.issues.length ? `<span class="pb-count pb-ok">✓ Sin problemas</span>` : ''}
@@ -194,7 +194,7 @@ export function updateProblems(file: CodeFile, liveMetrics?: LiveMetricsData): v
         ${
           liveMetrics.safe_mode
             ? `
-          <div class="pb-safe-mode">⚠ Safe mode activo — AST falló, usando regex fallback</div>
+          <div class="pb-safe-mode">${icon('warning', 12)} Safe mode activo — AST falló, usando regex fallback</div>
         `
             : ''
         }
@@ -204,13 +204,13 @@ export function updateProblems(file: CodeFile, liveMetrics?: LiveMetricsData): v
 
   // Sección por categoría
   if (security.length) {
-    html += _problemSection('🔒 Security', security, 'pb-security')
+    html += _problemSection(`${icon('shield', 12)} Security`, security, 'pb-security')
   }
   if (errors.length) {
-    html += _problemSection('🔴 Errors', errors, 'pb-err-section')
+    html += _problemSection('Errors', errors, 'pb-err-section')
   }
   if (warnings.length) {
-    html += _problemSection('🟡 Warnings', warnings, 'pb-warn-section')
+    html += _problemSection('Warnings', warnings, 'pb-warn-section')
   }
   if (infos.length) {
     html += _problemSection('ℹ Info', infos, 'pb-info-section')
@@ -220,7 +220,7 @@ export function updateProblems(file: CodeFile, liveMetrics?: LiveMetricsData): v
   if (liveMetrics?.big_o_dist && Object.keys(liveMetrics.big_o_dist).length) {
     html += `
       <div class="pb-section">
-        <div class="pb-section-head">📊 Big-O Distribution</div>
+        <div class="pb-section-head">Big-O Distribution</div>
         <div class="pb-bigo-dist">
           ${Object.entries(liveMetrics.big_o_dist)
             .sort(([a], [b]) => _bigoRank(b) - _bigoRank(a))

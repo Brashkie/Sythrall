@@ -251,20 +251,6 @@ def extract_zip(content: bytes, dest_dir: Path) -> dict:
     return {"extracted": extracted, "skipped": skipped, "errors": errors}
 
 
-# ─── Guardar archivos desde memoria ──────────────────────────────────────────
-
-
-def save_files(files_data: list[dict], dest_dir: Path) -> list[dict]:
-    """Guarda una lista de {path, content_bytes} en dest_dir."""
-    saved = []
-    for f in files_data:
-        dest = dest_dir / f["path"]
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(f["content"])
-        saved.append({"path": f["path"], "size": len(f["content"])})
-    return saved
-
-
 # ─── Info del proyecto ────────────────────────────────────────────────────────
 
 
