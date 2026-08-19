@@ -114,12 +114,7 @@ class TestSmellShape:
                 assert key in s
 
     def test_smells_sorted_by_line(self):
-        code = (
-            "def big(a, b, c, d, e, f):\n"
-            "    return a\n\n\n"
-            "def small():\n"
-            "    return 1\n"
-        )
+        code = "def big(a, b, c, d, e, f):\n" "    return a\n\n\n" "def small():\n" "    return 1\n"
         smells = _smells(code)
         lines = [s["line"] for s in smells]
         assert lines == sorted(lines)

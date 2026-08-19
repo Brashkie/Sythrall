@@ -166,12 +166,8 @@ async def parse_project(req: ParseProjectRequest) -> dict[str, Any]:
     # Agregación pura sobre resultados ya calculados (Rust-first desde las Fases
     # 21/22) — mismo tipo de glue code que big_o_distribution/wasm_candidates
     # arriba, no lógica de análisis nueva.
-    security_findings = [
-        {**f, "file": r["filename"]} for r in results for f in r.get("security_findings", [])
-    ]
-    structural_smells = [
-        {**s, "file": r["filename"]} for r in results for s in r.get("structural_smells", [])
-    ]
+    security_findings = [{**f, "file": r["filename"]} for r in results for f in r.get("security_findings", [])]
+    structural_smells = [{**s, "file": r["filename"]} for r in results for s in r.get("structural_smells", [])]
     all_complexities = [fn.get("complexity", 1) for r in results for fn in r.get("functions", [])]
     avg_complexity = round(sum(all_complexities) / len(all_complexities), 2) if all_complexities else 0.0
 

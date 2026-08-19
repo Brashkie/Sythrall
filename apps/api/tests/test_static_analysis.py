@@ -195,7 +195,7 @@ class TestProjectHealth:
     SQLI_FILE = (
         "def run_query(request):\n"
         "    username = request.args.get('username')\n"
-        "    query = \"SELECT * FROM users WHERE name = '\" + username + \"'\"\n"
+        '    query = "SELECT * FROM users WHERE name = \'" + username + "\'"\n'
         "    cursor.execute(query)\n"
     )
     LONG_FN_FILE = "def big(a, b, c, d, e, f):\n" + "    x = 1\n" * 55 + "    return x\n"

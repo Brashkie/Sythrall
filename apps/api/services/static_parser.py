@@ -1584,11 +1584,7 @@ def _count_self_attributes_python(class_node: ast.ClassDef) -> int:
             for n in _own_scope_nodes(item):
                 if isinstance(n, ast.Assign):
                     for t in n.targets:
-                        if (
-                            isinstance(t, ast.Attribute)
-                            and isinstance(t.value, ast.Name)
-                            and t.value.id == "self"
-                        ):
+                        if isinstance(t, ast.Attribute) and isinstance(t.value, ast.Name) and t.value.id == "self":
                             attrs.add(t.attr)
     return len(attrs)
 
