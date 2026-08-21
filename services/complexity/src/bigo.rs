@@ -150,7 +150,7 @@ pub fn full(body: &[Stmt], name: &str, is_recursive: bool) -> (BigO, Option<Divi
     let (theta, omega) = theta_omega(has_early_exit, &big_o);
     let signal = if is_recursive && binary {
         let a = divide_conquer_factor(body, name);
-        (a > 0).then(|| DivideConquerSignal { a, c_own: depth })
+        (a > 0).then_some(DivideConquerSignal { a, c_own: depth })
     } else {
         None
     };

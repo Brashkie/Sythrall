@@ -156,9 +156,7 @@ async def _parse_all(files: list[dict]) -> list[dict]:
     HTTP para `.py`, no vale la pena serializar esos round-trips."""
     from services.static_parser import parse_file
 
-    to_parse = [
-        (f.get("filename", "unknown"), f.get("content", "")) for f in files if f.get("content", "").strip()
-    ]
+    to_parse = [(f.get("filename", "unknown"), f.get("content", "")) for f in files if f.get("content", "").strip()]
     parsed_list = await asyncio.gather(*(parse_file(fname, content) for fname, content in to_parse))
 
     results = []

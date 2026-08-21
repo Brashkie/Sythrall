@@ -184,7 +184,13 @@ def _extract_imports_python(tree: ast.AST) -> list[dict]:
             mod = node.module or ""
             for alias in node.names:
                 imports.append(
-                    {"module": mod, "name": alias.name, "alias": alias.asname, "type": "from_import", "line": node.lineno}
+                    {
+                        "module": mod,
+                        "name": alias.name,
+                        "alias": alias.asname,
+                        "type": "from_import",
+                        "line": node.lineno,
+                    }
                 )
     return imports
 

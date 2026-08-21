@@ -360,9 +360,7 @@ class TestProjectHealth:
         helpers = [{"filename": f"helper_{i}.py", "content": f"x = {i}\n"} for i in range(4)]
         core_content = "".join(f"import helper_{i}\n" for i in range(4))
         dependents = [{"filename": f"dep_{c}.py", "content": "import core\n"} for c in ("a", "b", "c")]
-        data = self._parse_project(
-            [{"filename": "core.py", "content": core_content}, *helpers, *dependents]
-        )
+        data = self._parse_project([{"filename": "core.py", "content": core_content}, *helpers, *dependents])
         smells = [s for s in data["architecture_smells"] if s["kind"] == "unstable_dependency"]
         assert len(smells) == 1
         assert smells[0]["name"] == "core.py"
