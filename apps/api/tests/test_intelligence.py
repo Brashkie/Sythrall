@@ -227,14 +227,28 @@ class TestHeavyAnalyze:
         assert "big_o" in data
         assert len(data["big_o"]) >= 2
 
-    def test_analyze_halstead_key_present_without_sidecar(self):
-        """Fase 22: sin sidecar (no corre en pytest), `halstead` tiene que
-        seguir presente en metrics, en None — no faltar la key."""
+    def test_analyze_halstead_key_present_with_sidecar(self):
+        """Fase 22: `halstead` es Rust-only — con el sidecar arriba
+        (`conftest.py` lo levanta para toda la sesión), viene con números
+        reales, no None."""
         data = client.post(
             "/intel/analyze", json={"filename": "test.py", "content": PY_ISSUES, "tools": ["ast", "complexity"]}
         ).json()
         assert "halstead" in data["metrics"]
-        assert data["metrics"]["halstead"] is None
+        assert data["metrics"]["halstead"] is not None
+        assert "effort" in data["metrics"]["halstead"]
+
+    def test_analyze_findings_keys_present_with_sidecar(self):
+        """Fases 21/22 cableadas al Editor, Rust-only — `PY_ISSUES` no tiene
+        taint/smells estructurales pero sí variables de una letra (`n`, `x`),
+        así que `naming_smells` viene con contenido real; `security_findings`/
+        `structural_smells` siguen vacíos porque el snippet no dispara ninguno."""
+        data = client.post(
+            "/intel/analyze", json={"filename": "test.py", "content": PY_ISSUES, "tools": ["ast", "complexity"]}
+        ).json()
+        assert data["security_findings"] == []
+        assert data["structural_smells"] == []
+        assert any(s["kind"] == "single_letter_name" for s in data["naming_smells"])
 
     def test_analyze_big_o_bubble(self):
         data = client.post(
@@ -506,7 +520,10 @@ class TestHoverPython:
         ).json()
         assert "O(log n)" in data["markdown"]
 
-    def test_hover_bigo_emoji(self):
+    def test_hover_shows_bigo_value_no_emoji(self):
+        # La severidad del Big-O se comunica con la notación en sí (O(n²) es
+        # autoexplicativo para la audiencia de esta herramienta) y el label de
+        # texto de _cc_label — no con un emoji de semáforo (ver UX audit).
         data = client.post(
             "/intel/hover",
             json={
@@ -517,8 +534,8 @@ class TestHoverPython:
                 "symbol_name": "bubble_sort",
             },
         ).json()
-        # Debe tener uno de los emojis de severity
-        assert any(e in data["markdown"] for e in ["🟢", "🟡", "🔴", "⚪"])
+        assert "O(n" in data["markdown"]
+        assert not any(e in data["markdown"] for e in ["🟢", "🟡", "🟠", "🔴", "⚪"])
 
     def test_hover_notation_reference_footnote(self):
         data = client.post(

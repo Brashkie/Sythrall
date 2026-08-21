@@ -4,7 +4,6 @@
 // panels/apis.ts
 
 import { api } from '../api/client'
-import { renderRTChart } from '../components/charts'
 import { state } from '../store/state'
 import { toast } from '../utils/helpers'
 import { icon } from '../utils/icons'
@@ -62,7 +61,6 @@ export async function recheckAPI(url: string): Promise<void> {
     const idx = state.results.apis.findIndex((a) => a.url === url)
     if (idx >= 0 && res.results[0]) state.results.apis[idx] = res.results[0]
     renderAPICards()
-    renderRTChart()
     toast(`↺ ${url}`, 'ok')
   } catch (e) {
     toast('Error: ' + (e as Error).message, 'err')
@@ -106,22 +104,51 @@ export function renderIssuesList(list?: Issue[]): void {
     }
     return
   }
-  el.innerHTML = items
-    .map(
-      (iss, idx) => `
-    <div class="issue-item ii-${iss.severity}" data-file="${iss.file ?? ''}" style="animation-delay:${idx * 0.02}s">
+  el.innerHTML = _groupByLocation(items)
+    .map((group, idx) => {
+      const first = group[0]
+      const maxSev = group.reduce((sev, i) => (SEV_RANK[i.severity] < SEV_RANK[sev] ? i.severity : sev), first.severity)
+      return `
+    <div class="issue-item ii-${maxSev}" data-file="${first.file ?? ''}" style="animation-delay:${idx * 0.02}s">
       <div class="ii-head">
-        <span class="ii-sev sev-${iss.severity}">${iss.severity.toUpperCase()}</span>
+        <span class="ii-sev sev-${maxSev}">${maxSev.toUpperCase()}</span>
+        <span class="ii-file">${first.file ?? ''}</span>
+        ${first.line ? `<span style="font-family:var(--mono);font-size:.6rem;color:var(--muted)">:${first.line}</span>` : ''}
+      </div>
+      ${group
+        .map(
+          (iss) => `
+      <div class="ii-sub">
         <span class="ii-tool t-${iss.tool}">${iss.tool}</span>
         ${iss.code ? `<span style="font-family:var(--mono);font-size:.6rem;color:var(--muted)">${iss.code}</span>` : ''}
-        <span class="ii-file">${iss.file ?? ''}</span>
-        ${iss.line ? `<span style="font-family:var(--mono);font-size:.6rem;color:var(--muted)">:${iss.line}</span>` : ''}
-      </div>
-      <div class="ii-msg">${iss.message ?? ''}</div>
-      ${iss.preview ? `<div class="ii-preview">→ ${iss.preview.substring(0, 70)}</div>` : ''}
-    </div>`,
-    )
+        <span class="ii-msg">${iss.message ?? ''}</span>
+        ${iss.preview ? `<div class="ii-preview">→ ${iss.preview.substring(0, 70)}</div>` : ''}
+      </div>`,
+        )
+        .join('')}
+    </div>`
+    })
     .join('')
+}
+
+const SEV_RANK: Record<string, number> = { error: 0, warning: 1, info: 2 }
+
+// Agrupa por ubicación (file:line) en vez de intentar detectar "estos dos
+// issues son la misma cosa" por contenido (frágil — flake8 y pylint no
+// siempre coinciden en el texto exacto para el mismo hallazgo, ej. import no
+// usado). Un solo header (severidad máxima del grupo) en vez de repetirlo por
+// cada tool que reporta sobre la misma línea — sin ocultar ningún mensaje,
+// cada uno sigue listado como su propia sub-fila. Grupos de tamaño 1 (el caso
+// común, no hay nada co-ubicado) quedan visualmente idénticos a antes.
+function _groupByLocation(items: Issue[]): Issue[][] {
+  const map = new Map<string, Issue[]>()
+  for (const iss of items) {
+    const key = `${iss.file ?? ''}:${iss.line ?? 0}`
+    const arr = map.get(key)
+    if (arr) arr.push(iss)
+    else map.set(key, [iss])
+  }
+  return [...map.values()]
 }
 
 export function setIssueFilter(sev: string | null, tool?: string): void {

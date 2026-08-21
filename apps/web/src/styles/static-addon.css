@@ -115,6 +115,10 @@
 .sec-cwe {
   font-family: var(--mono); font-size: .6rem; color: var(--muted);
   background: var(--s1); border: 1px solid var(--b0); border-radius: 3px; padding: 1px 5px;
+  /* También se usa para el path de archivo (Structural/Naming Smells,
+   * Security & Taint) — sin punto de quiebre natural, así que sin esto se
+   * sale del flex-wrap del padre en vez de partirse. */
+  max-width: 100%; overflow-wrap: break-word; word-break: break-all; min-width: 0;
 }
 .sec-confidence { font-size: .62rem; color: var(--muted); }
 .sec-flow {
@@ -145,7 +149,7 @@
 .st-fn-head {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px;
 }
-.st-fn-name { font-family: var(--mono); font-size: .82rem; font-weight: 700; color: var(--txt); }
+.st-fn-name { font-family: var(--mono); font-size: .82rem; font-weight: 700; color: var(--txt); max-width: 100%; overflow-wrap: break-word; word-break: break-all; min-width: 0; }
 .st-fn-args { font-family: var(--mono); font-size: .72rem; color: var(--muted); }
 .st-fn-line { font-family: var(--mono); font-size: .62rem; color: var(--b2); }
 .st-fn-meta {
@@ -221,6 +225,11 @@
 /* ─── Responsive ──────────────────────────── */
 @media (max-width: 680px) {
   .st-summary-row { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  /* El Dashboard reusa .st-summary-row con 4 celdas (Files/LOC/Findings/
+   * Last Analysis) en vez de las 6 de Static — a 3 columnas la 4ta queda
+   * huérfana en una fila propia. Más específico que la regla de arriba, así
+   * que gana sin tocar el layout de 6 celdas de Static. */
+  #dash-content .st-summary-row { grid-template-columns: repeat(2, 1fr); }
   .bigo-table .bigo-reason { display: none; }
   .bigo-table .bigo-thetaomega { display: none; }
   .bigo-table .bigo-space { display: none; }

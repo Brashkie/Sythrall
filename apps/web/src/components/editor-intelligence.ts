@@ -15,6 +15,7 @@
 // ══════════════════════════════════════════
 
 import * as monaco from 'monaco-editor'
+import type { NamingSmell, SecurityFinding, StructuralSmell } from '../api/client'
 import { getApiBase } from '../store/state'
 import { appendLog } from '../utils/helpers'
 
@@ -159,6 +160,8 @@ async function _runHeavyAnalyze(): Promise<void> {
     if (hot.length) {
       appendLog('warn', `Hot paths en ${_currentFile}: ${hot.map((f) => `${f.name}(${f.big_o})`).join(', ')}`, 'be')
     }
+    const { updateFileFindings } = await import('../panels/problems')
+    updateFileFindings(data.security_findings ?? [], data.structural_smells ?? [], data.naming_smells ?? [])
   } catch (e) {
     if ((e as Error).name !== 'AbortError') {
       appendLog('warn', `heavy analyze: ${(e as Error).message}`, 'fe')
@@ -507,6 +510,9 @@ interface HeavyResult {
   markers: RawMarker[]
   big_o: Array<{ name: string; line: number; big_o: string; complexity: number }>
   metrics: Record<string, unknown>
+  security_findings: SecurityFinding[]
+  structural_smells: StructuralSmell[]
+  naming_smells: NamingSmell[]
   ms: number
 }
 

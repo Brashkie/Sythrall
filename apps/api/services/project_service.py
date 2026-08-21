@@ -295,6 +295,30 @@ def save_project_meta(project_dir: Path, info: dict) -> None:
         logger.warning(f"No se pudo cachear metadata de {project_dir.name}", exc_info=True)
 
 
+def resolve_project_name(project_dir: Path, info: dict, requested_name: str, fallback: str) -> str:
+    """
+    Resuelve el nombre final del proyecto y lo escribe en `info` (que el
+    caller todavía tiene que persistir con save_project_meta) para que
+    list_projects() pueda mostrarlo después — antes se resolvía un nombre
+    solo para la respuesta HTTP de creación y se perdía para siempre en la
+    próxima carga de "Proyectos recientes", que solo tenía el project_id.
+
+    Si el proyecto ya existía (se le están agregando archivos) y no vino un
+    nombre nuevo, se preserva el que ya tenía en vez de pisarlo con el
+    fallback genérico basado en el id.
+    """
+    preserved = None
+    meta_file = project_dir / META_FILENAME
+    if meta_file.exists():
+        try:
+            preserved = json.loads(meta_file.read_text(encoding="utf-8")).get("project_name")
+        except Exception:
+            pass
+    resolved = requested_name or preserved or fallback
+    info["project_name"] = resolved
+    return resolved
+
+
 def get_project_info_cached(project_dir: Path) -> dict:
     """Lee la metadata cacheada si existe; si no (proyectos subidos antes de
     este cache, o cache corrupto), la calcula y la guarda para la próxima."""

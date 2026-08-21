@@ -26,14 +26,14 @@
     <div class="nav-rail-divider"></div>
 
     <!-- PROJECT -->
+    <div class="tab" id="t-upload" data-tab="upload" title="Proyectos">
+      <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      <span class="tab-label">Proyectos</span>
+    </div>
     <div class="tab" id="t-editor" data-tab="editor" title="Editor">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M9 13h6M9 17h4"/></svg>
       <span class="tab-label">Editor</span>
       <span class="tbadge tbadge-ok" id="tb-files" style="display:none">0</span>
-    </div>
-    <div class="tab" id="t-upload" data-tab="upload" title="Proyectos">
-      <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-      <span class="tab-label">Proyectos</span>
     </div>
     <div class="tab" id="t-diff" data-tab="diff" title="Diff">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg>
@@ -56,15 +56,6 @@
       <span class="tab-label">Diagrama</span>
       <span class="tbadge tbadge-ok" id="tb-diagram" style="display:none">✓</span>
     </div>
-    <div class="tab" id="t-ml" data-tab="ml" title="ML/DL">
-      <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2 2M17.1 17.1l2 2M4.9 19.1l2-2M17.1 6.9l2-2"/></svg>
-      <span class="tab-label">ML/DL</span>
-      <span class="tbadge tbadge-ok" id="tb-ml" style="display:none">✓</span>
-    </div>
-
-    <div class="nav-rail-divider"></div>
-
-    <!-- FINDINGS -->
     <div class="tab" id="t-issues" data-tab="issues" title="Issues">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v5M12 16h.01"/></svg>
       <span class="tab-label">Issues</span>
@@ -73,7 +64,7 @@
 
     <div class="nav-rail-divider"></div>
 
-    <!-- SYSTEM -->
+    <!-- SERVICES -->
     <div class="tab" id="t-apis" data-tab="apis" title="APIs">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 14 0M2 9.5a15 15 0 0 1 20 0"/></svg>
       <span class="tab-label">APIs</span>
@@ -82,6 +73,15 @@
     <div class="tab" id="t-logs" data-tab="logs" title="Logs">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
       <span class="tab-label">Logs</span>
+    </div>
+
+    <div class="nav-rail-divider"></div>
+
+    <!-- AI / ML -->
+    <div class="tab" id="t-ml" data-tab="ml" title="ML/DL">
+      <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2 2M17.1 17.1l2 2M4.9 19.1l2-2M17.1 6.9l2-2"/></svg>
+      <span class="tab-label">ML/DL</span>
+      <span class="tbadge tbadge-ok" id="tb-ml" style="display:none">✓</span>
     </div>
   </nav>
 
@@ -94,10 +94,7 @@
     </button>
     <div class="logo">
       <img class="logo-ring" src="/sythrall-logo.png" alt="Sythrall" />
-      <div>
-        <div class="logo-text">Sythrall</div>
-        <div class="logo-sub">VITE · TS · FASTAPI · PYLINT · ML/DL</div>
-      </div>
+      <div class="logo-text">Sythrall</div>
     </div>
     <div id="be-badge" class="be-badge be-loading"><span>●</span><span id="be-txt">Conectando...</span></div>
     <button class="btn btn-ghost btn-sm" id="terminal-toggle-btn" title="Terminal">
@@ -116,7 +113,7 @@
       </button>
     </div>
     <div class="quick-urls">
-      <button class="btn btn-ghost btn-sm" data-quick-url="http://localhost:8000">:8000</button>
+      <button class="btn btn-ghost btn-sm" data-quick-url="http://localhost:8420">:8420</button>
       <button class="btn btn-ghost btn-sm" data-quick-url="http://localhost:3000">:3000</button>
       <button class="btn btn-ghost btn-sm" data-quick-url="http://localhost:5173">:5173</button>
     </div>
@@ -124,11 +121,11 @@
     <div id="global-pill" class="pill pill-idle"><span class="dot dot-idle"></span><span>SIN ANÁLISIS</span></div>
     <button class="btn btn-ghost btn-sm" id="auto-btn">
       <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-      Auto
+      <span>Auto</span>
     </button>
     <button class="btn btn-ghost btn-sm" id="btn-export">
       <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 19h16"/></svg>
-      ZIP
+      <span>ZIP</span>
     </button>
     <button class="btn btn-run" id="run-btn">
       <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>
@@ -148,6 +145,9 @@
             Archivos
           </span>
           <span class="sb-actions">
+            <button class="btn btn-ghost btn-sm" id="exp-search-btn" title="Buscar (Ctrl+Shift+F)" style="padding:2px 6px">
+              <svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            </button>
             <button class="btn btn-ghost btn-sm" id="btn-add-code">+ Código</button>
             <button class="btn btn-ghost btn-sm" id="btn-add-log">+ Log</button>
             <button class="btn btn-ghost btn-sm" id="btn-add-folder" title="Explorar una carpeta, estilo VSCode">+ Carpeta</button>
@@ -198,27 +198,13 @@
     <div class="center">
 
       <!-- DASHBOARD -->
+      <!-- Project-centric por diseño (ver panels/dashboard.ts): siempre
+           refleja state.activeProjectId, nunca archivos sueltos del Editor
+           ni URLs de APIs pegadas a mano — esas viven en Editor/Static y
+           APIs respectivamente, no acá. -->
       <div class="tab-panel active" id="panel-dashboard">
         <div class="dash-scroll">
-          <div class="stats-row">
-            <div class="stat-card"><div class="sc-lbl">APIs activas</div><div class="sc-val" id="sv-api" style="color:var(--ok)">—</div><div class="sc-sub" id="ss-api">endpoints</div></div>
-            <div class="stat-card"><div class="sc-lbl">Archivos</div><div class="sc-val" id="sv-files" style="color:var(--info)">—</div><div class="sc-sub">cargados</div></div>
-            <div class="stat-card"><div class="sc-lbl">Problemas</div><div class="sc-val" id="sv-issues" style="color:var(--err)">—</div><div class="sc-sub" id="ss-issues">errores</div></div>
-            <div class="stat-card"><div class="sc-lbl">Pylint</div><div class="sc-val" id="sv-score" style="color:var(--warn)">—</div><div class="sc-sub">/10 promedio</div></div>
-          </div>
-          <div class="chart-card wide" style="background:var(--s1);border:1px solid var(--b0);border-radius:var(--radius);padding:14px">
-            <div class="cc-head">PROJECT HEALTH <span class="cc-head-sub" style="color:var(--muted);font-size:.58rem;font-family:var(--mono)">security · quality · complexity · architecture</span></div>
-            <div id="dash-health" style="padding-top:8px"></div>
-          </div>
-          <div class="charts-row">
-            <div class="chart-card"><div class="cc-head"><span>RESPUESTA APIs (ms)</span><span id="rt-avg" style="color:var(--ok);font-family:var(--mono);font-size:.62rem"></span></div><div class="chart-wrap"><canvas id="chart-rt"></canvas></div></div>
-            <div class="chart-card"><div class="cc-head"><span>DISTRIBUCIÓN</span></div><div class="chart-wrap"><canvas id="chart-dist"></canvas></div></div>
-            <div class="chart-card wide"><div class="cc-head"><span>HISTORIAL</span><span id="hist-n" style="color:var(--muted);font-family:var(--mono);font-size:.62rem">0 ejecuciones</span></div><div class="chart-wrap" style="height:90px"><canvas id="chart-hist"></canvas></div></div>
-          </div>
-          <div class="chart-card wide" style="background:var(--s1);border:1px solid var(--b0);border-radius:var(--radius);padding:14px">
-            <div class="cc-head">COMPLEJIDAD POR FUNCIÓN <span style="color:var(--muted);font-size:.58rem;font-family:var(--mono)">radon cyclomatic</span></div>
-            <div id="complexity-bars" style="display:flex;align-items:flex-end;gap:8px;height:72px;overflow-x:auto;padding-bottom:4px"></div>
-          </div>
+          <div id="dash-content"></div>
         </div>
       </div>
 
@@ -226,7 +212,6 @@
       <div class="tab-panel" id="panel-editor">
         <div class="editor-bar">
           <select id="file-sel" class="btn btn-ghost btn-sm" style="font-family:var(--mono);font-size:.67rem"><option value="">— Selecciona archivo —</option></select>
-          <div id="ed-fname" style="font-family:var(--mono);font-size:.67rem;color:var(--info);display:none"></div>
           <div style="flex:1"></div>
           <span id="ed-errs" style="font-family:var(--mono);font-size:.65rem;color:var(--err)"></span>
           <button class="btn btn-ghost btn-sm" id="btn-analyze-file">Analizar</button>
@@ -255,7 +240,7 @@
           <button class="btn btn-ghost btn-sm" data-sev="info"><span class="ui-dot" style="background:var(--info);display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px"></span>Info</button>
           <select class="search-input" id="tool-filter" style="max-width:130px">
             <option value="">Todas las tools</option>
-            <option>flake8</option><option>pylint</option><option>radon</option><option>ast</option>
+            <option>flake8</option><option>pylint</option><option>ast</option>
           </select>
         </div>
         <div class="issues-scroll" id="issues-list"></div>
@@ -507,7 +492,7 @@
     <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M8.6 7.6 15.4 10.4M8.6 16.4 15.4 13.6"/></svg>
     Diagrama
   </button>
-  <div class="bn-more-section-label">System</div>
+  <div class="bn-more-section-label">Services</div>
   <button class="bn-more-item" data-bn-tab="apis">
     <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 14 0M2 9.5a15 15 0 0 1 20 0"/></svg>
     APIs

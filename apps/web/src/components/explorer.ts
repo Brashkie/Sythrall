@@ -4,12 +4,21 @@
 //
 //  API pública (consumida por app.ts / events.ts / file-browser.ts):
 //    initExplorer({ onFileOpen: (f) => ... })  — engancha la apertura de archivos
-//    explorerAddFile(file) / explorerRemoveFile(id)
-//    openSearch()
+//    explorerAddFile(file) / explorerRefreshTree() / explorerClearAll()
+//    explorerSetFolderRoot(root)  — árbol pendiente de "+ Carpeta"
+//    openSearch() / toggleSearch()
+//
+//  Dueño único de #file-tree: árbol jerárquico real (carpetas + archivos
+//  sueltos conviven, ver utils/file-tree.ts::buildMergedTree). La delegación
+//  de click se ata UNA sola vez en initExplorer() — _renderFileTree() nunca
+//  vuelve a tocar listeners, solo innerHTML.
 // ══════════════════════════════════════════
 
+import { MAX_RENDERED_CHILDREN } from '../panels/upload'
 import { state } from '../store/state'
 import type { CodeFile } from '../types'
+import { buildMergedTree, type FolderTreeNode } from '../utils/file-tree'
+import { appendLog, fmtBytes, getExt, toast, uniqueId } from '../utils/helpers'
 import { icon, languageBadge } from '../utils/icons'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -31,6 +40,8 @@ const _tabs: Tab[] = []
 let _activeTabId: string = ''
 let _searchOpen = false
 let _searchQuery = ''
+let _folderRoot: FolderTreeNode | null = null
+const _expandedDirs = new Set<string>()
 
 // ─── Iconos ───────────────────────────────────────────────────────────────────
 
@@ -44,126 +55,105 @@ function extIcon(ext: string): string {
 
 export function initExplorer(opts: ExplorerOptions): void {
   _opts = opts
-  _upgradeFileTree()
+  _renderFileTree()
+  _wireTreeEvents()
   _injectFileTabs()
   _injectSearchOverlay()
   _wireGlobalShortcuts()
 }
 
 // ══════════════════════════════════════════
-//  ÁRBOL DE ARCHIVOS (reemplaza #file-tree)
+//  ÁRBOL DE ARCHIVOS (#file-tree)
 // ══════════════════════════════════════════
-
-function _upgradeFileTree(): void {
-  const container = document.getElementById('file-tree')
-  if (!container) return
-
-  // Reemplazar sb-head con versión mejorada
-  const sbHead = container.previousElementSibling as HTMLElement | null
-  if (sbHead?.classList.contains('sb-head')) {
-    sbHead.innerHTML = `
-      <span>Archivos</span>
-      <div style="display:flex;gap:3px">
-        <button class="btn btn-ghost btn-sm" id="exp-search-btn" title="Buscar (Ctrl+Shift+F)" style="padding:2px 6px">${icon('search', 13)}</button>
-        <button class="btn btn-ghost btn-sm" id="btn-add-code">+ Código</button>
-        <button class="btn btn-ghost btn-sm" id="btn-add-log">+ Log</button>
-      </div>
-    `
-    document.getElementById('exp-search-btn')?.addEventListener('click', toggleSearch)
-  }
-
-  _renderFileTree()
-}
 
 function _renderFileTree(): void {
   const container = document.getElementById('file-tree')
   if (!container) return
 
-  if (!state.files.length) {
+  if (!state.files.length && !_folderRoot) {
     container.innerHTML = `<div class="empty">
       Sin archivos cargados
       <button class="btn btn-ghost btn-sm" id="exp-empty-cta">+ Código</button>
     </div>`
-    document.getElementById('exp-empty-cta')?.addEventListener('click', () => {
-      document.getElementById('btn-add-code')?.click()
-    })
     return
   }
 
-  // Agrupar por extensión (pseudo-árbol)
-  const groups: Record<string, CodeFile[]> = {}
-  for (const f of state.files) {
-    const ext = f.ext || '.txt'
-    if (!groups[ext]) groups[ext] = []
-    groups[ext].push(f)
-  }
-
-  // Renderizar como lista plana con grupos colapsables
-  let html = ''
-
-  if (Object.keys(groups).length > 1) {
-    // Múltiples tipos: agrupar
-    for (const [ext, files] of Object.entries(groups)) {
-      const icon = extIcon(ext)
-      html += `
-        <div class="exp-group" data-ext="${ext}">
-          <div class="exp-group-head" data-toggle-group="${ext}">
-            <span class="exp-arrow">▾</span>
-            <span>${icon} ${ext.toUpperCase().replace('.', '')}</span>
-            <span class="exp-count">${files.length}</span>
-          </div>
-          <div class="exp-group-body" data-group-body="${ext}">
-            ${files.map((f) => _fileNodeHtml(f)).join('')}
-          </div>
-        </div>
-      `
-    }
-  } else {
-    // Un solo tipo: lista plana
-    html = state.files.map((f) => _fileNodeHtml(f)).join('')
-  }
-
-  container.innerHTML = html
-  _attachTreeEvents(container)
+  const merged = buildMergedTree(state.files, _folderRoot)
+  container.innerHTML = `<div class="dz-tree">${(merged.children ?? []).map((c) => _renderTreeNode(c, 0)).join('')}</div>`
 }
 
-function _fileNodeHtml(f: CodeFile): string {
-  const isActive = f === state.currentFile
-  const n = f.issues.length
-  const errCount = f.issues.filter((i) => i.severity === 'error').length
-  const warnCount = f.issues.filter((i) => i.severity === 'warning').length
+function _renderTreeNode(node: FolderTreeNode, depth: number): string {
+  const pad = depth * 14
 
-  let badge = ''
-  if (errCount) badge = `<span class="exp-badge exp-badge-err">${errCount}</span>`
-  else if (warnCount) badge = `<span class="exp-badge exp-badge-warn">${warnCount}</span>`
-  else if (f.analyzed) badge = `<span class="exp-badge exp-badge-ok">✓</span>`
+  if (node.type === 'directory') {
+    if (depth === 0 && !_expandedDirs.has(node.path)) _expandedDirs.add(node.path)
+    const isOpen = _expandedDirs.has(node.path)
+    const allChildren = node.children ?? []
+    const visibleChildren = allChildren.slice(0, MAX_RENDERED_CHILDREN)
+    const hiddenCount = allChildren.length - visibleChildren.length
+    const childrenHtml = isOpen ? visibleChildren.map((c) => _renderTreeNode(c, depth + 1)).join('') : ''
 
-  const cls = [
-    'exp-file',
-    isActive ? 'exp-file-active' : '',
-    errCount ? 'exp-file-err' : '',
-    warnCount && !errCount ? 'exp-file-warn' : '',
-    f.analyzed && !n ? 'exp-file-ok' : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
+    return `
+      <div class="tree-dir">
+        <div class="tree-row dir-row" style="padding-left:${pad + 6}px" data-tree-toggle="${_esc(node.path)}">
+          <span class="tree-expand">${isOpen ? '▾' : '▸'}</span>
+          <span class="tree-name">${_esc(node.name)}</span>
+          ${node.children?.length ? `<span class="tree-count">${node.children.length}</span>` : ''}
+        </div>
+        <div class="tree-children" ${isOpen ? '' : 'style="display:none"'}>
+          ${childrenHtml}
+          ${isOpen && hiddenCount > 0 ? `<div class="tree-truncated" style="padding-left:${(depth + 1) * 14 + 20}px">… +${hiddenCount} más (carpeta muy grande, no se muestran todos)</div>` : ''}
+        </div>
+      </div>`
+  }
+
+  const cf = node.codeFileId ? state.files.find((f) => f.id === node.codeFileId) : undefined
+  const isActive = !!cf && cf === state.currentFile
+  const badge = cf ? _fileBadgeHtml(cf) : ''
+  const ext = `.${node.name.split('.').pop()}`
 
   return `
-    <div class="${cls}" data-file-id="${f.id}" title="${f.name}">
-      <span class="exp-file-icon">${extIcon(f.ext)}</span>
-      <span class="exp-file-name">${f.name}</span>
+    <div class="tree-row file-row ${isActive ? 'active' : ''}"
+      style="padding-left:${pad + 20}px"
+      data-tree-file="${_esc(node.path)}"
+      ${cf ? `data-file-id="${cf.id}"` : ''}
+      title="${_esc(node.path)}">
+      <span>${extIcon(ext)}</span>
+      <span class="tree-name">${_esc(node.name)}</span>
       ${badge}
-      <button class="exp-file-close" data-remove-id="${f.id}" title="Cerrar">✕</button>
-    </div>
-  `
+      ${cf ? `<button class="exp-file-close" data-remove-id="${cf.id}" title="Cerrar">✕</button>` : ''}
+    </div>`
 }
 
-function _attachTreeEvents(container: HTMLElement): void {
-  // Click en archivo
+// El badge muestra el TOTAL de issues (no solo la severidad dominante) —
+// antes mostraba errCount||warnCount, que para un archivo con 0 errores pero
+// muchos warnings + algunos infos daba un número distinto al que Métricas/
+// Logs muestran para el mismo archivo (f.issues.length), sin ninguna etiqueta
+// que explicara la diferencia. Mismo dato en todos lados; el color sigue
+// codificando severidad (rojo si hay al menos un error).
+function _fileBadgeHtml(f: CodeFile): string {
+  const n = f.issues.length
+  if (!n) return f.analyzed ? `<span class="exp-badge exp-badge-ok">✓</span>` : ''
+  const hasErr = f.issues.some((i) => i.severity === 'error')
+  return `<span class="exp-badge ${hasErr ? 'exp-badge-err' : 'exp-badge-warn'}">${n}</span>`
+}
+
+// Delegación de click atada UNA sola vez (en initExplorer) — _renderFileTree()
+// solo escribe innerHTML, nunca vuelve a atar listeners. Antes, cada render
+// agregaba otro addEventListener sobre el mismo contenedor persistente, y se
+// iban acumulando sin límite (cada click disparaba N aperturas/cambios de tab).
+function _wireTreeEvents(): void {
+  const container = document.getElementById('file-tree')
+  if (!container) return
+
   container.addEventListener('click', (e) => {
     const target = e.target as HTMLElement
 
-    // Botón eliminar
+    if (target.closest('#exp-empty-cta')) {
+      document.getElementById('btn-add-code')?.click()
+      return
+    }
+
     const removeId = target.closest<HTMLElement>('[data-remove-id]')?.dataset['removeId']
     if (removeId) {
       e.stopPropagation()
@@ -171,27 +161,84 @@ function _attachTreeEvents(container: HTMLElement): void {
       return
     }
 
-    // Seleccionar archivo
-    const fileNode = target.closest<HTMLElement>('[data-file-id]')
-    const fileId = fileNode?.dataset['fileId']
-    if (fileId) {
-      explorerSelectFile(fileId)
+    const toggle = target.closest<HTMLElement>('[data-tree-toggle]')
+    if (toggle) {
+      e.stopPropagation()
+      const path = toggle.dataset['treeToggle']
+      if (!path) return
+      if (_expandedDirs.has(path)) _expandedDirs.delete(path)
+      else _expandedDirs.add(path)
+      _renderFileTree()
       return
     }
 
-    // Toggle grupo
-    const groupHead = target.closest<HTMLElement>('[data-toggle-group]')
-    const groupExt = groupHead?.dataset['toggleGroup']
-    if (groupExt) {
-      const body = container.querySelector<HTMLElement>(`[data-group-body="${groupExt}"]`)
-      const arrow = groupHead.querySelector('.exp-arrow') as HTMLElement
-      if (body) {
-        const isOpen = body.style.display !== 'none'
-        body.style.display = isOpen ? 'none' : ''
-        if (arrow) arrow.textContent = isOpen ? '▸' : '▾'
+    const fileRow = target.closest<HTMLElement>('[data-tree-file]')
+    if (fileRow) {
+      e.stopPropagation()
+      const fileId = fileRow.dataset['fileId']
+      if (fileId) {
+        explorerSelectFile(fileId)
+        return
       }
+      const path = fileRow.dataset['treeFile']
+      if (path) _openLazyFile(path)
     }
   })
+}
+
+// ══════════════════════════════════════════
+//  "+ Carpeta" — árbol pendiente (archivos aún no leídos)
+// ══════════════════════════════════════════
+
+export function explorerSetFolderRoot(root: FolderTreeNode | null): void {
+  _folderRoot = root
+  if (root) {
+    for (const c of root.children ?? []) {
+      if (c.type === 'directory') _expandedDirs.add(c.path)
+    }
+  }
+  _renderFileTree()
+}
+
+function _findLazyNode(node: FolderTreeNode, path: string): FolderTreeNode | null {
+  if (node.path === path) return node
+  for (const child of node.children ?? []) {
+    const found = _findLazyNode(child, path)
+    if (found) return found
+  }
+  return null
+}
+
+function _openLazyFile(path: string): void {
+  if (!_folderRoot) return
+  const node = _findLazyNode(_folderRoot, path)
+  if (node?.type !== 'file' || !node.file) return
+
+  const f = node.file
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const file: CodeFile = {
+      id: uniqueId(),
+      name: f.name,
+      ext: getExt(f.name),
+      size: f.size,
+      content: e.target!.result as string,
+      issues: [],
+      metrics: {},
+      analyzed: false,
+      path,
+    }
+    state.files.push(file)
+    explorerAddFile(file)
+    import('./app').then((m) => {
+      m.updateSelectors()
+      m.updateBadges()
+    })
+    explorerSelectFile(file.id)
+    appendLog('info', `${path} (${fmtBytes(f.size)})`, 'fe')
+    toast(f.name, 'ok')
+  }
+  reader.readAsText(f)
 }
 
 function _removeFileFromExplorer(id: string): void {
@@ -203,9 +250,8 @@ function _removeFileFromExplorer(id: string): void {
 
   // Delegar al sistema existente
   import('./app').then((m) => {
-    m.updateFileTree?.()
     m.updateSelectors?.()
-    m.updateStats?.()
+    m.updateBadges?.()
   })
 }
 
@@ -223,7 +269,30 @@ function _injectFileTabs(): void {
   tabsContainer.className = 'exp-tabs-bar'
   editorBar.parentElement?.insertBefore(tabsContainer, editorBar)
 
+  _wireTabsEvents(tabsContainer)
   _renderFileTabs()
+}
+
+// Delegación atada una sola vez, igual que _wireTreeEvents() — el contenedor
+// se crea una única vez en _injectFileTabs(); _renderFileTabs() corre en
+// cada apertura/cierre de tab y antes volvía a atar un listener cada vez.
+function _wireTabsEvents(bar: HTMLElement): void {
+  bar.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement
+
+    // Cerrar tab
+    const closeId = target.closest<HTMLElement>('[data-close-tab]')?.dataset['closeTab']
+    if (closeId) {
+      e.stopPropagation()
+      _closeTab(closeId)
+      return
+    }
+
+    // Activar tab
+    const tabEl = target.closest<HTMLElement>('[data-tab-id]')
+    const tabId = tabEl?.dataset['tabId']
+    if (tabId) explorerSelectFile(tabId)
+  })
 }
 
 function _renderFileTabs(): void {
@@ -252,23 +321,6 @@ function _renderFileTabs(): void {
   // Scroll al tab activo
   const activeTab = bar.querySelector<HTMLElement>('.exp-tab-active')
   activeTab?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-
-  bar.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement
-
-    // Cerrar tab
-    const closeId = target.closest<HTMLElement>('[data-close-tab]')?.dataset['closeTab']
-    if (closeId) {
-      e.stopPropagation()
-      _closeTab(closeId)
-      return
-    }
-
-    // Activar tab
-    const tabEl = target.closest<HTMLElement>('[data-tab-id]')
-    const tabId = tabEl?.dataset['tabId']
-    if (tabId) explorerSelectFile(tabId)
-  })
 }
 
 function _openTab(file: CodeFile): void {
@@ -443,7 +495,7 @@ function _runSearch(): void {
   }
 }
 
-function toggleSearch(): void {
+export function toggleSearch(): void {
   _searchOpen ? closeSearch() : openSearch()
 }
 
@@ -615,9 +667,19 @@ export function explorerAddFile(file: CodeFile): void {
   _openTab(file)
 }
 
-export function explorerRemoveFile(id: string): void {
-  _closeTab(id)
+/** Refresca el árbol (badges, resaltado de archivo activo) sin tocar tabs/carpeta pendiente. */
+export function explorerRefreshTree(): void {
   _renderFileTree()
+}
+
+/** Limpieza total tras "Limpiar" — árbol, tabs y carpeta pendiente. */
+export function explorerClearAll(): void {
+  _tabs.length = 0
+  _activeTabId = ''
+  _folderRoot = null
+  _expandedDirs.clear()
+  _renderFileTree()
+  _renderFileTabs()
 }
 
 function explorerSelectFile(id: string): void {

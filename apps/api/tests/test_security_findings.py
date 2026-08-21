@@ -2,9 +2,9 @@
 Tests — Security & Taint Intelligence (Fase 21 v1)
 pytest tests/test_security_findings.py -v
 
-Ejercita services/static_parser.py::_security_findings_python /
-_hardcoded_credentials_python directo (via /static/parse), sin sidecar —
-esta pasada es 100% Python, no toca Rust.
+Ejercita `services/complexity/src/security.rs` (Rust-only ahora, ver
+`static_parser.py::_parse_python`) vía `/static/parse` — `conftest.py` levanta
+el sidecar real para toda la sesión de pytest.
 """
 
 import sys
@@ -38,7 +38,7 @@ def get_user(request):
         assert len(sqli) == 1
         assert sqli[0]["confidence"] == "High"
         assert sqli[0]["function"] == "get_user"
-        assert sqli[0]["source"] == "solicitud HTTP"
+        assert sqli[0]["source"] == "HTTP request"
 
     def test_fstring_query_flagged(self):
         code = """

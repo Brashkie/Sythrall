@@ -25,20 +25,7 @@ from services.complexity_client import analyze_complexity, parse_python_rich
 from services.static_parser import (
     _parse_ts,
     _parse_js,
-    _infer_big_o_python,
-    _infer_space_python,
     _cyclomatic_python,
-    _theta_omega_python,
-    _recursion_info_python,
-    _recursion_note,
-    _loop_analysis_python,
-    _regex_info_python,
-    _regex_note,
-    _grammar_info_python,
-    _grammar_note,
-    _graph_traversal_info_python,
-    _graph_traversal_note,
-    _security_findings_python,
 )
 
 router = APIRouter()
@@ -259,6 +246,14 @@ async def heavy_analyze(req: AnalyzeRequest) -> dict[str, Any]:
     markers: list[dict] = []
     metrics: dict = {}
     big_o: list[dict] = []
+    # Findings del CS Engine (Fases 21/22) para el archivo abierto en el
+    # Editor — Rust-only acá, sin fallback Python: mismo límite que Halstead/
+    # MI arriba, correcto para una feature de live-typing (recalcular en
+    # Python cada 2s sin el sidecar no vale la latencia). Vacíos si el
+    # sidecar no está arriba o el archivo no es Python.
+    security_findings: list[dict] = []
+    structural_smells: list[dict] = []
+    naming_smells: list[dict] = []
     t0 = time.perf_counter()
     tmp_path = None
 
@@ -291,6 +286,9 @@ async def heavy_analyze(req: AnalyzeRequest) -> dict[str, Any]:
             # el sidecar no está disponible. Mismo shape en ambos casos.
             rich = await parse_python_rich(req.filename, req.content)
             if rich is not None:
+                security_findings = rich.get("security_findings", [])
+                structural_smells = rich.get("structural_smells", [])
+                naming_smells = rich.get("naming_smells", [])
                 big_o.extend(
                     {
                         "name": fn["name"],
@@ -305,6 +303,7 @@ async def heavy_analyze(req: AnalyzeRequest) -> dict[str, Any]:
                         "is_recursive": fn["is_recursive"],
                         "is_tail_recursive": fn["is_tail_recursive"],
                         "recursion_note": fn["recursion_note"],
+                        "recurrence": fn.get("recurrence"),
                         "regex_class": fn["regex_class"],
                         "regex_note": fn["regex_note"],
                         "grammar_class": fn["grammar_class"],
@@ -315,41 +314,37 @@ async def heavy_analyze(req: AnalyzeRequest) -> dict[str, Any]:
                     for fn in rich["functions"]
                 )
             else:
+                # Sidecar caído — Big-O/space/recursión/regex/grammar/graph
+                # classifiers/security son Rust-only ahora (ver
+                # `static_parser.py::_parse_python`); sin el sidecar no se
+                # recalculan, solo se reporta la estructura básica de la
+                # función con valores neutros en vez de reimplementar el
+                # motor en Python.
                 try:
                     tree = ast.parse(req.content)
                     for node in ast.walk(tree):
                         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                            recursion = _recursion_info_python(node)
-                            depth, has_early_exit = _loop_analysis_python(node)
-                            bigo, reason = _infer_big_o_python(node, recursion["is_recursive"], depth)
-                            theta, omega = _theta_omega_python(has_early_exit, bigo)
-                            space, space_reason = _infer_space_python(node, recursion["is_recursive"])
-                            cc = _cyclomatic_python(node)
-                            regex_info = _regex_info_python(node)
-                            grammar_info = _grammar_info_python(node, recursion["is_recursive"])
-                            graph_info = _graph_traversal_info_python(node, recursion["is_recursive"])
                             big_o.append(
                                 {
                                     "name": node.name,
                                     "line": node.lineno,
-                                    "big_o": bigo,
-                                    "big_o_theta": theta,
-                                    "big_o_omega": omega,
-                                    "reason": reason,
-                                    "space_complexity": space,
-                                    "space_reason": space_reason,
-                                    "complexity": cc,
-                                    "is_recursive": recursion["is_recursive"],
-                                    "is_tail_recursive": recursion["is_tail_recursive"],
-                                    "recursion_note": _recursion_note(recursion),
-                                    "regex_class": "Type-3 (Regular)" if regex_info["uses_regex"] else None,
-                                    "regex_note": _regex_note(regex_info),
-                                    "grammar_class": "Type-2 (Context-Free)"
-                                    if grammar_info["is_grammar_shaped"]
-                                    else None,
-                                    "grammar_note": _grammar_note(grammar_info),
-                                    "graph_traversal": graph_info["traversal_kind"],
-                                    "graph_traversal_note": _graph_traversal_note(graph_info),
+                                    "big_o": "?",
+                                    "big_o_theta": "?",
+                                    "big_o_omega": "?",
+                                    "reason": "",
+                                    "space_complexity": "?",
+                                    "space_reason": "",
+                                    "complexity": _cyclomatic_python(node),
+                                    "is_recursive": False,
+                                    "is_tail_recursive": False,
+                                    "recursion_note": None,
+                                    "recurrence": None,
+                                    "regex_class": None,
+                                    "regex_note": None,
+                                    "grammar_class": None,
+                                    "grammar_note": None,
+                                    "graph_traversal": None,
+                                    "graph_traversal_note": None,
                                 }
                             )
                 except Exception:
@@ -403,6 +398,9 @@ async def heavy_analyze(req: AnalyzeRequest) -> dict[str, Any]:
         "markers": sorted(unique, key=lambda x: x["startLineNumber"]),
         "metrics": metrics,
         "big_o": big_o,
+        "security_findings": security_findings,
+        "structural_smells": structural_smells,
+        "naming_smells": naming_smells,
         "ms": ms,
         "source": "heavy",
     }
@@ -576,6 +574,7 @@ async def _build_hover_python(fn: ast.FunctionDef | ast.AsyncFunctionDef, req: H
     if rich_fn is not None:
         bigo, reason = rich_fn["big_o"], rich_fn["big_o_reason"]
         theta, omega = rich_fn["big_o_theta"], rich_fn["big_o_omega"]
+        recurrence = rich_fn.get("recurrence")
         space, space_reason = rich_fn["space_complexity"], rich_fn["space_reason"]
         rec_note = rich_fn["recursion_note"]
         is_tail_recursive = rich_fn["is_tail_recursive"]
@@ -584,39 +583,36 @@ async def _build_hover_python(fn: ast.FunctionDef | ast.AsyncFunctionDef, req: H
         grammar_note = rich_fn["grammar_note"]
         graph_note = rich_fn["graph_traversal_note"]
     else:
-        recursion = _recursion_info_python(fn)
-        depth, has_early_exit = _loop_analysis_python(fn)
-        bigo, reason = _infer_big_o_python(fn, recursion["is_recursive"], depth)
-        theta, omega = _theta_omega_python(has_early_exit, bigo)
-        space, space_reason = _infer_space_python(fn, recursion["is_recursive"])
-        rec_note = _recursion_note(recursion)
-        is_tail_recursive = recursion["is_tail_recursive"]
+        # Sidecar caído (o no encontró esta función puntual) — Big-O/space/
+        # recursión/regex/grammar/graph classifiers son Rust-only ahora (ver
+        # `static_parser.py::_parse_python`); sin el sidecar no se
+        # recalculan, quedan en valores neutros en vez de reimplementar el
+        # motor acá.
+        bigo, reason, theta, omega = "?", "", "?", "?"
+        recurrence = None
+        space, space_reason = "?", ""
+        rec_note = None
+        is_tail_recursive = False
         cc = _cyclomatic_python(fn)
-        regex_info = _regex_info_python(fn)
-        regex_note = _regex_note(regex_info)
-        grammar_info = _grammar_info_python(fn, recursion["is_recursive"])
-        grammar_note = _grammar_note(grammar_info)
-        graph_info = _graph_traversal_info_python(fn, recursion["is_recursive"])
-        graph_note = _graph_traversal_note(graph_info)
+        regex_note = None
+        grammar_note = None
+        graph_note = None
     end_line = getattr(fn, "end_lineno", fn.lineno)
     loc = end_line - fn.lineno + 1
     docstring = ast.get_docstring(fn) or ""
 
-    # Security & Taint (Fase 21) — Fase 18: sidecar Rust primero, mismo rich
-    # ya resuelto arriba para Big-O; degrada a Python si el sidecar no está
-    # disponible o no encontró esta función puntual (mismo gate que arriba).
+    # Security & Taint (Fase 21) — Rust-only ahora, mismo rich ya resuelto
+    # arriba para Big-O; sin sidecar (o si no encontró esta función
+    # puntual), queda vacío en vez de recalcularse en Python.
     if rich_fn is not None:
         security_findings = [f for f in rich["security_findings"] if f.get("function") == fn.name]
     else:
-        security_findings = _security_findings_python(fn)
-
-    # Color del Big-O
-    bigo_emoji = _bigo_emoji(bigo)
+        security_findings = []
 
     # WASM hint
     wasm_hint = ""
     if bigo in ("O(n²)", "O(n³)", "O(2^n)"):
-        wasm_hint = "\n\n⚡ **Hot Path** — candidato a Cython / WASM"
+        wasm_hint = "\n\n**Hot Path** — candidato a Cython / WASM"
 
     # Construir markdown
     md = f"```python\n{signature}\n```"
@@ -624,33 +620,34 @@ async def _build_hover_python(fn: ast.FunctionDef | ast.AsyncFunctionDef, req: H
     if docstring:
         md += f"\n\n{docstring[:200]}{'…' if len(docstring) > 200 else ''}"
 
+    recurrence_row = f"| **Recurrencia** | `{recurrence}` |\n" if recurrence else ""
     md += f"""
 
 ---
 | Métrica | Valor |
 |---------|-------|
-| **Time Complexity (O)** | {bigo_emoji} `{bigo}` |
+| **Time Complexity (O)** | `{bigo}` |
 | **Cota ajustada (Θ)** | `{theta}` |
 | **Mejor caso (Ω)** | `{omega}` |
 | **Razón** | {reason} |
-| **Space Complexity** | `{space}` |
+{recurrence_row}| **Space Complexity** | `{space}` |
 | **Razón (espacio)** | {space_reason} |
 | **Cyclomatic CC** | `{cc}` — {_cc_label(cc)} |
 | **LOC** | `{loc}` líneas |
 | **Línea** | `{fn.lineno}` |"""
 
     if rec_note:
-        tail_badge = "🔁 tail-call" if is_tail_recursive else "🔁 no tail-call"
+        tail_badge = "tail-call" if is_tail_recursive else "no tail-call"
         md += f"\n\n**Recursión** — {tail_badge}\n\n{rec_note}"
 
     if regex_note:
-        md += f"\n\n**🔤 Regex** — {regex_note}"
+        md += f"\n\n**Regex** — {regex_note}"
 
     if grammar_note:
-        md += f"\n\n**🌳 Grammar/Parser** — {grammar_note}"
+        md += f"\n\n**Grammar/Parser** — {grammar_note}"
 
     if graph_note:
-        md += f"\n\n**🕸️ Graph Traversal** — {graph_note}"
+        md += f"\n\n**Graph Traversal** — {graph_note}"
 
     for finding in security_findings:
         sink_txt = f" → `{finding['sink']}`" if finding.get("sink") else ""
@@ -658,13 +655,13 @@ async def _build_hover_python(fn: ast.FunctionDef | ast.AsyncFunctionDef, req: H
             finding["confidence"], finding["confidence"]
         )
         md += (
-            f"\n\n**🔐 {finding['category']} ({finding['cwe']})** — confianza {confidence_es}\n\n"
+            f"\n\n**{finding['category']} ({finding['cwe']})** — confianza {confidence_es}\n\n"
             f"`{finding['source']}`{sink_txt} — línea {finding['line']}\n\n"
-            f"💡 {finding['recommendation']}"
+            f"{finding['recommendation']}"
         )
 
     if is_async:
-        md += "\n\n🟣 Función **async**"
+        md += "\n\nFunción **async**"
 
     if wasm_hint:
         md += wasm_hint
@@ -715,7 +712,6 @@ def _hover_js_ts(req: HoverRequest) -> dict:
     is_async = best.get("is_async", False)
     args = best.get("args", [])
     calls = best.get("calls", [])
-    bigo_emoji = _bigo_emoji(bigo)
 
     lang = "typescript" if ext in (".ts", ".tsx") else "javascript"
     prefix = "async " if is_async else ""
@@ -727,7 +723,7 @@ def _hover_js_ts(req: HoverRequest) -> dict:
 ---
 | Métrica | Valor |
 |---------|-------|
-| **Time Complexity** | {bigo_emoji} `{bigo}` |
+| **Time Complexity** | `{bigo}` |
 | **Razón** | {reason} |
 | **Cyclomatic CC** | `{cc}` — {_cc_label(cc)} |
 | **LOC** | `{loc}` líneas |
@@ -737,7 +733,7 @@ def _hover_js_ts(req: HoverRequest) -> dict:
         md += f"\n\n**Llama a:** `{'`, `'.join(calls[:5])}{'…' if len(calls)>5 else ''}`"
 
     if bigo in ("O(n²)", "O(n³)", "O(2^n)"):
-        md += "\n\n⚡ **Hot Path** — considera mover a WASM / Worker"
+        md += "\n\n**Hot Path** — considera mover a WASM / Worker"
 
     return {
         "markdown": md,
@@ -753,27 +749,14 @@ def _hover_js_ts(req: HoverRequest) -> dict:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-def _bigo_emoji(bigo: str) -> str:
-    table = {
-        "O(1)": "🟢",
-        "O(log n)": "🟢",
-        "O(n)": "🟡",
-        "O(n log n)": "🟡",
-        "O(n²)": "🔴",
-        "O(n³)": "🔴",
-        "O(2^n)": "🔴",
-    }
-    return table.get(bigo, "⚪")
-
-
 def _cc_label(cc: int) -> str:
     if cc <= 4:
-        return "🟢 Simple"
+        return "Simple"
     if cc <= 7:
-        return "🟡 Moderado"
+        return "Moderado"
     if cc <= 10:
-        return "🟠 Complejo"
-    return "🔴 Muy complejo"
+        return "Complejo"
+    return "Muy complejo"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

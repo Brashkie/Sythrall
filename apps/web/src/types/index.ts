@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════
 //  Sythrall — Types
 // ══════════════════════════════════════════
-import type { ProjectHealth } from '../api/client'
+import type { StaticProjectResult } from '../api/client'
 
 export type Severity = 'error' | 'warning' | 'info'
 export type Status = 'ok' | 'warning' | 'down' | 'unknown' | 'error'
@@ -191,7 +191,10 @@ export interface AppState {
     apis: ApiResult[]
     issues: Issue[]
     logErrors: LogError[]
-    projectHealth: ProjectHealth | null
+    /** Último resultado de análisis del proyecto activo (parse-project) —
+     * compartido entre Dashboard y la vista de proyecto de Static para no
+     * pedir el mismo análisis dos veces. */
+    projectDashboard: StaticProjectResult | null
   }
   running: boolean
   autoOn: boolean

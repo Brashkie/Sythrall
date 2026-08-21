@@ -18,6 +18,7 @@ from services.project_service import (
     get_project_info,
     get_project_info_cached,
     save_project_meta,
+    resolve_project_name,
     delete_project,
     list_projects,
     prune_old_projects,
@@ -93,6 +94,7 @@ async def upload_files(
 
     tree = await run_in_threadpool(build_tree, project_dir)
     info = await run_in_threadpool(get_project_info, project_dir)
+    resolved_name = resolve_project_name(project_dir, info, project_name, f"project-{project_id[:8]}")
     save_project_meta(project_dir, info)
     await run_in_threadpool(prune_old_projects, UPLOADS_DIR)
 
@@ -100,7 +102,7 @@ async def upload_files(
 
     return {
         "project_id": project_id,
-        "project_name": project_name or f"project-{project_id[:8]}",
+        "project_name": resolved_name,
         "type": "files",
         "saved": saved,
         "errors": errors,
@@ -168,6 +170,9 @@ async def upload_folder(
 
     tree = await run_in_threadpool(build_tree, project_dir)
     info = await run_in_threadpool(get_project_info, project_dir)
+    resolved_name = resolve_project_name(
+        project_dir, info, project_name, Path(files[0].filename or "").parts[0] if files else "folder"
+    )
     save_project_meta(project_dir, info)
     await run_in_threadpool(prune_old_projects, UPLOADS_DIR)
 
@@ -175,7 +180,7 @@ async def upload_folder(
 
     return {
         "project_id": project_id,
-        "project_name": project_name or (Path(files[0].filename or "").parts[0] if files else "folder"),
+        "project_name": resolved_name,
         "type": "folder",
         "saved": saved,
         "errors": errors,
@@ -217,6 +222,7 @@ async def upload_zip(
 
     tree = await run_in_threadpool(build_tree, project_dir)
     info = await run_in_threadpool(get_project_info, project_dir)
+    resolved_name = resolve_project_name(project_dir, info, project_name, Path(file.filename).stem)
     save_project_meta(project_dir, info)
     await run_in_threadpool(prune_old_projects, UPLOADS_DIR)
 
@@ -224,7 +230,7 @@ async def upload_zip(
 
     return {
         "project_id": project_id,
-        "project_name": project_name or Path(file.filename).stem,
+        "project_name": resolved_name,
         "type": "zip",
         "original_zip": file.filename,
         "extracted": result["extracted"],

@@ -12,7 +12,7 @@ export const state: AppState = {
     apis: [],
     issues: [],
     logErrors: [],
-    projectHealth: null,
+    projectDashboard: null,
   },
   running: false,
   autoOn: false,
@@ -57,11 +57,11 @@ export function loadPersistedActiveProject(): string | null {
 }
 
 export function getApiBase(): string {
-  // FastAPI corre en :8000 — en dev Vite proxea /api → :8000
+  // FastAPI corre en :8420 — en dev Vite proxea /api → :8420
   // En producción con nginx el proxy maneja todo en el mismo origen
   if (window.location.port === '5173' || window.location.port === '4173') {
     // Modo dev Vite — FastAPI directo
-    return 'http://localhost:8000'
+    return 'http://localhost:8420'
   }
   if (window.location.port === '8080') {
     // Docker / nginx — usa el proxy del mismo origen (sin puerto)

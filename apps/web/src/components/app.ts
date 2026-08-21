@@ -6,18 +6,17 @@
 import { api } from '../api/client'
 import { renderFileAnalysis, renderMetrics } from '../panels/analysis'
 import { renderAPICards, renderIssuesList } from '../panels/apis'
-import { renderProjectHealth } from '../panels/dashboard'
+import { renderDashboard } from '../panels/dashboard'
 import { generateCodeGraph, generateProjectGraph } from '../panels/graph'
 import { clientMLAnalysis, renderMLResults } from '../panels/ml'
 import { clearSession, restoreSession, saveSession } from '../panels/problems'
 import { loadPersistedActiveProject, setActiveProject, state } from '../store/state'
 import type { TabId } from '../types'
 import { appendLog, delay, fmtBytes, getExt, nowStr, setProgress, toast, uniqueId } from '../utils/helpers'
-import { icon, languageBadge } from '../utils/icons'
+import { icon } from '../utils/icons'
 import { createCollapseToggle, createResizer } from '../utils/resizer'
-import { initCharts, renderComplexityBars, renderDistChart, renderRTChart, updateHistChart } from './charts'
 import { applyMarkers, getEditorValue, initEditor, loadFileInEditor } from './editor'
-import { explorerAddFile, explorerRemoveFile, initExplorer } from './explorer'
+import { explorerAddFile, explorerClearAll, explorerRefreshTree, initExplorer } from './explorer'
 import { renderFlow, setStep, updateRunMeta } from './flow'
 import { initMermaid, renderDiagram } from './mermaid'
 
@@ -74,7 +73,7 @@ export function switchTab(name: TabId): void {
   // "lazy check" que el resto de los paneles), así que sin esto el usuario
   // vería el empty state viejo hasta disparar algo más.
   if (name === 'dashboard') {
-    renderProjectHealth()
+    renderDashboard()
   }
 }
 
@@ -110,27 +109,7 @@ function overallStatus(): 'ok' | 'warning' | 'down' {
   return 'ok'
 }
 
-// ── Stats
-export function updateStats(): void {
-  const ok = state.results.apis.filter((a) => a.status === 'ok').length
-  const n = state.results.issues.length
-
-  setEl('sv-api', state.urls.length ? `${ok}/${state.urls.length}` : '—')
-  setEl('ss-api', `${ok} activo(s)`)
-  setEl('sv-files', state.files.length || '—')
-  setEl('sv-issues', String(n || '0'))
-  const issEl = document.getElementById('sv-issues')
-  if (issEl) issEl.style.color = n ? 'var(--err)' : 'var(--ok)'
-  setEl('ss-issues', `${state.results.issues.filter((i) => i.severity === 'error').length} errores`)
-
-  const scores = state.files.filter((f) => f.metrics?.pylint_score != null).map((f) => f.metrics.pylint_score!)
-  const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null
-  const scoreEl = document.getElementById('sv-score')!
-  scoreEl.textContent = avg != null ? avg.toFixed(1) : '—'
-  scoreEl.style.color = avg == null ? 'var(--muted)' : avg >= 8 ? 'var(--ok)' : avg >= 5 ? 'var(--warn)' : 'var(--err)'
-}
-
-function updateBadges(): void {
+export function updateBadges(): void {
   const nDown = state.results.apis.filter((a) => a.status === 'down' || a.status === 'error').length
   const ta = document.getElementById('tb-apis')
   if (ta) ta.style.display = nDown ? '' : 'none'
@@ -153,11 +132,6 @@ function updateBadges(): void {
     bnf.textContent = String(nf)
     bnf.style.display = nf ? '' : 'none'
   }
-}
-
-function setEl(id: string, val: unknown): void {
-  const el = document.getElementById(id)
-  if (el) el.textContent = String(val)
 }
 
 // ── Backend check
@@ -235,6 +209,14 @@ async function tryRestoreSession(): Promise<void> {
     setActiveProject(projectId)
     appendLog('ok', `Proyecto activo restaurado (${projectId.slice(0, 8)}…)`, 'be')
 
+    // El Dashboard ya se renderizó una vez durante initApp() (con
+    // activeProjectId todavía null, sesión sin restaurar) — si el usuario
+    // arranca en ese tab (el default), sin este re-render se queda pegado en
+    // el empty state "sin proyecto" hasta navegar afuera y volver. Mismo tipo
+    // de gap que ya se corrigió para switchTab('dashboard'), acá aplicado al
+    // caso "restauración de sesión completa mientras ya estás en Dashboard".
+    renderDashboard()
+
     const lastFile = restoreSession()
     if (lastFile) {
       const { openProjectFile } = await import('../panels/upload')
@@ -272,9 +254,8 @@ export function handleCodeFiles(files: FileList | null): void {
       }
       state.files.push(file)
       explorerAddFile(file)
-      updateFileTree()
       updateSelectors()
-      updateStats()
+      updateBadges()
       appendLog('info', `${f.name} (${fmtBytes(f.size)})`, 'fe')
       toast(f.name, 'ok')
     }
@@ -323,53 +304,6 @@ export function handleLogFiles(files: FileList | null): void {
   })
 }
 
-export function updateFileTree(): void {
-  const el = document.getElementById('file-tree')!
-  const tb = document.getElementById('tb-files')!
-  if (!state.files.length) {
-    el.innerHTML = ''
-    tb.style.display = 'none'
-    return
-  }
-  tb.textContent = String(state.files.length)
-  tb.style.display = ''
-  el.innerHTML = state.files
-    .map((f) => {
-      const n = f.issues.length
-      const cls = n ? 'has-err' : f.analyzed ? 'analyzed' : ''
-      const badge = n
-        ? `<span class="fn-badge fn-err">${n}</span>`
-        : f.analyzed
-          ? `<span class="fn-badge fn-ok">✓</span>`
-          : `<span class="fn-badge fn-pending">—</span>`
-      return `<div class="file-node ${cls}${f === state.currentFile ? ' active' : ''}" data-id="${f.id}">
-      ${languageBadge(f.ext)}
-      <span class="fn-name" title="${f.name}">${f.name}</span>
-      ${badge}
-      <button class="btn btn-danger btn-sm" style="padding:2px 4px" data-remove="${f.id}">✕</button>
-    </div>`
-    })
-    .join('')
-  el.onclick = (e: MouseEvent) => {
-    const target = e.target as HTMLElement
-    const removeId = target.dataset['remove']
-    const nodeEl = target.closest<HTMLElement>('.file-node')
-    if (removeId) {
-      e.stopPropagation()
-      removeFile(removeId)
-    } else if (nodeEl?.dataset['id']) selectFile(nodeEl.dataset['id'])
-  }
-}
-
-function removeFile(id: string): void {
-  state.files = state.files.filter((f) => f.id !== id)
-  if (state.currentFile?.id === id) state.currentFile = null
-  explorerRemoveFile(id)
-  updateFileTree()
-  updateSelectors()
-  updateStats()
-}
-
 export function updateSelectors(): void {
   const opts =
     '<option value="">— Selecciona —</option>' +
@@ -387,7 +321,7 @@ export function selectFile(id: string): void {
   loadFileInEditor(f)
   renderFileAnalysis(f)
   rpTab('analysis')
-  updateFileTree()
+  explorerRefreshTree()
   saveSession(f.name)
   ;(document.getElementById('file-sel') as HTMLSelectElement).value = id
   ;(document.getElementById('diag-file-sel') as HTMLSelectElement).value = id
@@ -497,10 +431,8 @@ export async function runAll(): Promise<void> {
     ms,
   }
   state.history.push(entry)
-  updateHistChart()
   updateRunMeta(entry)
   updateGlobalPill()
-  updateStats()
   updateBadges()
   appendLog('info', `✔ Completo en ${ms}ms — ${overallStatus().toUpperCase()}`, 'fe')
   state.running = false
@@ -530,7 +462,6 @@ async function runAPIChecks(): Promise<void> {
   }
   renderURLList()
   renderAPICards()
-  renderRTChart()
 }
 
 async function analyzeAllFiles(): Promise<void> {
@@ -588,7 +519,15 @@ async function analyzeAllFiles(): Promise<void> {
       appendLog('warn', `${f.name}: análisis básico`, 'fe')
     }
   }
-  updateFileTree()
+  explorerRefreshTree()
+  // A diferencia de analyzeCurrentFile() (que llama applyMarkers → updateProblems
+  // para el archivo que acaba de analizar), esta corrida en lote nunca refrescaba
+  // el panel Problems del archivo abierto en el Editor — quedaba mostrando lo que
+  // sea que decía ANTES de correr "Análisis completo" hasta que el usuario
+  // volviera a hacer click en el archivo. Con file.analyzed ahora distinguiendo
+  // "sin analizar" de "analizado, sin problemas" (ver panels/problems.ts), esa
+  // demora se volvió visible — antes ambos casos se veían idénticos.
+  if (state.currentFile) applyMarkers(state.currentFile)
 }
 
 function clientAnalyze(f: { content: string; ext: string }): import('../types').Issue[] {
@@ -655,7 +594,7 @@ export async function analyzeCurrentFile(): Promise<void> {
     }
     applyMarkers(f)
     renderFileAnalysis(f)
-    updateFileTree()
+    explorerRefreshTree()
     setProgress(100)
     setTimeout(() => setProgress(0), 500)
     toast(`${f.name}: ${f.issues.length} issue(s)`, f.issues.length ? 'warn' : 'ok')
@@ -669,9 +608,6 @@ function renderAllResults(): void {
   renderAPICards()
   renderIssuesList()
   renderMetrics()
-  renderComplexityBars()
-  renderDistChart()
-  renderRTChart()
 }
 
 // ══════════════════════════════════════════
@@ -680,16 +616,21 @@ function renderAllResults(): void {
 export function toggleAuto(): void {
   state.autoOn = !state.autoOn
   const btn = document.getElementById('auto-btn')!
+  // btn.textContent borraría el ícono SVG entero, no solo la etiqueta — el
+  // mismo error que ya se corrigió una vez para el FAB (.rp-fab pisado con
+  // un emoji). El label vive en su propio <span>, así que se actualiza solo
+  // ese nodo.
+  const label = btn.querySelector('span')
   if (state.autoOn) {
     btn.style.color = 'var(--ok)'
-    btn.textContent = 'Auto ON'
+    if (label) label.textContent = 'Auto ON'
     state.autoTimer = setInterval(() => {
       if (!state.running) runAll()
     }, 30000)
     toast('Auto cada 30s', 'ok')
   } else {
     btn.style.color = ''
-    btn.textContent = 'Auto'
+    if (label) label.textContent = 'Auto'
     if (state.autoTimer) clearInterval(state.autoTimer)
     toast('Auto OFF', 'warn')
   }
@@ -700,12 +641,12 @@ export function clearAll(): void {
   state.files = []
   state.logFiles = []
   state.urls = []
-  state.results = { apis: [], issues: [], logErrors: [], projectHealth: null }
-  updateFileTree()
+  state.results = { apis: [], issues: [], logErrors: [], projectDashboard: null }
+  explorerClearAll()
   updateSelectors()
+  updateBadges()
   renderURLList()
-  updateStats()
-  renderProjectHealth()
+  renderDashboard()
   const apiCards = document.getElementById('api-cards')
   if (apiCards) apiCards.innerHTML = ''
   const issuesList = document.getElementById('issues-list')
@@ -872,14 +813,19 @@ function generateMermaidFallback(name: string, content: string, _type: string): 
 //  DIFF
 // ══════════════════════════════════════════
 export async function runDiff(): Promise<void> {
-  const { createPatch } = await import('diff')
+  const { createTwoFilesPatch } = await import('diff')
   const a = state.files.find((f) => f.id === (document.getElementById('diff-a') as HTMLSelectElement).value)
   const b = state.files.find((f) => f.id === (document.getElementById('diff-b') as HTMLSelectElement).value)
   if (!a || !b) {
     toast('Selecciona dos archivos', 'warn')
     return
   }
-  const patch = createPatch(a.name, a.content, b.content)
+  // createPatch() solo acepta UN nombre de archivo, usado para las dos
+  // cabeceras (---/+++) — para comparar dos archivos DISTINTOS (no dos
+  // versiones del mismo) hace falta createTwoFilesPatch, que sí acepta un
+  // nombre para cada lado. Antes ambas cabeceras mostraban a.name, aunque el
+  // contenido comparado sí era el correcto (a.content vs b.content).
+  const patch = createTwoFilesPatch(a.name, b.name, a.content, b.content)
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const html = patch
     .split('\n')
@@ -960,15 +906,8 @@ export function initApp(): void {
   }
   initExplorer({ onFileOpen: (f) => selectFile(f.id) })
   renderIssuesList()
-  renderProjectHealth()
+  renderDashboard()
   initMermaid()
-  setTimeout(() => {
-    try {
-      initCharts()
-    } catch (e) {
-      console.warn('Charts init error:', e)
-    }
-  }, 100)
 
   const sidebar = document.getElementById('sidebar') as HTMLElement
   const sideHandle = document.getElementById('sidebar-resize') as HTMLElement
@@ -990,18 +929,11 @@ export function initApp(): void {
   renderFlow()
   renderURLList()
 
-  // Pre-cargar localhost:8000 (FastAPI)
-  state.urls.push('http://localhost:8000')
-  state.results.apis.push({
-    url: 'http://localhost:8000',
-    status: 'unknown',
-    code: null,
-    ms: null,
-    error: null,
-    ts: null,
-    history: [],
-  })
-  renderURLList()
+  // El backend propio de Sythrall (localhost:8420) ya NO se pre-carga acá
+  // como si fuera una API del usuario a monitorear — esa señal ya la da el
+  // badge "Backend OK" del topbar; duplicarla en esta lista mezclaba dos
+  // cosas distintas y, si algún día ese endpoint muestra DOWN, contradice
+  // directamente al badge verde de al lado.
 
   // Wiring de eventos (tabs, drag&drop, inputs de archivo, etc.) vive en
   // events.ts (wireAllEvents, llamado desde main.ts) — no duplicar aquí.

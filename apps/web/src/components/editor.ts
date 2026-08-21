@@ -123,11 +123,6 @@ export function loadFileInEditor(file: CodeFile): void {
   const lang = EXT_LANG[file.ext] ?? 'plaintext'
   monaco.editor.setModelLanguage(editorInstance.getModel(), lang)
   editorInstance.setValue(file.content)
-  const fnEl = document.getElementById('ed-fname')
-  if (fnEl) {
-    fnEl.textContent = file.name
-    fnEl.style.display = ''
-  }
   applyMarkers(file)
   initLiveMetrics(file.name, file.content)
 

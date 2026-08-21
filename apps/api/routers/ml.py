@@ -61,81 +61,70 @@ PIPELINE_PATTERNS: list[tuple] = [
         r"\bpd\.read_csv\b|\bpd\.read_excel\b|\bpd\.read_json\b|\bpd\.read_parquet\b|\bpd\.read_sql\b",
         "carga_datos",
         "Carga de datos",
-        "📥",
     ),
-    (r"\bdropna\b|\bfillna\b|\bdrop_duplicates\b|SimpleImputer", "limpieza", "Limpieza de datos", "🧹"),
-    (r"\bLabelEncoder\b|\bOneHotEncoder\b|\bget_dummies\b|\bOrdinalEncoder\b", "encoding", "Encoding categórico", "🔢"),
-    (r"\bStandardScaler\b|\bMinMaxScaler\b|\bRobustScaler\b|\bnormalize\b", "escalado", "Escalado/Normalización", "⚖️"),
-    (r"\btrain_test_split\b|\bKFold\b|\bStratifiedKFold\b|\bcross_val_score\b", "split", "División train/test", "✂️"),
-    (r"\bPCA\b|\bTSNE\b|\bSelectKBest\b|feature_selection", "features", "Selección de features", "🔍"),
+    (r"\bdropna\b|\bfillna\b|\bdrop_duplicates\b|SimpleImputer", "limpieza", "Limpieza de datos"),
+    (r"\bLabelEncoder\b|\bOneHotEncoder\b|\bget_dummies\b|\bOrdinalEncoder\b", "encoding", "Encoding categórico"),
+    (r"\bStandardScaler\b|\bMinMaxScaler\b|\bRobustScaler\b|\bnormalize\b", "escalado", "Escalado/Normalización"),
+    (r"\btrain_test_split\b|\bKFold\b|\bStratifiedKFold\b|\bcross_val_score\b", "split", "División train/test"),
+    (r"\bPCA\b|\bTSNE\b|\bSelectKBest\b|feature_selection", "features", "Selección de features"),
     (
         r"\bnn\.Module\b|\bnn\.Sequential\b|\bnn\.Linear\b|\bnn\.Conv2d\b",
         "arquitectura",
         "Definición de arquitectura",
-        "🧠",
     ),
     (
         r"\bmodel\.compile\b|\boptim\.\w+\(|\bAdam\b|\bSGD\b|\bAdamW\b",
         "optimizador",
         "Configuración del optimizador",
-        "⚙️",
     ),
     (
         r"\bDataLoader\b|\bDataset\b|\bImageDataGenerator\b|\btf\.data\.Dataset\b",
         "dataloader",
         "Pipeline de datos",
-        "🔄",
     ),
     (
         r"\bfit\s*\(|\bfit_transform\s*\(|\bmodel\.fit\b|\bloss\.backward\(\)",
         "entrenamiento",
         "Entrenamiento del modelo",
-        "🏋️",
     ),
     (
         r"\bEarlyStopping\b|\bModelCheckpoint\b|\bCallbacks\b|\bTensorBoard\b",
         "callbacks",
         "Callbacks de entrenamiento",
-        "🔔",
     ),
-    (r"\bpredict\s*\(|\bpredict_proba\s*\(|\bmodel\.predict\b", "prediccion", "Predicción/Inferencia", "🎯"),
+    (r"\bpredict\s*\(|\bpredict_proba\s*\(|\bmodel\.predict\b", "prediccion", "Predicción/Inferencia"),
     (
         r"\baccuracy_score\b|\bconfusion_matrix\b|\bclassification_report\b"
         r"|\br2_score\b|\bmean_squared_error\b|\bf1_score\b|\broc_auc_score\b",
         "evaluacion",
         "Evaluación del modelo",
-        "📊",
     ),
-    (r"\bjoblib\.dump\b|\bpickle\.dump\b|\bmodel\.save\b|\btorch\.save\b", "guardado", "Guardado del modelo", "💾"),
+    (r"\bjoblib\.dump\b|\bpickle\.dump\b|\bmodel\.save\b|\btorch\.save\b", "guardado", "Guardado del modelo"),
     (
         r"\bplt\.plot\b|\bplt\.show\b|\bsns\.heatmap\b|\bplt\.figure\b",
         "visualizacion",
         "Visualización Matplotlib",
-        "📈",
     ),
     (
         r"\bpx\.scatter\b|\bpx\.line\b|\bpx\.bar\b|\bgo\.Figure\b|\bplotly\.",
         "viz_interactiva",
         "Visualización interactiva Plotly",
-        "📊",
     ),
     (
         r"\bcv2\.imread\b|\bcv2\.resize\b|\bcv2\.cvtColor\b|\bcv2\.VideoCapture\b",
         "vision",
         "Procesamiento de imágenes OpenCV",
-        "📷",
     ),
     (
         r"\bscipy\.stats\b|\bscipy\.optimize\b|\bscipy\.signal\b|\bscipy\.linalg\b",
         "scipy_calc",
         "Cálculo científico SciPy",
-        "🔬",
     ),
-    (r"\bic\s*\(|from icecream import", "debugging", "Debug con IceCream", "🍦"),
-    (r"\bpl\.read_csv\b|\bpl\.read_parquet\b|\bpl\.DataFrame\b", "carga_polars", "Carga datos Polars", "🐻"),
-    (r"\blgb\.train\b|\bLGBMClassifier\b|\bLGBMRegressor\b", "lightgbm_train", "Modelo LightGBM", "🌿"),
-    (r"\bspacy\.load\b|nlp\s*=\s*spacy", "nlp_spacy", "Procesamiento NLP spaCy", "🔤"),
-    (r"\bcdef\s|\bcpdef\s|\bctypedef\s|\bpyximport\b|cimport\b", "cython_compile", "Compilación Cython", "⚡"),
+    (r"\bic\s*\(|from icecream import", "debugging", "Debug con IceCream"),
+    (r"\bpl\.read_csv\b|\bpl\.read_parquet\b|\bpl\.DataFrame\b", "carga_polars", "Carga datos Polars"),
+    (r"\blgb\.train\b|\bLGBMClassifier\b|\bLGBMRegressor\b", "lightgbm_train", "Modelo LightGBM"),
+    (r"\bspacy\.load\b|nlp\s*=\s*spacy", "nlp_spacy", "Procesamiento NLP spaCy"),
+    (r"\bcdef\s|\bcpdef\s|\bctypedef\s|\bpyximport\b|cimport\b", "cython_compile", "Compilación Cython"),
 ]
 
 MODEL_PATTERNS: dict[str, dict] = {
@@ -229,6 +218,13 @@ async def analyze_ml(req: AnalyzeMLRequest):
 
 
 def _detect_ml_libraries(tree: ast.AST) -> list[dict]:
+    # `found` se indexa por el NOMBRE CANÓNICO (info["name"], ej. "NumPy"), no
+    # por el string de alias que matcheó — ML_LIB_MAP mapea a propósito tanto
+    # "numpy" como "np" (mismo patrón para pandas/pd, tensorflow/tf, etc.) al
+    # mismo dict de info, así que `import numpy as np` pasaba por el loop de
+    # abajo dos veces (una vez con k="numpy", otra con k="np") y, al indexar
+    # por k en vez de por la librería real, se agregaba dos veces al
+    # resultado — la UI mostraba "NumPy" repetido con la misma versión.
     found: dict[str, dict] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -236,28 +232,34 @@ def _detect_ml_libraries(tree: ast.AST) -> list[dict]:
                 base = alias.name.split(".")[0]
                 key = alias.asname or base
                 for k in [alias.name, base, key]:
-                    if k in ML_LIB_MAP and k not in found:
-                        info = ML_LIB_MAP[k].copy()
-                        info["import"] = alias.name
-                        info["alias"] = alias.asname
-                        info["version"] = _get_lib_version(base)
-                        found[k] = info
+                    if k in ML_LIB_MAP:
+                        canonical = ML_LIB_MAP[k]["name"]
+                        if canonical not in found:
+                            info = ML_LIB_MAP[k].copy()
+                            info["import"] = alias.name
+                            info["alias"] = alias.asname
+                            info["version"] = _get_lib_version(base)
+                            found[canonical] = info
+                        break
         if isinstance(node, ast.ImportFrom):
             mod = node.module or ""
             base = mod.split(".")[0]
             for k in [mod, base]:
-                if k in ML_LIB_MAP and k not in found:
-                    info = ML_LIB_MAP[k].copy()
-                    info["import"] = f"from {mod} import ..."
-                    info["alias"] = None
-                    info["version"] = _get_lib_version(base)
-                    found[k] = info
+                if k in ML_LIB_MAP:
+                    canonical = ML_LIB_MAP[k]["name"]
+                    if canonical not in found:
+                        info = ML_LIB_MAP[k].copy()
+                        info["import"] = f"from {mod} import ..."
+                        info["alias"] = None
+                        info["version"] = _get_lib_version(base)
+                        found[canonical] = info
+                    break
     return list(found.values())
 
 
 def _detect_pipeline(content: str) -> list[dict]:
     steps, seen = [], set()
-    for pattern, stage_id, description, icon in PIPELINE_PATTERNS:
+    for pattern, stage_id, description in PIPELINE_PATTERNS:
         matches = list(re.finditer(pattern, content))
         if matches and stage_id not in seen:
             seen.add(stage_id)
@@ -266,7 +268,6 @@ def _detect_pipeline(content: str) -> list[dict]:
                 {
                     "id": stage_id,
                     "description": description,
-                    "icon": icon,
                     "line": line_no,
                     "count": len(matches),
                 }
@@ -600,12 +601,12 @@ def _detect_ml_issues(content: str, libraries: list[dict]) -> list[dict]:
 
 def _ml_diagram(pipeline: list, models: list, filename: str) -> str:
     if not pipeline:
-        return f"flowchart TD\n" f"    A[📄 {filename}]\n" f"    B[Sin pipeline ML detectado]\n" f"    A --> B"
-    lines = ["flowchart TD", f"    START([🤖 Pipeline: {filename}])"]
+        return f"flowchart TD\n" f"    A[{filename}]\n" f"    B[Sin pipeline ML detectado]\n" f"    A --> B"
+    lines = ["flowchart TD", f"    START([Pipeline: {filename}])"]
     prev = "START"
     for i, step in enumerate(pipeline[:10]):
         sid = f"S{i}"
-        label = f'{step["icon"]} {step["description"]}'
+        label = step["description"]
         if step.get("count", 1) > 1:
             label += f'\\n({step["count"]}x)'
         lines.append(f'    {sid}["{label}"]')
@@ -614,14 +615,14 @@ def _ml_diagram(pipeline: list, models: list, filename: str) -> str:
 
     for j, model in enumerate(models[:4]):
         mid = f"M{j}"
-        lines.append(f'    {mid}([⚡ {model["name"]}\\n{model["type"]}])')
+        lines.append(f'    {mid}([{model["name"]}\\n{model["type"]}])')
         train_node = next(
             (f"S{i}" for i, s in enumerate(pipeline[:10]) if s["id"] == "entrenamiento"),
             prev,
         )
         lines.append(f"    {train_node} --> {mid}")
 
-    lines.append("    END([✅ Fin])")
+    lines.append("    END([Fin])")
     lines.append(f"    {prev} --> END")
 
     for i, step in enumerate(pipeline[:10]):

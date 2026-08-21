@@ -25,7 +25,7 @@ if (!python) {
   process.exit(1)
 }
 
-const child = spawn(python, ['-m', 'uvicorn', 'main:app', '--host', '0.0.0.0', '--port', '8000', '--reload'], {
+const child = spawn(python, ['-m', 'uvicorn', 'main:app', '--host', '0.0.0.0', '--port', '8420', '--reload'], {
   cwd: join(root, 'apps', 'api'),
   stdio: 'inherit',
 })

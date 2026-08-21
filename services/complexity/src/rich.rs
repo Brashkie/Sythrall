@@ -12,6 +12,7 @@ use serde::Serialize;
 use crate::bigo;
 use crate::classifiers;
 use crate::complexity::cyclomatic;
+use crate::naming::{self, NamingSmell};
 use crate::parser::{line_of_offset, parse_module};
 use crate::recursion;
 use crate::security::{self, SecurityFinding};
@@ -39,6 +40,13 @@ pub struct RichFunction {
     pub is_recursive: bool,
     pub is_tail_recursive: bool,
     pub recursion_note: Option<String>,
+    pub recurrence: Option<String>,
+    /// Señal de recursión divide-and-conquer (a, c_own) — interna, se
+    /// resuelve en el segundo pase de `analyze_rich` (`apply_master_theorem`)
+    /// una vez que el Big-O de las funciones que esta llama ya se conoce, y
+    /// no viaja al frontend.
+    #[serde(skip)]
+    dc_signal: Option<(u32, u32)>,
     pub regex_class: Option<String>,
     pub regex_note: Option<String>,
     pub grammar_class: Option<String>,
@@ -65,6 +73,7 @@ pub struct RichAnalysisResult {
     pub imports: Vec<RichImport>,
     pub security_findings: Vec<SecurityFinding>,
     pub structural_smells: Vec<StructuralSmell>,
+    pub naming_smells: Vec<NamingSmell>,
     pub summary: RichSummary,
     pub error: Option<String>,
 }
@@ -79,6 +88,7 @@ pub fn analyze_rich(content: &str) -> RichAnalysisResult {
                 imports: Vec::new(),
                 security_findings: Vec::new(),
                 structural_smells: Vec::new(),
+                naming_smells: Vec::new(),
                 summary: RichSummary {
                     total_functions: 0,
                     total_classes: 0,
@@ -97,6 +107,7 @@ pub fn analyze_rich(content: &str) -> RichAnalysisResult {
     collect_functions(content, &suite, &mut functions, &mut security_findings, &mut structural_smells);
     security_findings.extend(security::hardcoded_credentials(content, &suite));
     security_findings.sort_by_key(|f| f.line);
+    apply_master_theorem(&mut functions);
 
     let classes = structure::extract_classes(content, &suite);
     let imports = structure::extract_imports(content, &suite);
@@ -106,6 +117,9 @@ pub fn analyze_rich(content: &str) -> RichAnalysisResult {
         structural_smells.extend(smells::check_god_object(&c.name, c.line, c.methods.len(), c.attribute_count));
     }
     structural_smells.sort_by_key(|s| s.line);
+
+    let mut naming_smells = naming::check_naming_smells(content, &suite);
+    naming_smells.sort_by_key(|s| s.line);
 
     let total_functions = functions.len();
     let avg_complexity = if total_functions == 0 {
@@ -128,6 +142,7 @@ pub fn analyze_rich(content: &str) -> RichAnalysisResult {
         imports,
         security_findings,
         structural_smells,
+        naming_smells,
         error: None,
     }
 }
@@ -176,6 +191,34 @@ fn function_smells(rf: &RichFunction, body: &[Stmt]) -> Vec<StructuralSmell> {
     out
 }
 
+/// Segundo pase — Fase 13 (recurrence relations): resuelve el Master
+/// Theorem para las funciones que `build_function` marcó con `dc_signal`
+/// (recursión divide-and-conquer sobre n/2). Corre DESPUÉS de que todas las
+/// funciones del archivo ya tienen su `big_o` resuelto, para poder mirar el
+/// de las funciones que cada una llama (ej. `merge_sort` llamando a
+/// `merge()`, ya analizada por su cuenta como O(n)) sin volver a recorrer
+/// AST. El snapshot de grados se toma antes de mutar nada, así ninguna
+/// función divide-and-conquer usa el resultado ya reescrito de otra.
+fn apply_master_theorem(functions: &mut [RichFunction]) {
+    let degrees: std::collections::HashMap<String, u32> = functions
+        .iter()
+        .filter_map(|f| bigo::degree_of(&f.big_o).map(|d| (f.name.clone(), d)))
+        .collect();
+
+    for f in functions.iter_mut() {
+        let Some((a, c_own)) = f.dc_signal else { continue };
+        let name = f.name.as_str();
+        let callee_degrees: Vec<u32> = f.calls.iter().filter(|c| c.as_str() != name).filter_map(|c| degrees.get(c.as_str()).copied()).collect();
+        let sig = bigo::DivideConquerSignal { a, c_own };
+        let (recurrence, big_o, theta, omega, reason) = bigo::resolve_master_theorem(&sig, &callee_degrees);
+        f.big_o = big_o;
+        f.big_o_theta = theta;
+        f.big_o_omega = omega;
+        f.big_o_reason = reason;
+        f.recurrence = Some(recurrence);
+    }
+}
+
 fn nested(stmt: &Stmt) -> Vec<&[Stmt]> {
     match stmt {
         Stmt::If(s) => vec![&s.body, &s.orelse],
@@ -205,7 +248,7 @@ fn build_function(
     let loc = end_line.saturating_sub(line) + 1;
 
     let recursion = recursion::analyze(name, body);
-    let bigo = bigo::full(body, recursion.is_recursive);
+    let (bigo, dc_signal) = bigo::full(body, name, recursion.is_recursive);
     let space_info = space::infer(body, recursion.is_recursive);
     let regex = classifiers::regex_info(body);
     let grammar = classifiers::grammar_info(name, body, recursion.is_recursive);
@@ -230,6 +273,8 @@ fn build_function(
         is_recursive: recursion.is_recursive,
         is_tail_recursive: recursion.is_tail_recursive,
         recursion_note: recursion::note(&recursion),
+        recurrence: None,
+        dc_signal: dc_signal.map(|s| (s.a, s.c_own)),
         regex_class: regex.uses_regex.then(|| "Type-3 (Regular)".to_string()),
         regex_note: classifiers::regex_note(&regex),
         grammar_class: grammar.is_grammar_shaped.then(|| "Type-2 (Context-Free)".to_string()),
@@ -265,6 +310,44 @@ mod tests {
         let src = "def binary_search(arr, target):\n    lo, hi = 0, len(arr)\n    while lo < hi:\n        mid = (lo + hi) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            lo = mid + 1\n        else:\n            hi = mid\n    return -1\n";
         let r = analyze_rich(src);
         assert_eq!(func(&r, "binary_search").big_o, "O(log n)");
+    }
+
+    #[test]
+    fn merge_sort_reconoce_recurrencia_onlogn() {
+        // merge() no es recursiva y tiene un loop propio (O(n)) — merge_sort
+        // llama a merge() ya analizada, así que el segundo pase de
+        // apply_master_theorem debe leer su grado (1) como c, no solo su
+        // propia profundidad de loop (0, no tiene loop propio).
+        let src = "def merge(left, right):\n    result = []\n    i = 0\n    for x in left:\n        result.append(x)\n    return result\n\ndef merge_sort(arr):\n    if len(arr) <= 1:\n        return arr\n    mid = len(arr) // 2\n    left = merge_sort(arr[:mid])\n    right = merge_sort(arr[mid:])\n    return merge(left, right)\n";
+        let r = analyze_rich(src);
+        let f = func(&r, "merge_sort");
+        assert_eq!(f.big_o, "O(n log n)");
+        assert_eq!(f.big_o_theta, "\u{398}(n log n)");
+        assert_eq!(f.big_o_omega, "\u{398}(n log n)");
+        assert_eq!(f.recurrence.as_deref(), Some("T(n) = 2T(n/2) + \u{398}(n)"));
+    }
+
+    #[test]
+    fn binary_search_recursivo_es_ologn_no_on() {
+        // Las dos auto-llamadas están en ramas elif/else mutuamente
+        // excluyentes de un mismo if — el factor divide-and-conquer real es
+        // a=1 (T(n) = T(n/2) + O(1)), no a=2 como daría contar sitios de
+        // auto-llamada sin distinguir ramas alternativas.
+        let src = "def binary_search_rec(arr, target, lo, hi):\n    if lo >= hi:\n        return -1\n    mid = (lo + hi) // 2\n    if arr[mid] == target:\n        return mid\n    elif arr[mid] < target:\n        return binary_search_rec(arr, target, mid + 1, hi)\n    else:\n        return binary_search_rec(arr, target, lo, mid)\n";
+        let r = analyze_rich(src);
+        let f = func(&r, "binary_search_rec");
+        assert_eq!(f.big_o, "O(log n)");
+        assert_eq!(f.recurrence.as_deref(), Some("T(n) = 1T(n/2) + \u{398}(1)"));
+    }
+
+    #[test]
+    fn recursion_sin_binary_split_no_dispara_master_theorem() {
+        // factorial es recursiva pero no divide el problema (n-1, no n//2)
+        // — no debe activar el path de Master Theorem, `recurrence` queda
+        // en None y el comportamiento heurístico existente no cambia.
+        let src = "def factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)\n";
+        let r = analyze_rich(src);
+        assert!(func(&r, "factorial").recurrence.is_none());
     }
 
     #[test]

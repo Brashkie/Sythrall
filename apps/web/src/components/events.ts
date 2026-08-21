@@ -25,14 +25,13 @@ import {
   runMLAnalysis,
   switchTab,
   toggleAuto,
-  updateStats,
 } from './app'
 import { getEditorValue } from './editor'
-import { openSearch } from './explorer'
+import { toggleSearch } from './explorer'
 import { fitDiagram, initDiagramZoom, resetZoom, zoomIn, zoomOut } from './mermaid'
 
 export function wireAllEvents(): void {
-  document.getElementById('exp-search-btn')?.addEventListener('click', openSearch)
+  document.getElementById('exp-search-btn')?.addEventListener('click', toggleSearch)
 
   // ── Tabs
   document.querySelectorAll<HTMLElement>('.tab[data-tab]').forEach((el) => {
@@ -148,10 +147,7 @@ export function wireAllEvents(): void {
         if (idx >= 0) state.results.apis[idx] = res
       })
       const { renderAPICards } = await import('../panels/apis')
-      const { renderRTChart } = await import('./charts')
       renderAPICards()
-      renderRTChart()
-      updateStats()
     } catch (e) {
       appendLog('err', 'Error: ' + (e as Error).message, 'fe')
     }

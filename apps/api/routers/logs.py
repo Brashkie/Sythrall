@@ -10,13 +10,13 @@ from shared import LOG_HISTORY, API_HISTORY
 router = APIRouter()
 
 
-@router.get("/logs", tags=["📋 Logs"])
+@router.get("/logs", tags=["Logs"])
 async def get_logs(limit: int = Query(default=100, ge=1, le=500)):
     """Equivalente a GET /logs del Flask original."""
     return {"logs": LOG_HISTORY[-limit:], "total": len(LOG_HISTORY)}
 
 
-@router.get("/api/history", tags=["📋 Logs"])
+@router.get("/api/history", tags=["Logs"])
 async def get_api_history():
     """Equivalente a GET /api/history del Flask original."""
     return {"history": API_HISTORY}

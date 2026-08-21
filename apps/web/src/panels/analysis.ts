@@ -148,7 +148,7 @@ export function renderMetrics(): void {
       .map(
         (f) => `
     <div class="metric-section" style="cursor:pointer" data-select-file="${f.id}">
-      <div class="ms-title" style="display:flex;align-items:center;gap:6px">
+      <div class="ms-title" style="display:flex;align-items:center;gap:6px;text-transform:none">
         <span>${languageBadge(f.ext)}</span>${f.name}
         <span class="tag ${f.issues.length ? 'tg-err' : 'tg-ok'}" style="margin-left:auto">${f.issues.length || 'OK'}</span>
       </div>

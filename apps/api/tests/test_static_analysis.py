@@ -2,12 +2,10 @@
 Tests — Static Analysis Router (FastAPI)
 pytest tests/test_static_analysis.py -v
 
-El sidecar `complexity-engine` no corre durante `pytest` en CI, así que
-`/static/bigO` sobre archivos `.py` ejercita el fallback a `parse_file()`
-(Python) real — no un mock. Confirma que el wiring de la Fase 1 de migración
-a Rust (services/complexity_client.py::parse_python_rich, ver
-routers/static_analysis.py::analyze_big_o) no rompió el comportamiento
-existente cuando el sidecar no está disponible.
+`conftest.py` levanta el sidecar Rust (`complexity-engine`) para toda la
+sesión de pytest — Big-O/complejidad/space/recursión/security/smells para
+`.py` son Rust-only (ver `static_parser.py::_parse_python`), así que estos
+tests ejercitan el motor real vía HTTP, no un fallback Python ni un mock.
 """
 
 import sys
@@ -187,6 +185,67 @@ class TestSpaceComplexity:
         assert self._space_of(src, "contar") == "O(n)"
 
 
+class TestRecurrenceRelations:
+    """Fase 13: reconocimiento de recurrencias divide-and-conquer
+    (T(n) = aT(n/b) + f(n)), resuelto vía el Teorema Maestro — Rust-only
+    (`services/complexity/src/bigo.rs::resolve_master_theorem`), sin
+    duplicar la lógica en el fallback puro-Python: Rust es el camino
+    principal (el sidecar corre siempre que está disponible, y `conftest.py`
+    lo levanta para toda la sesión de pytest) y el costo de mantener dos
+    implementaciones completas en paridad no se justifica para algo que solo
+    se necesitaría en el fallback degradado. Los mismos 4 casos ya están
+    cubiertos en `rich::tests` vía `cargo test` — acá se confirma que llegan
+    igual vía HTTP end-to-end (`/static/parse`, `/intel/hover`)."""
+
+    MERGE_SORT = (
+        "def merge(left, right):\n"
+        "    result = []\n"
+        "    i = 0\n"
+        "    for x in left:\n"
+        "        result.append(x)\n"
+        "    return result\n"
+        "\n"
+        "def merge_sort(arr):\n"
+        "    if len(arr) <= 1:\n"
+        "        return arr\n"
+        "    mid = len(arr) // 2\n"
+        "    left = merge_sort(arr[:mid])\n"
+        "    right = merge_sort(arr[mid:])\n"
+        "    return merge(left, right)\n"
+    )
+
+    def _fn(self, src: str, name: str) -> dict:
+        r = client.post("/static/parse", json={"filename": "test.py", "content": src})
+        assert r.status_code == 200
+        fn = next((f for f in r.json()["functions"] if f["name"] == name), None)
+        assert fn is not None
+        return fn
+
+    def test_merge_sort_es_onlogn_via_helper_interprocedural(self):
+        fn = self._fn(self.MERGE_SORT, "merge_sort")
+        assert fn["big_o"] == "O(n log n)"
+        assert fn["recurrence"] == "T(n) = 2T(n/2) + Θ(n)"
+
+    def test_non_divide_and_conquer_recursion_has_no_recurrence(self):
+        src = "def factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)\n"
+        fn = self._fn(src, "factorial")
+        assert fn["recurrence"] is None
+
+    def test_iterative_function_has_no_recurrence(self):
+        src = "def total_de(arr):\n    total = 0\n    for x in arr:\n        total += x\n    return total\n"
+        fn = self._fn(src, "total_de")
+        assert fn["recurrence"] is None
+
+    def test_hover_markdown_includes_recurrence_row(self):
+        r = client.post(
+            "/intel/hover",
+            json={"filename": "test.py", "content": self.MERGE_SORT, "line": 8, "column": 5},
+        )
+        assert r.status_code == 200
+        md = r.json().get("markdown", "")
+        assert "T(n) = 2T(n/2)" in md
+
+
 class TestProjectHealth:
     """Fase 2 del rediseño UX: /static/parse-project agrega security_findings/
     structural_smells a nivel de proyecto (antes solo per-archivo) y computa
@@ -242,6 +301,17 @@ class TestProjectHealth:
         assert data["health"]["quality"]["score"] < 100
         assert data["summary"]["structural_smells"] == len(smells)
 
+    def test_naming_smells_aggregated_with_file(self):
+        # `x` de una sola letra, asignada muchas veces dentro de una función
+        # larga — el mismo archivo que ya dispara structural_smells también
+        # dispara naming_smells, y ambos se cuentan por separado.
+        data = self._parse_project([{"filename": "long.py", "content": self.LONG_FN_FILE}])
+        naming = data["naming_smells"]
+        assert {s["kind"] for s in naming} == {"single_letter_name"}
+        assert all(s["file"] == "long.py" for s in naming)
+        assert data["health"]["quality"]["naming"] == len(naming)
+        assert data["summary"]["naming_smells"] == len(naming)
+
     def test_circular_dependency_penalizes_architecture_score(self):
         data = self._parse_project(
             [
@@ -251,6 +321,62 @@ class TestProjectHealth:
         )
         assert data["health"]["architecture"]["cycles"] >= 1
         assert data["health"]["architecture"]["score"] < 100
+
+    def test_architecture_circular_dependency_produces_smell(self):
+        # Mismo fixture que el test de arriba, pero verificando la Fase 22:
+        # el ciclo ahora TAMBIÉN aparece reencuadrado como architecture_smell
+        # (antes solo vivía en el grafo `circular`). health.architecture.smells
+        # tiene que quedar en 0 acá — ya está penalizado por `cycles`, contarlo
+        # de nuevo sería un doble castigo por el mismo hallazgo.
+        data = self._parse_project(
+            [
+                {"filename": "circular_a.py", "content": "import circular_b\n"},
+                {"filename": "circular_b.py", "content": "import circular_a\n"},
+            ]
+        )
+        smells = data["architecture_smells"]
+        assert any(s["kind"] == "circular_dependency" for s in smells)
+        assert data["summary"]["architecture_smells"] >= 1
+        assert data["health"]["architecture"]["smells"] == 0
+
+    def test_architecture_high_efferent_coupling_detected(self):
+        # hub_importer.py importa 16 archivos del proyecto (> el umbral de 15,
+        # calibrado arriba de apps/api/main.py que hoy importa 11 como
+        # composition root legítimo).
+        targets = [{"filename": f"target_{i}.py", "content": f"x = {i}\n"} for i in range(16)]
+        hub_content = "".join(f"import target_{i}\n" for i in range(16))
+        data = self._parse_project([{"filename": "hub_importer.py", "content": hub_content}, *targets])
+        smells = [s for s in data["architecture_smells"] if s["kind"] == "high_efferent_coupling"]
+        assert len(smells) == 1
+        assert smells[0]["name"] == "hub_importer.py"
+        assert smells[0]["line"] == 0
+        assert data["health"]["architecture"]["smells"] >= 1
+
+    def test_architecture_unstable_dependency_detected(self):
+        # core.py: 3 dependientes (Ca=3) que a la vez importa 4 helpers
+        # (Ce=4) → inestabilidad 4/(3+4) ≈ 0.57 > 0.5 — un módulo muy usado
+        # que además es frágil (depende de más de lo que debería para algo
+        # tan central).
+        helpers = [{"filename": f"helper_{i}.py", "content": f"x = {i}\n"} for i in range(4)]
+        core_content = "".join(f"import helper_{i}\n" for i in range(4))
+        dependents = [{"filename": f"dep_{c}.py", "content": "import core\n"} for c in ("a", "b", "c")]
+        data = self._parse_project(
+            [{"filename": "core.py", "content": core_content}, *helpers, *dependents]
+        )
+        smells = [s for s in data["architecture_smells"] if s["kind"] == "unstable_dependency"]
+        assert len(smells) == 1
+        assert smells[0]["name"] == "core.py"
+        assert data["health"]["architecture"]["smells"] >= 1
+
+    def test_architecture_smells_have_no_file_field(self):
+        # A diferencia de structural_smells/naming_smells (que se agregan por
+        # archivo, con un campo `file` tackeado), architecture_smells ya son
+        # globales — `name` lleva la ruta completa por sí solo.
+        targets = [{"filename": f"target_{i}.py", "content": f"x = {i}\n"} for i in range(16)]
+        hub_content = "".join(f"import target_{i}\n" for i in range(16))
+        data = self._parse_project([{"filename": "hub_importer.py", "content": hub_content}, *targets])
+        assert data["architecture_smells"]
+        assert all("file" not in s for s in data["architecture_smells"])
 
     def test_project_wide_avg_complexity_flattens_all_functions(self):
         # 1 archivo con 1 función O(1) + 1 archivo con función de loop anidado
@@ -263,6 +389,53 @@ class TestProjectHealth:
             ]
         )
         assert data["health"]["complexity"]["avg_complexity"] > 1.0
+
+    def test_top_complex_functions_sorted_desc_across_files(self):
+        # Fase 2 del rediseño UX — widget "Complexity by Function" del
+        # Dashboard: aplanado entre archivos, ordenado desc por complejidad.
+        data = self._parse_project(
+            [
+                {"filename": "a.py", "content": PY_NESTED_LOOPS},
+                {"filename": "b.py", "content": "def simple():\n    return 1\n"},
+            ]
+        )
+        top = data["top_complex_functions"]
+        assert top
+        assert all(top[i]["complexity"] >= top[i + 1]["complexity"] for i in range(len(top) - 1))
+        assert top[0]["name"] == "bubble_sort"
+        assert top[0]["file"] == "a.py"
+        assert {"file", "name", "line", "complexity", "big_o"} <= set(top[0].keys())
+
+    def test_top_complex_functions_capped_at_ten(self):
+        files = [{"filename": f"f{i}.py", "content": f"def fn{i}():\n    return {i}\n"} for i in range(15)]
+        data = self._parse_project(files)
+        assert len(data["top_complex_functions"]) == 10
+
+    def test_language_distribution_is_real_loc_not_estimated(self):
+        # Fase 2 del rediseño UX — widget "Languages" del Dashboard: LOC real
+        # contado sobre el contenido, no una estimación.
+        py_content = "def a():\n    return 1\n"  # 2 líneas (2 \n, criterio wc -l)
+        ts_content = "function b() {\n  return 2\n}\n"  # 3 líneas
+        data = self._parse_project(
+            [
+                {"filename": "a.py", "content": py_content},
+                {"filename": "b.ts", "content": ts_content},
+            ]
+        )
+        dist = data["language_distribution"]
+        assert dist["python"] == {"files": 1, "loc": 2, "functions": 1}
+        assert dist["typescript"] == {"files": 1, "loc": 3, "functions": 1}
+        assert data["summary"]["total_loc"] == 5
+
+    def test_language_distribution_groups_multiple_files_same_language(self):
+        data = self._parse_project(
+            [
+                {"filename": "a.py", "content": "def a():\n    return 1\n"},
+                {"filename": "b.py", "content": "def b():\n    return 2\n"},
+            ]
+        )
+        assert data["language_distribution"]["python"]["files"] == 2
+        assert data["language_distribution"]["python"]["functions"] == 2
 
     def test_health_scores_never_negative(self):
         # Muchos findings High + muchos smells — el clamp a 0 no debe fallar.

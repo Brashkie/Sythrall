@@ -4,7 +4,13 @@
 //  Sin IA. Parsers: Python AST, tree-sitter C/C++, regex TS/JS
 // ══════════════════════════════════════════
 
-import type { SecurityFinding, StaticProjectResult, StructuralSmell } from '../api/client'
+import type {
+  ArchitectureSmell,
+  NamingSmell,
+  SecurityFinding,
+  StaticProjectResult,
+  StructuralSmell,
+} from '../api/client'
 import { api } from '../api/client'
 import { state } from '../store/state'
 import { renderHealthCards } from '../utils/health'
@@ -28,6 +34,7 @@ interface ParsedFunction {
   is_recursive?: boolean
   is_tail_recursive?: boolean
   recursion_note?: string | null
+  recurrence?: string | null
   regex_class?: string | null
   regex_note?: string | null
   grammar_class?: string | null
@@ -79,6 +86,7 @@ interface StaticResult {
   wasm_hints: WasmHint[]
   security_findings: SecurityFinding[]
   structural_smells: StructuralSmell[]
+  naming_smells: NamingSmell[]
   summary: Record<string, number | string>
   error?: string
 }
@@ -90,7 +98,7 @@ const BIG_O_COLOR: Record<string, string> = {
   'O(log n)': '#8ef5c0',
   'O(n)': 'var(--info)',
   'O(n log n)': 'var(--warn)',
-  'O(n²)': '#ff8a00',
+  'O(n²)': 'var(--orange)',
   'O(n³)': 'var(--err)',
   'O(2^n)': 'var(--err)',
 }
@@ -133,7 +141,11 @@ export function renderStaticPanel(): void {
             }
            </div>`
           : `<div class="empty">
-            Selecciona un archivo y haz clic en Analizar
+            ${
+              state.currentFile
+                ? `"${esc(state.currentFile.name)}" cargado — click "Analizar" arriba para ver Big-O, smells y seguridad`
+                : 'Selecciona un archivo y haz clic en Analizar'
+            }
            </div>`
       }
     </div>
@@ -181,11 +193,12 @@ async function _runSingle(): Promise<void> {
 
 // ─── Análisis del proyecto completo ──────────────────────────────────────────
 
-/** El Dashboard muestra las mismas 4 tarjetas de Project Health — un solo
- * fetch acá las actualiza ahí también, sin pedir el análisis dos veces. */
-function _syncDashboardHealth(health: StaticProjectResult['health']): void {
-  state.results.projectHealth = health
-  import('./dashboard').then((m) => m.renderProjectHealth())
+/** El Dashboard muestra el mismo análisis de proyecto (Project Health,
+ * Findings, distribución Big-O, funciones más complejas) — un solo fetch acá
+ * lo actualiza ahí también, sin pedir el análisis dos veces. */
+function _syncDashboard(data: StaticProjectResult): void {
+  state.results.projectDashboard = data
+  import('./dashboard').then((m) => m.renderDashboard())
 }
 
 async function _runProject(): Promise<void> {
@@ -196,7 +209,7 @@ async function _runProject(): Promise<void> {
     try {
       const data = await api.staticParseProjectById(state.activeProjectId)
       _renderProjectResult(data)
-      _syncDashboardHealth(data.health)
+      _syncDashboard(data)
       appendLog('ok', `Proyecto activo: ${data.summary.total_files} archivos analizados`, 'be')
     } catch (e) {
       _showError((e as Error).message)
@@ -216,7 +229,11 @@ async function _runProject(): Promise<void> {
     const files = state.files.map((f) => ({ filename: f.name, content: f.content }))
     const data = await api.staticParseProject(files)
     _renderProjectResult(data)
-    _syncDashboardHealth(data.health)
+    // Deliberadamente NO se sincroniza con el Dashboard: esto es análisis
+    // ad-hoc de archivos sueltos del Editor, no del proyecto activo — el
+    // Dashboard es project-centric por diseño (ver panels/dashboard.ts) y
+    // mezclar ambas fuentes acá reintroduciría exactamente la ambigüedad
+    // "¿estos archivos son del proyecto o los cargué a mano?" que se corrigió.
     appendLog('ok', `Proyecto: ${files.length} archivos analizados`, 'be')
   } catch (e) {
     _showError((e as Error).message)
@@ -248,6 +265,9 @@ function _renderResult(r: StaticResult): void {
 
     <!-- Structural smells -->
     ${r.structural_smells?.length ? _renderStructuralSmells(r.structural_smells) : ''}
+
+    <!-- Naming smells -->
+    ${r.naming_smells?.length ? _renderNamingSmells(r.naming_smells) : ''}
 
     <!-- Big O table -->
     ${_renderBigOTable(r.functions)}
@@ -309,7 +329,7 @@ function _renderBigOTable(functions: ParsedFunction[]): string {
         ${f.is_async ? '<span class="bigo-async">async</span>' : ''}
         ${
           f.is_recursive
-            ? `<span class="bigo-recursion ${f.is_tail_recursive ? 'bigo-recursion-tail' : 'bigo-recursion-notail'}" title="${esc(f.recursion_note ?? '')}">${f.is_tail_recursive ? 'tail-call' : 'recursión'}</span>`
+            ? `<span class="bigo-recursion ${f.is_tail_recursive ? 'bigo-recursion-tail' : 'bigo-recursion-notail'}" title="${esc([f.recursion_note, f.recurrence].filter(Boolean).join('\n\n'))}">${f.is_tail_recursive ? 'tail-call' : 'recursión'}</span>`
             : ''
         }
         ${f.regex_class ? `<span class="bigo-cs-badge bigo-regex" title="${esc(f.regex_note ?? '')}">Regex</span>` : ''}
@@ -495,7 +515,7 @@ function _renderCallGraph(edges: Array<{ from: string; to: string }>): string {
 
 function _renderWasmHints(hints: WasmHint[]): string {
   const priorityLabel = (p: number) =>
-    p >= 5 ? ['Crítico', 'var(--err)'] : p >= 3 ? ['Alto', '#ff8a00'] : ['Medio', 'var(--warn)']
+    p >= 5 ? ['Crítico', 'var(--err)'] : p >= 3 ? ['Alto', 'var(--orange)'] : ['Medio', 'var(--warn)']
 
   return `
   <div class="metric-section">
@@ -520,8 +540,11 @@ function _renderWasmHints(hints: WasmHint[]): string {
   </div>`
 }
 
+export function securitySeverityColor(s: string): string {
+  return s === 'High' ? 'var(--err)' : s === 'Medium' ? 'var(--warn)' : 'var(--muted)'
+}
+
 function _renderSecurityFindings(findings: SecurityFinding[]): string {
-  const sevColor = (s: string) => (s === 'High' ? 'var(--err)' : s === 'Medium' ? 'var(--warn)' : 'var(--muted)')
   const confLabel = (c: string) => (c === 'High' ? 'Alta' : c === 'Medium' ? 'Media' : 'Baja')
 
   return `
@@ -529,7 +552,7 @@ function _renderSecurityFindings(findings: SecurityFinding[]): string {
     <div class="ms-title">${icon('shield', 14)} Security & Taint (${findings.length}) <span class="sec-disclaimer">— patrones heurísticos, no un reemplazo de SAST</span></div>
     ${findings
       .map((f) => {
-        const color = sevColor(f.severity)
+        const color = securitySeverityColor(f.severity)
         return `<div class="st-wasm-item sec-finding">
         <div class="st-fn-head">
           ${f.file ? `<span class="sec-cwe">${esc(f.file)}</span>` : ''}
@@ -550,12 +573,23 @@ function _renderSecurityFindings(findings: SecurityFinding[]): string {
   </div>`
 }
 
-const SMELL_LABEL: Record<StructuralSmell['kind'], [string, string]> = {
+export const SMELL_LABEL: Record<StructuralSmell['kind'], [string, string]> = {
   long_function: ['Función larga', 'var(--warn)'],
   excessive_parameters: ['Exceso de parámetros', 'var(--warn)'],
   deep_nesting: ['Anidamiento profundo', 'var(--warn)'],
-  large_class: ['Clase grande', '#ff8a00'],
+  large_class: ['Clase grande', 'var(--orange)'],
   god_object: ['God object', 'var(--err)'],
+}
+
+// Ni structural_smells ni naming_smells traen un campo `severity` propio (a
+// diferencia de SecurityFinding) — el color ya asignado arriba/abajo por
+// `kind` es el único juicio de gravedad que el sistema ya expresa en algún
+// lado, así que el Dashboard lo reusa para el widget "Findings by Severity"
+// en vez de inventar una escala nueva sin verla reflejada en ningún otro lado.
+export function smellColorSeverity(color: string): 'High' | 'Medium' | 'Low' {
+  if (color === 'var(--err)') return 'High'
+  if (color === 'var(--orange)') return 'Medium'
+  return 'Low'
 }
 
 function _renderStructuralSmells(smells: StructuralSmell[]): string {
@@ -579,6 +613,63 @@ function _renderStructuralSmells(smells: StructuralSmell[]): string {
   </div>`
 }
 
+export const NAMING_SMELL_LABEL: Record<NamingSmell['kind'], [string, string]> = {
+  shadowed_name: ['Nombre tapado', 'var(--err)'],
+  inconsistent_casing: ['Casing inconsistente', 'var(--orange)'],
+  single_letter_name: ['Nombre de una letra', 'var(--warn)'],
+}
+
+function _renderNamingSmells(smells: NamingSmell[]): string {
+  return `
+  <div class="metric-section">
+    <div class="ms-title">Naming Smells (${smells.length})</div>
+    ${smells
+      .map((s) => {
+        const [label, color] = NAMING_SMELL_LABEL[s.kind] ?? [s.kind, 'var(--muted)']
+        return `<div class="st-wasm-item">
+        <div class="st-fn-head">
+          ${s.file ? `<span class="sec-cwe">${esc(s.file)}</span>` : ''}
+          <span class="st-fn-name">${esc(s.name)}</span>
+          <span style="font-size:.65rem;color:${color};font-family:var(--mono)">${label}</span>
+          <span class="st-fn-line" style="margin-left:auto">línea ${s.line}</span>
+        </div>
+        <div class="st-wasm-rec">${esc(s.message)}</div>
+      </div>`
+      })
+      .join('')}
+  </div>`
+}
+
+export const ARCH_SMELL_LABEL: Record<ArchitectureSmell['kind'], [string, string]> = {
+  circular_dependency: ['Dependencia circular', 'var(--err)'],
+  unstable_dependency: ['Dependencia inestable', 'var(--orange)'],
+  high_efferent_coupling: ['Alto acoplamiento eferente', 'var(--warn)'],
+}
+
+// Función propia, no una reutilización de _renderStructuralSmells: esa
+// renderiza incondicionalmente "línea ${s.line}", que acá siempre sería
+// "línea 0" (smells de arquitectura son de archivo/grafo, no de línea
+// puntual) — se leería como un bug. Tampoco hay badge de archivo (`s.file`):
+// no existe ese campo, `s.name` ya es la ruta completa por sí sola.
+function _renderArchitectureSmells(smells: ArchitectureSmell[]): string {
+  return `
+  <div class="metric-section">
+    <div class="ms-title">Architecture Smells (${smells.length})</div>
+    ${smells
+      .map((s) => {
+        const [label, color] = ARCH_SMELL_LABEL[s.kind] ?? [s.kind, 'var(--muted)']
+        return `<div class="st-wasm-item">
+        <div class="st-fn-head">
+          <span class="st-fn-name">${esc(s.name)}</span>
+          <span style="font-size:.65rem;color:${color};font-family:var(--mono)">${label}</span>
+        </div>
+        <div class="st-wasm-rec">${esc(s.message)}</div>
+      </div>`
+      })
+      .join('')}
+  </div>`
+}
+
 const SEC_SEV_ORDER: Record<string, number> = { High: 0, Medium: 1, Low: 2 }
 const SMELL_KIND_ORDER: Record<StructuralSmell['kind'], number> = {
   god_object: 0,
@@ -587,28 +678,32 @@ const SMELL_KIND_ORDER: Record<StructuralSmell['kind'], number> = {
   long_function: 3,
   excessive_parameters: 4,
 }
+const NAMING_SMELL_KIND_ORDER: Record<NamingSmell['kind'], number> = {
+  shadowed_name: 0,
+  inconsistent_casing: 1,
+  single_letter_name: 2,
+}
+const ARCH_SMELL_KIND_ORDER: Record<ArchitectureSmell['kind'], number> = {
+  circular_dependency: 0,
+  unstable_dependency: 1,
+  high_efferent_coupling: 2,
+}
 
-// ─── Render proyecto ──────────────────────────────────────────────────────────
+// ─── Big O distribution (reusada por Dashboard) ──────────────────────────────
 
-function _renderProjectResult(data: StaticProjectResult): void {
-  const body = document.getElementById('st-body')!
-  const s = data.summary
-  const dist = s.big_o_distribution ?? {}
-  const projectFindings = [...(data.security_findings ?? [])].sort(
-    (a, b) => SEC_SEV_ORDER[a.severity] - SEC_SEV_ORDER[b.severity],
-  )
-  const projectSmells = [...(data.structural_smells ?? [])].sort(
-    (a, b) => SMELL_KIND_ORDER[a.kind] - SMELL_KIND_ORDER[b.kind],
-  )
+const BIG_O_ORDER = ['O(1)', 'O(log n)', 'O(n)', 'O(n log n)', 'O(n²)', 'O(n³)', 'O(2^n)']
 
-  const distRows = Object.entries(dist)
-    .sort((a, b) => {
-      const order = ['O(1)', 'O(log n)', 'O(n)', 'O(n log n)', 'O(n²)', 'O(n³)', 'O(2^n)']
-      return order.indexOf(a[0]) - order.indexOf(b[0])
-    })
+export function renderBigODistribution(
+  dist: Record<string, number>,
+  title = 'Distribución Big O del proyecto',
+): string {
+  const entries = Object.entries(dist)
+  if (!entries.length) return ''
+  const max = Math.max(...Object.values(dist))
+  const rows = entries
+    .sort((a, b) => BIG_O_ORDER.indexOf(a[0]) - BIG_O_ORDER.indexOf(b[0]))
     .map(([bigo, count]) => {
       const color = BIG_O_COLOR[bigo] ?? 'var(--muted)'
-      const max = Math.max(...Object.values(dist))
       const pct = Math.round((count / max) * 100)
       return `<div class="bigo-dist-row">
         <span class="bigo-badge" style="color:${color};border-color:${color};min-width:80px">${esc(bigo)}</span>
@@ -619,6 +714,30 @@ function _renderProjectResult(data: StaticProjectResult): void {
       </div>`
     })
     .join('')
+  return `
+  <div class="metric-section">
+    <div class="ms-title">${esc(title)}</div>
+    <div style="padding:4px 0">${rows}</div>
+  </div>`
+}
+
+// ─── Render proyecto ──────────────────────────────────────────────────────────
+
+function _renderProjectResult(data: StaticProjectResult): void {
+  const body = document.getElementById('st-body')!
+  const s = data.summary
+  const projectFindings = [...(data.security_findings ?? [])].sort(
+    (a, b) => SEC_SEV_ORDER[a.severity] - SEC_SEV_ORDER[b.severity],
+  )
+  const projectSmells = [...(data.structural_smells ?? [])].sort(
+    (a, b) => SMELL_KIND_ORDER[a.kind] - SMELL_KIND_ORDER[b.kind],
+  )
+  const projectNamingSmells = [...(data.naming_smells ?? [])].sort(
+    (a, b) => NAMING_SMELL_KIND_ORDER[a.kind] - NAMING_SMELL_KIND_ORDER[b.kind],
+  )
+  const projectArchSmells = [...(data.architecture_smells ?? [])].sort(
+    (a, b) => ARCH_SMELL_KIND_ORDER[a.kind] - ARCH_SMELL_KIND_ORDER[b.kind],
+  )
 
   const candidates = data.wasm_candidates ?? []
 
@@ -638,15 +757,11 @@ function _renderProjectResult(data: StaticProjectResult): void {
 
     ${projectSmells.length ? _renderStructuralSmells(projectSmells) : ''}
 
-    ${
-      distRows
-        ? `
-    <div class="metric-section">
-      <div class="ms-title">Distribución Big O del proyecto</div>
-      <div style="padding:4px 0">${distRows}</div>
-    </div>`
-        : ''
-    }
+    ${projectNamingSmells.length ? _renderNamingSmells(projectNamingSmells) : ''}
+
+    ${projectArchSmells.length ? _renderArchitectureSmells(projectArchSmells) : ''}
+
+    ${renderBigODistribution(s.big_o_distribution ?? {})}
 
     ${
       candidates.length

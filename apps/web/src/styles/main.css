@@ -22,6 +22,10 @@
   --err:    #ff3366;
   --info:   #3d9eff;
   --purple: #b87dff;
+  /* Severidad "Alto"/Medium — entre --warn y --err. Ya se usaba como hex
+     literal repetido en 8+ lugares (static.ts, problems.ts, graph.ts) antes
+     de tener token propio — promovido acá para que dejen de duplicarlo. */
+  --orange: #ff8a00;
   --txt:    #c8d4f0;
   --muted:  #4a5880;
   --mono: 'DM Mono', monospace;
@@ -68,6 +72,7 @@
   --err:    #d61a4a;
   --info:   #1a6fd4;
   --purple: #8b4fd6;
+  --orange: #c1560a;
   --txt:    #1a2036;
   --muted:  #6b7494;
   --glass-bg:        rgba(255,255,255,.92);
@@ -149,7 +154,6 @@ html, body {
   width: 34px; height: 34px; flex-shrink: 0; object-fit: contain; display: block;
 }
 .logo-text { font-size: .95rem; font-weight: 800; white-space: nowrap; }
-.logo-sub { font-size: .55rem; font-family: var(--mono); color: var(--muted); }
 
 .be-badge {
   display: flex; align-items: center; gap: 5px;
@@ -423,11 +427,21 @@ html, body {
   font-size: .58rem; font-weight: 700; letter-spacing: 1.6px;
   text-transform: uppercase; color: var(--muted);
   border-bottom: 1px solid var(--b0);
-  display: flex; align-items: center; justify-content: space-between;
+  /* .sb-actions (3 botones "+ Código/+ Log/+ Carpeta") necesita ~180px sin
+   * achicarse — el sidebar es redimensionable a mano (.resize-handle) y su
+   * ancho por default (200-260px según el viewport) casi nunca alcanza para
+   * los dos junto a "Archivos" sin superponerse. No es un problema de un
+   * breakpoint puntual: pasaba en TODO el rango 850-1440px de ventana
+   * probado, porque el ancho real que importa acá es el del sidebar, no el
+   * de la ventana. flex-wrap lo resuelve solo, a cualquier ancho que termine
+   * teniendo el sidebar (arrastrado a mano o no), sin depender de adivinar
+   * breakpoints de un elemento redimensionable por el usuario. */
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  row-gap: 6px;
   flex-shrink: 0;
 }
-.sb-head-label { display: flex; align-items: center; gap: 6px; }
-.sb-actions { display: flex; gap: var(--space-1); }
+.sb-head-label { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.sb-actions { display: flex; gap: var(--space-1); flex-wrap: wrap; }
 .file-tree-scroll { overflow-y: auto; flex: 1; min-height: 0; }
 .sb-endpoints { border-top: 1px solid var(--b0); flex-shrink: 0; }
 .url-list-scroll { overflow-y: auto; max-height: 160px; }
@@ -501,6 +515,55 @@ html, body {
 .cc-head { font-size: .57rem; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
 .chart-wrap  { position: relative; height: 130px; max-height: 130px; overflow: hidden; }
 
+/* ── Dashboard: widgets project-centric (rediseño Fase 2) ── */
+.dash-project-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dash-project-lbl  { font-size: .67rem; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); }
+.dash-project-name { font-family: var(--mono); font-size: .85rem; color: var(--txt); }
+
+.dash-findings-list { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; max-height: 220px; overflow-y: auto; }
+.dash-finding-row   { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--b0); }
+.dash-finding-row:last-child { border-bottom: none; }
+.dash-finding-body  { flex: 1; min-width: 0; }
+.dash-finding-label { font-size: .74rem; color: var(--txt); }
+.dash-finding-loc   { font-family: var(--mono); font-size: .62rem; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.dash-sev-rows { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.dash-sev-row  { display: grid; grid-template-columns: 60px 1fr 24px; align-items: center; gap: 8px; font-size: .72rem; }
+.dash-sev-bar-wrap { height: 8px; background: var(--b0); border-radius: 4px; overflow: hidden; }
+.dash-sev-bar      { height: 100%; border-radius: 4px; transition: width .4s ease; opacity: .8; }
+
+.dash-cc-fn-list   { display: flex; flex-direction: column; gap: 9px; margin-top: 6px; }
+.dash-cc-fn-row    { display: grid; grid-template-columns: minmax(0,1fr) 110px 34px 78px; align-items: center; gap: 10px; cursor: pointer; padding: 3px 0; }
+.dash-cc-fn-row:hover .dash-cc-fn-name { color: var(--info); }
+.dash-cc-fn-name   { font-family: var(--mono); font-size: .72rem; color: var(--txt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-cc-fn-bar-wrap { height: 6px; background: var(--b0); border-radius: 3px; overflow: hidden; }
+.dash-cc-fn-bar    { height: 100%; border-radius: 3px; transition: width .4s ease; }
+.dash-cc-fn-cc     { font-family: var(--mono); font-size: .72rem; text-align: right; }
+.dash-cc-fn-bigo   { font-family: var(--mono); font-size: .65rem; color: var(--muted); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Resumen de archivos sueltos (sin proyecto activo, ver dashboard.ts::
+   _renderAdHocSummary) — mismo criterio de hover que .dash-cc-fn-row de
+   arriba (nombre pasa a --info), más un fondo sutil en la fila entera ya
+   que acá no hay una barra/columna de datos que por sí sola comunique que
+   la fila es interactiva. */
+.dash-adhoc-file-row {
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+  padding: 5px 8px; margin: 0 -8px; border-radius: 6px;
+  transition: background .12s ease;
+}
+.dash-adhoc-file-row:hover { background: var(--ghost-tint); }
+.dash-adhoc-file-row:hover .dash-adhoc-file-name { color: var(--info); }
+.dash-adhoc-file-name {
+  font-family: var(--mono); font-size: .72rem; color: var(--txt);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: color .12s ease;
+}
+
+.cc-head-link:hover { text-decoration: underline; }
+
+.dash-lang-support-grid { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 8px; }
+.dash-lang-support-row  { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: .68rem; color: var(--txt); }
+
 /* ── Editor ── */
 .editor-bar { padding: 7px 14px; background: var(--s0); border-bottom: 1px solid var(--b0); display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
 #editor-container { flex: 1; min-height: 0; min-width: 0; }
@@ -534,6 +597,12 @@ html, body {
 .ii-file    { font-family: var(--mono); font-size: .72rem; font-weight: 600; }
 .ii-msg     { font-size: .82rem; color: var(--muted); }
 .ii-preview { font-family: var(--mono); font-size: .63rem; color: var(--b2); margin-top: 2px; }
+/* Varios tools reportando sobre la misma línea (ej. flake8 + pylint, mismo
+   import no usado) comparten un solo header (.ii-head) en vez de repetirlo
+   por cada uno — cada hallazgo sigue con su propia fila acá abajo, nada se
+   oculta, solo se deja de repetir la severidad/archivo/línea N veces. */
+.ii-sub { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; padding: 4px 0; }
+.ii-sub + .ii-sub { border-top: 1px solid var(--b0); }
 
 /* ── APIs ── */
 .api-scroll { overflow-y: auto; flex: 1; padding: 12px; }
@@ -565,7 +634,7 @@ html, body {
 .complexity-bar { height: 5px; background: var(--b0); border-radius: 3px; margin-top: 3px; overflow: hidden; }
 .cb-fill { height: 100%; border-radius: 3px; transition: width .6s; }
 .rank-A { color: var(--ok);  } .rank-B { color: #8ef5c0; }
-.rank-C { color: var(--warn);} .rank-D { color: #ff8a00; }
+.rank-C { color: var(--warn);} .rank-D { color: var(--orange); }
 .rank-E, .rank-F { color: var(--err); }
 
 /* ── Diff ── */
@@ -587,8 +656,13 @@ html, body {
 .ls-row > span:last-child { min-width: 0; overflow-wrap: break-word; flex: 1; }
 
 /* ── Right Panel ── */
-.rp-tabs { display: flex; border-bottom: 1px solid var(--b0); flex-shrink: 0; }
-.rp-tab  { padding: 10px 13px; font-size: .76rem; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; white-space: nowrap; }
+/* Los 4 tabs (Flujo/Análisis/Servidor/Problems) no entran en los 300px del
+ * drawer mobile (@media max-width:900px, ver .rp) — "Problems" quedaba
+ * directamente cortado por el borde de la pantalla, no solo apretado.
+ * overflow-x:auto los hace deslizables en vez de invisibles/inalcanzables. */
+.rp-tabs { display: flex; border-bottom: 1px solid var(--b0); flex-shrink: 0; overflow-x: auto; scrollbar-width: none; }
+.rp-tabs::-webkit-scrollbar { display: none; }
+.rp-tab  { padding: 10px 13px; font-size: .76rem; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; white-space: nowrap; flex-shrink: 0; }
 .rp-tab.active { color: var(--info); border-bottom-color: var(--info); }
 .rp-panel { display: none; flex: 1; overflow-y: auto; padding: 14px 16px; }
 .rp-panel.active { display: block; }
@@ -662,7 +736,21 @@ input[type=file] { display: none; }
   }
   .rp         { min-width: 240px; }
   #caps-row   { max-width: 280px; }
-  .url-bar    { max-width: 240px; }
+  /* .url-bar ya estaba clavado en su min-width:160px con max-width:240px —
+   * reducir el max-width no achicaba nada, el piso ya era el límite real.
+   * Es chrome secundario (probador de API, ya oculto del todo a 480px) —
+   * ocultarlo acá en vez de perseguir un ancho que no lo iba a mover. */
+  .url-bar    { display: none; }
+}
+
+/* ━━━ 750px: cierra el último hueco angosto (681-749px) donde el botón
+   "Analizar" — la acción principal del topbar — quedaba empujado fuera de
+   vista antes de que el bloque de 680px ocultara Auto/ZIP. Deliberadamente
+   NO se ensancha el bloque de 680px de abajo para esto — ese además reordena
+   sidebar/Dashboard a drawer/2-columnas, cambios que no hacen falta acá,
+   solo el texto de estos 2 botones. ━━━ */
+@media (max-width: 750px) {
+  #auto-btn span, #btn-export span { display: none; }
 }
 
 /* ━━━ 900px: Tablet landscape ━━━ */
@@ -726,10 +814,12 @@ input[type=file] { display: none; }
   .charts-row { grid-template-columns: minmax(0,1fr); }
   .chart-card.wide { grid-column: span 1; }
   .chart-wrap { height: 120px; }
+  .dash-cc-fn-row { grid-template-columns: minmax(0,1fr) 80px 30px 70px; gap: 6px; }
 
-  /* Topbar */
+  /* Topbar — .url-bar no necesita regla acá: ya está display:none desde el
+     tier de 1100px de arriba, y eso se mantiene en todos los tiers más
+     angostos también (no "expira" al cruzar a un breakpoint más chico). */
   #caps-row   { max-width: 160px; }
-  .url-bar    { max-width: 180px; }
   .pill       { display: none; }
 }
 
@@ -760,7 +850,6 @@ input[type=file] { display: none; }
     padding: 0 12px;
     gap: 8px;
   }
-  .logo-sub                       { display: none; }
   .logo-ring                      { width: 30px; height: 30px; }
   .logo-text                      { font-size: .85rem; }
   .pill                           { display: none; }
@@ -769,7 +858,6 @@ input[type=file] { display: none; }
   #btn-export                     { display: none; }
   .topbar [data-quick-url]        { display: none; }
   .topbar [data-quick-url] + *    { display: none; }
-  .url-bar                        { min-width: 120px; max-width: 180px; }
 
   /* Mostrar botón hamburguesa */
   .mobile-toggle { display: flex !important; }
@@ -822,7 +910,6 @@ input[type=file] { display: none; }
   .logo-text  { font-size: .78rem; }
   .logo-ring  { width: 26px; height: 26px; }
   #run-btn    { padding: 5px 10px; font-size: .72rem; }
-  .url-bar    { display: none; }
   .topbar [data-quick-url] { display: none; }
   .be-badge   { padding: 3px 7px; font-size: .58rem; }
 
@@ -838,6 +925,11 @@ input[type=file] { display: none; }
     align-items: stretch;
     box-shadow: 0 -4px 20px rgba(0,0,0,.4);
   }
+  /* El FAB del panel derecho (bottom:20px en el bloque de 900px) queda casi
+   * tapado por el bottom-nav (60px de alto, z-index más alto) bajo 480px —
+   * de los 44px del botón, solo ~4px quedaban afuera y clickeables.
+   * Subirlo por encima del bottom-nav acá, donde el bottom-nav existe. */
+  .rp-fab { bottom: 76px; }
   .bn-item {
     flex: 1;
     display: flex;
@@ -894,6 +986,8 @@ input[type=file] { display: none; }
   .chart-card   { padding: 10px; }
   .cc-head      { font-size: .58rem; margin-bottom: 8px; }
   .chart-wrap   { height: 110px; }
+  .dash-cc-fn-row { grid-template-columns: minmax(0,1fr) 60px 26px; gap: 5px; }
+  .dash-cc-fn-bigo { display: none; }
 
   /* Issues */
   .issues-toolbar { padding: 8px 10px; gap: 4px; }

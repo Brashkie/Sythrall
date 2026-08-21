@@ -130,7 +130,7 @@ HAS_CYTHON = LIB_FLAGS["HAS_CYTHON"]
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     os.makedirs("uploads/projects", exist_ok=True)
-    add_log("info", "🚀 Sythrall v4.8 — FastAPI")
+    add_log("info", "Sythrall v4.10 — FastAPI")
     add_log(
         "info",
         f"   flake8={'✓' if HAS_FLAKE8 else '✗'}  pylint={'✓' if HAS_PYLINT else '✗'}  "
@@ -150,10 +150,10 @@ async def lifespan(app: FastAPI):
         f"   scipy={'✓' if HAS_SCIPY else '✗'}  spacy={'✓' if HAS_SPACY else '✗'}  cython={'✓' if HAS_CYTHON else '✗'}",
     )
     yield
-    add_log("info", "🛑 Sythrall detenido.")
+    add_log("info", "Sythrall detenido.")
 
 
-app = FastAPI(title="Sythrall", version="4.9.0", lifespan=lifespan)
+app = FastAPI(title="Sythrall", version="4.10.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )
@@ -169,21 +169,21 @@ from routers.intelligence import router as intel_router
 from routers.graph import router as graph_router
 from routers.metrics_live import router as metrics_router
 
-app.include_router(upload_router, prefix="/api/upload", tags=["📂 Upload"])
-app.include_router(analysis_router, prefix="/analyze", tags=["🔍 Analysis"])
-app.include_router(ml_router, prefix="/analyze", tags=["🤖 ML"])
-app.include_router(diagram_router, prefix="/analyze", tags=["📐 Diagram"])
-app.include_router(logs_router, tags=["📋 Logs"])
-app.include_router(static_router, prefix="/static", tags=["🔬 Static"])
-app.include_router(intel_router, prefix="/intel", tags=["🧠 Intelligence"])
-app.include_router(graph_router, prefix="/analyze", tags=["🕸 Graph"])
-app.include_router(metrics_router, prefix="/metrics", tags=["📊 Live Metrics"])
+app.include_router(upload_router, prefix="/api/upload", tags=["Upload"])
+app.include_router(analysis_router, prefix="/analyze", tags=["Analysis"])
+app.include_router(ml_router, prefix="/analyze", tags=["ML"])
+app.include_router(diagram_router, prefix="/analyze", tags=["Diagram"])
+app.include_router(logs_router, tags=["Logs"])
+app.include_router(static_router, prefix="/static", tags=["Static"])
+app.include_router(intel_router, prefix="/intel", tags=["Intelligence"])
+app.include_router(graph_router, prefix="/analyze", tags=["Graph"])
+app.include_router(metrics_router, prefix="/metrics", tags=["Live Metrics"])
 
 
 # ── System endpoints ─────────────────────────────────────────────────────────
 
 
-@app.get("/health", tags=["⚙️ System"])
+@app.get("/health", tags=["System"])
 async def health():
     return {
         "status": "ok",
@@ -202,13 +202,13 @@ async def health():
     }
 
 
-@app.get("/capabilities", tags=["⚙️ System"])
+@app.get("/capabilities", tags=["System"])
 async def capabilities():
     import subprocess
 
     caps: dict = {
         "python": sys.version,
-        "server": "Sythrall v4.8",
+        "server": "Sythrall v4.10",
         "ts": now(),
         **{k: v for k, v in LIB_FLAGS.items()},
     }

@@ -89,17 +89,17 @@ def _py_flowchart(content: str, filename: str = "script.py") -> str:
     )
 
     if not funcs:
-        return f"flowchart TD\n" f"    A[📄 {filename}]\n" f"    B[Sin funciones]\n" f"    A --> B"
+        return f"flowchart TD\n" f"    A[{filename}]\n" f"    B[Sin funciones]\n" f"    A --> B"
 
-    lines = ["flowchart TD", f"    START([🚀 {filename}])"]
+    lines = ["flowchart TD", f"    START([{filename}])"]
     for i, fn in enumerate(funcs[:12]):
-        icon = "⚡" if fn["is_async"] else "⚙️"
-        label = f'{icon} {fn["name"]}({", ".join(fn["args"][:2])})'
+        prefix = "async " if fn["is_async"] else ""
+        label = f'{prefix}{fn["name"]}({", ".join(fn["args"][:2])})'
         if fn["docstring"]:
-            label += f'\\n📝 {fn["docstring"]}'
+            label += f'\\n{fn["docstring"]}'
         lines.append(f'    F{i}["{label}"]')
 
-    lines += ["    END([🏁 Fin])", "    START --> F0"]
+    lines += ["    END([Fin])", "    START --> F0"]
     for i in range(min(len(funcs), 12) - 1):
         lines.append(f"    F{i} --> F{i+1}")
     lines.append(f"    F{min(len(funcs)-1, 11)} --> END")
@@ -147,7 +147,7 @@ def _py_callgraph(content: str) -> str:
                 if callee and callee in func_names and callee != caller:
                     call_map[caller].append(callee)
 
-    lines = ["graph LR"] + [f'    {fn}["⚙️ {fn}"]' for fn in list(func_names)[:12]]
+    lines = ["graph LR"] + [f'    {fn}["{fn}"]' for fn in list(func_names)[:12]]
     seen: set[str] = set()
     for caller, callees in call_map.items():
         for callee in callees:
@@ -266,15 +266,15 @@ def _generic_flowchart(content: str, filename: str, ext: str) -> str:
     if not funcs:
         return (
             f"flowchart TD\n"
-            f'    A[📄 {filename}]\n'
+            f'    A[{filename}]\n'
             f'    B[{len(lines_list)} líneas · {ext.replace(".", "").upper()}]\n'
             f"    A --> B"
         )
 
-    code = f"flowchart TD\n    START([📄 {filename}])\n"
+    code = f"flowchart TD\n    START([{filename}])\n"
     for i, fn in enumerate(funcs[:10]):
-        code += f'    F{i}["⚙️ {fn["name"]}()"]\n'
-    code += "    END([🏁])\n    START --> F0\n"
+        code += f'    F{i}["{fn["name"]}()"]\n'
+    code += "    END([Fin])\n    START --> F0\n"
     for i in range(min(len(funcs), 10) - 1):
         code += f"    F{i} --> F{i+1}\n"
     code += f"    F{min(len(funcs)-1, 9)} --> END\n"

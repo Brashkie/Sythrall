@@ -107,6 +107,9 @@ export interface ProjectInfo {
   code_files: number
   by_extension: Record<string, number>
   created_at: string
+  /** Persistido desde la Fase de UX Audit — proyectos subidos antes de ese
+   * fix no lo tienen, de ahí el opcional. */
+  project_name?: string
 }
 
 export interface UploadResult {
@@ -129,6 +132,9 @@ export interface ProjectSummary {
   code_files: number
   by_extension: Record<string, number>
   created_at: string
+  /** Persistido desde la Fase de UX Audit — proyectos subidos antes de ese
+   * fix no lo tienen, de ahí el opcional. */
+  project_name?: string
 }
 
 export interface FileContent {
@@ -153,6 +159,7 @@ export interface StaticFunction {
   is_recursive?: boolean
   is_tail_recursive?: boolean
   recursion_note?: string | null
+  recurrence?: string | null
   calls?: string[]
   is_async?: boolean
   args?: string[]
@@ -208,15 +215,37 @@ export interface StructuralSmell {
   file?: string
 }
 
+export interface NamingSmell {
+  kind: 'single_letter_name' | 'inconsistent_casing' | 'shadowed_name'
+  name: string
+  line: number
+  message: string
+  /** Solo presente a nivel de proyecto, ver SecurityFinding.file. */
+  file?: string
+}
+
+/** Fase 22: acoplamiento eferente alto, dependencia inestable, y ciclos de
+ * import reencuadrados como un smell más. A diferencia de StructuralSmell/
+ * NamingSmell, no hay campo `file` — estos smells ya son globales (nunca
+ * existen a nivel de un solo archivo), así que `name` lleva la ruta completa
+ * del archivo por sí sola. `line` siempre es 0 (smell de archivo/grafo, no
+ * de línea puntual). */
+export interface ArchitectureSmell {
+  kind: 'circular_dependency' | 'unstable_dependency' | 'high_efferent_coupling'
+  name: string
+  line: number
+  message: string
+}
+
 export interface ProjectHealthMetric {
   score: number
 }
 
 export interface ProjectHealth {
   security: ProjectHealthMetric & { high: number; medium: number; low: number }
-  quality: ProjectHealthMetric & { smells: number }
+  quality: ProjectHealthMetric & { smells: number; naming: number }
   complexity: ProjectHealthMetric & { avg_complexity: number }
-  architecture: ProjectHealthMetric & { cycles: number }
+  architecture: ProjectHealthMetric & { cycles: number; smells: number }
 }
 
 export interface StaticParseResult {
@@ -233,6 +262,7 @@ export interface StaticParseResult {
   wasm_hints: WasmHint[]
   security_findings: SecurityFinding[]
   structural_smells: StructuralSmell[]
+  naming_smells: NamingSmell[]
   summary: Record<string, number | string>
   error?: string
 }
@@ -249,11 +279,28 @@ export interface StaticProjectResult {
     wasm_candidates: number
     security_findings: number
     structural_smells: number
+    naming_smells: number
+    /** Incluye las entradas de circular_dependency — a diferencia de
+     * health.architecture.smells, que las excluye para no penalizar el
+     * score dos veces (ver comentario en el backend). */
+    architecture_smells: number
+    total_loc: number
   }
   wasm_candidates: Array<{ file: string; hints: WasmHint[] }>
   security_findings: SecurityFinding[]
   structural_smells: StructuralSmell[]
+  naming_smells: NamingSmell[]
+  architecture_smells: ArchitectureSmell[]
+  top_complex_functions: Array<{ file: string; name: string; line: number; complexity: number; big_o: string }>
+  language_distribution: Record<string, { files: number; loc: number; functions: number }>
   health: ProjectHealth
+}
+
+/** Capacidad real del motor de análisis por lenguaje — `available` refleja
+ * si la dependencia real (ej. tree-sitter) está instalada, no una promesa. */
+export interface StaticLanguagesResult {
+  languages: Record<string, { extensions: string[]; parser: string; features: string[]; available: boolean }>
+  capabilities: { tree_sitter: boolean; networkx: boolean }
 }
 
 // ─── Tipos Code Graph ─────────────────────────────────────────────────────────
@@ -302,7 +349,6 @@ export interface GraphResult {
 export interface GraphType {
   id: string
   label: string
-  icon: string
   description: string
 }
 
@@ -471,4 +517,8 @@ export const api = {
   /** Igual que staticParseProject, pero para un proyecto ya subido (Proyectos). */
   staticParseProjectById: (projectId: string) =>
     post<StaticProjectResult>('/static/parse-project', { project_id: projectId }),
+
+  /** Capacidad real del motor por lenguaje (no una lista estática hardcodeada
+   * en el frontend) — para el widget "Languages" del Dashboard. */
+  staticLanguages: () => get<StaticLanguagesResult>('/static/languages'),
 }

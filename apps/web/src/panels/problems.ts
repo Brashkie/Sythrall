@@ -7,9 +7,11 @@
 //  sub-tab "Análisis" (#analysis-content, panels/analysis.ts).
 // ══════════════════════════════════════════
 
+import type { NamingSmell, SecurityFinding, StructuralSmell } from '../api/client'
 import { getApiBase } from '../store/state'
 import type { CodeFile, Issue } from '../types'
 import { icon, languageBadge } from '../utils/icons'
+import { NAMING_SMELL_LABEL, SMELL_LABEL, securitySeverityColor } from './static'
 
 // ─── Estado ───────────────────────────────────────────────────────────────────
 
@@ -35,7 +37,7 @@ const BIGO_COLOR: Record<string, string> = {
 function ccColor(cc: number): string {
   if (cc <= 5) return 'var(--ok)'
   if (cc <= 10) return 'var(--warn)'
-  if (cc <= 20) return '#ff8a00'
+  if (cc <= 20) return 'var(--orange)'
   return 'var(--err)'
 }
 
@@ -143,9 +145,41 @@ function _setMetric(id: string, text: string, color?: string): void {
 //  Muestra errores, warnings, Big-O, complejidad, security
 // ══════════════════════════════════════════
 
+let _lastFile: CodeFile | null = null
+let _lastLiveMetrics: LiveMetricsData | undefined
+let _fileFindings: { security: SecurityFinding[]; structural: StructuralSmell[]; naming: NamingSmell[] } = {
+  security: [],
+  structural: [],
+  naming: [],
+}
+
+/** Findings del CS Engine (Fases 21/22 — security/structural/naming) para el
+ * archivo abierto en el Editor, empujados desde `editor-intelligence.ts`
+ * cuando resuelve el heavy path (`/intel/analyze`). Llegan en un timing
+ * distinto al de `updateProblems` (2s idle vs. cada cambio de markers), así
+ * que se cachean acá y disparan un re-render sobre el último file conocido
+ * en vez de requerir que el caller los pase siempre juntos. */
+export function updateFileFindings(
+  security: SecurityFinding[],
+  structural: StructuralSmell[],
+  naming: NamingSmell[],
+): void {
+  _fileFindings = { security, structural, naming }
+  if (_lastFile) updateProblems(_lastFile, _lastLiveMetrics)
+}
+
 export function updateProblems(file: CodeFile, liveMetrics?: LiveMetricsData): void {
   const container = document.getElementById('problems-content')
   if (!container) return
+
+  // Los findings del CS Engine son de otro archivo — todavía no llegaron los
+  // del que se acaba de abrir (el heavy path tarda ~2s idle), así que se
+  // limpian en vez de mostrar findings de un archivo distinto al de la vista.
+  if (file.name !== _lastFile?.name) {
+    _fileFindings = { security: [], structural: [], naming: [] }
+  }
+  _lastFile = file
+  _lastLiveMetrics = liveMetrics
 
   const errors = file.issues.filter((i) => i.severity === 'error')
   const warnings = file.issues.filter((i) => i.severity === 'warning')
@@ -166,7 +200,8 @@ export function updateProblems(file: CodeFile, liveMetrics?: LiveMetricsData): v
         ${errors.length ? `<span class="pb-count pb-err">${icon('warning', 11)} ${errors.length} error${errors.length !== 1 ? 'es' : ''}</span>` : ''}
         ${warnings.length ? `<span class="pb-count pb-warn">△ ${warnings.length} warn</span>` : ''}
         ${infos.length ? `<span class="pb-count pb-info">ℹ ${infos.length} info</span>` : ''}
-        ${!file.issues.length ? `<span class="pb-count pb-ok">✓ Sin problemas</span>` : ''}
+        ${!file.issues.length && file.analyzed ? `<span class="pb-count pb-ok">✓ Sin problemas</span>` : ''}
+        ${!file.analyzed ? `<span class="pb-count" style="color:var(--muted)">Sin analizar todavía</span>` : ''}
       </div>
     </div>
   `
@@ -241,6 +276,12 @@ export function updateProblems(file: CodeFile, liveMetrics?: LiveMetricsData): v
     `
   }
 
+  // Findings del CS Engine (Security/Structural/Naming — Fases 21/22),
+  // Rust-first vía /intel/analyze. Distinto de los `issues` de flake8/pylint
+  // de arriba — son señales del motor propio de Sythrall, no de linters
+  // externos, así que se muestran en su propia sección.
+  html += _renderFileFindings()
+
   container.innerHTML = html
 
   // Click en issue → ir a la línea
@@ -252,6 +293,45 @@ export function updateProblems(file: CodeFile, liveMetrics?: LiveMetricsData): v
       import('../components/app').then((m) => m.switchTab?.('editor'))
     })
   })
+}
+
+/** Security/Structural/Naming findings del CS Engine para el archivo abierto
+ * — mismo patrón visual que `_problemSection` (fila clickeable con
+ * `data-pb-line`, reusa el delegado de click ya wireado al final de
+ * `updateProblems`), pero coloreado con los mismos mapas kind→color que ya
+ * usa `panels/static.ts`, no una paleta nueva inventada acá. */
+function _renderFileFindings(): string {
+  const { security, structural, naming } = _fileFindings
+  if (!security.length && !structural.length && !naming.length) return ''
+
+  const row = (line: number, label: string, color: string, msg: string): string => `
+    <div class="pb-issue" data-pb-line="${line}" title="Clic para ir a la línea">
+      <span class="pb-issue-loc">L${line}</span>
+      <span class="pb-issue-tool" style="color:${color}">${_esc(label)}</span>
+      <span class="pb-issue-msg">${_esc(msg)}</span>
+    </div>`
+
+  const secHtml = security
+    .map((f) => row(f.line, f.severity, securitySeverityColor(f.severity), `${f.cwe} ${f.category}`))
+    .join('')
+  const structuralHtml = structural
+    .map((s) => {
+      const [label, color] = SMELL_LABEL[s.kind] ?? [s.kind, 'var(--muted)']
+      return row(s.line, label, color, `${s.name} — ${s.message}`)
+    })
+    .join('')
+  const namingHtml = naming
+    .map((s) => {
+      const [label, color] = NAMING_SMELL_LABEL[s.kind] ?? [s.kind, 'var(--muted)']
+      return row(s.line, label, color, `${s.name} — ${s.message}`)
+    })
+    .join('')
+
+  return `
+    ${security.length ? `<div class="pb-section pb-security"><div class="pb-section-head">${icon('shield', 12)} Security (${security.length})</div>${secHtml}</div>` : ''}
+    ${structural.length ? `<div class="pb-section"><div class="pb-section-head">Structural Smells (${structural.length})</div>${structuralHtml}</div>` : ''}
+    ${naming.length ? `<div class="pb-section"><div class="pb-section-head">Naming Smells (${naming.length})</div>${namingHtml}</div>` : ''}
+  `
 }
 
 function _problemSection(title: string, issues: Issue[], cls: string): string {

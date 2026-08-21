@@ -145,7 +145,7 @@ export function renderMLResults(data: MLAnalysisResult, container: HTMLElement):
       .map(
         (step, i) => `
       <div style="display:flex;align-items:center;gap:9px;padding:7px 0;${i < pipeline.length - 1 ? 'border-bottom:1px solid var(--b0)' : ''}">
-        <div style="width:26px;height:26px;border-radius:50%;background:${step.id === 'cython_compile' ? 'rgba(255,212,59,.12)' : 'var(--s2)'};border:1px solid ${step.id === 'cython_compile' ? 'rgba(255,212,59,.4)' : 'var(--b1)'};display:grid;place-items:center;font-size:12px;flex-shrink:0">${step.icon}</div>
+        <div style="width:26px;height:26px;border-radius:50%;background:${step.id === 'cython_compile' ? 'rgba(255,212,59,.12)' : 'var(--s2)'};border:1px solid ${step.id === 'cython_compile' ? 'rgba(255,212,59,.4)' : 'var(--b1)'};display:grid;place-items:center;font-size:.68rem;font-weight:600;font-family:var(--mono);color:var(--muted);flex-shrink:0">${i + 1}</div>
         <div style="flex:1">
           <div style="font-size:.78rem;font-weight:600;${step.id === 'cython_compile' ? 'color:#ffd43b' : ''}">${step.description}</div>
           <div style="font-size:.63rem;color:var(--muted);font-family:var(--mono)">línea ~${step.line}${step.count > 1 ? ' · ' + step.count + 'x' : ''}</div>

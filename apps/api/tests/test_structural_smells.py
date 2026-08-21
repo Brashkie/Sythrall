@@ -2,11 +2,9 @@
 Tests — Structural Smells (Fase 22, segundo ítem)
 pytest tests/test_structural_smells.py -v
 
-Ejercita services/static_parser.py::_check_long_function/_check_excessive_
-parameters/_check_deep_nesting/_check_large_class/_check_god_object directo
-(via /static/parse), sin sidecar — esta pasada es 100% Python. La paridad con
-la versión Rust (services/complexity/src/smells.rs) se confirma a mano sobre
-los mismos 5 casos.
+Ejercita `services/complexity/src/smells.rs` (Rust-only ahora, ver
+`static_parser.py::_parse_python`) vía `/static/parse` — `conftest.py` levanta
+el sidecar real para toda la sesión de pytest.
 """
 
 import sys

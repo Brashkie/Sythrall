@@ -281,7 +281,7 @@ function renderRecentProjects(): string {
           return `
         <div class="up-recent-item${isActive ? ' up-recent-active' : ''}">
           <div class="up-recent-info">
-            <span class="up-recent-id">${esc(p.project_id.slice(0, 8))}…${isActive ? ' <span class="pill pill-ok up-active-badge">Activo</span>' : ''}</span>
+            <span class="up-recent-id" title="${esc(p.project_id)}">${esc(p.project_name || `${p.project_id.slice(0, 8)}…`)}${isActive ? ' <span class="pill pill-ok up-active-badge">Activo</span>' : ''}</span>
             <span class="up-recent-meta">${p.total_files} archivos · ${p.total_size_fmt}</span>
           </div>
           <button class="btn btn-ghost btn-sm" data-load-project="${esc(p.project_id)}" title="Usar como proyecto activo">Usar</button>
@@ -546,13 +546,12 @@ export async function openProjectFile(projectId: string, filePath: string): Prom
       addFile(file)
 
       // Importados dinámicamente para no crear dependencia circular con app.ts/explorer.ts
-      const [{ explorerAddFile }, { updateSelectors, updateStats }] = await Promise.all([
+      const [{ explorerAddFile }, { updateSelectors }] = await Promise.all([
         import('../components/explorer'),
         import('../components/app'),
       ])
       explorerAddFile(file)
       updateSelectors()
-      updateStats()
     }
 
     const { selectFile } = await import('../components/app')
@@ -571,7 +570,7 @@ async function loadProject(projectId: string): Promise<void> {
     const data = await api.getProjectTree(projectId)
     st.activeResult = {
       project_id: data.project_id,
-      project_name: data.project_id.slice(0, 8),
+      project_name: data.info.project_name || data.project_id.slice(0, 8),
       type: 'files',
       total_files: data.info.total_files,
       tree: data.tree,

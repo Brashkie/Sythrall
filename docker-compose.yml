@@ -7,7 +7,7 @@ services:
     container_name: sythrall-backend
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8420:8000"
     environment:
       - PYTHONUNBUFFERED=1
       # Nombre del servicio Docker, no 127.0.0.1 — dentro de la red de

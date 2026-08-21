@@ -8,6 +8,7 @@ GET  /analyze/graph/types → tipos disponibles
 
 from __future__ import annotations
 
+import asyncio
 import re
 from pathlib import Path
 from typing import Any
@@ -90,31 +91,26 @@ async def graph_types():
             {
                 "id": "import",
                 "label": "Import Graph",
-                "icon": "📦",
                 "description": "Dependencias entre archivos vía imports/requires",
             },
             {
                 "id": "call",
                 "label": "Call Graph",
-                "icon": "🔗",
                 "description": "Qué función llama a cuál dentro de cada archivo",
             },
             {
                 "id": "circular",
                 "label": "Circular Dependencies",
-                "icon": "🔄",
                 "description": "Ciclos en el grafo de dependencias entre módulos",
             },
             {
                 "id": "heatmap",
                 "label": "Complexity Heatmap",
-                "icon": "🌡️",
                 "description": "Mapa de calor por complejidad ciclomática y Big-O",
             },
             {
                 "id": "centrality",
                 "label": "Centrality / Hubs",
-                "icon": "🔥",
                 "description": "Archivos más conectados del proyecto — mismo concepto que centralidad en redes sociales, aplicado a dependencias",
             },
         ]
@@ -131,7 +127,7 @@ async def generate_graph(req: GraphRequest) -> dict[str, Any]:
         return _empty_response(req.graph_type)
 
     # Parsear todos los archivos
-    parsed_files = _parse_all(req.files)
+    parsed_files = await _parse_all(req.files)
 
     try:
         if req.graph_type == "import":
@@ -154,21 +150,72 @@ async def generate_graph(req: GraphRequest) -> dict[str, Any]:
 # ── Parser helper ─────────────────────────────────────────────────────────────
 
 
-def _parse_all(files: list[dict]) -> list[dict]:
-    """Parsea todos los archivos con el static parser."""
+async def _parse_all(files: list[dict]) -> list[dict]:
+    """Parsea todos los archivos con el static parser. `asyncio.gather` en
+    vez de awaits secuenciales — `parse_file` consulta el sidecar Rust por
+    HTTP para `.py`, no vale la pena serializar esos round-trips."""
     from services.static_parser import parse_file
 
+    to_parse = [
+        (f.get("filename", "unknown"), f.get("content", "")) for f in files if f.get("content", "").strip()
+    ]
+    parsed_list = await asyncio.gather(*(parse_file(fname, content) for fname, content in to_parse))
+
     results = []
-    for f in files:
-        fname = f.get("filename", "unknown")
-        content = f.get("content", "")
-        if not content.strip():
-            continue
-        parsed = parse_file(fname, content)
+    for (fname, content), parsed in zip(to_parse, parsed_list, strict=True):
         parsed["_filename"] = fname
         parsed["_content"] = content
         results.append(parsed)
     return results
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EDGES / DIGRAPH COMPARTIDOS (Fase 22 — Architecture smells)
+#  `_build_import_graph`/`_build_circular_graph`/`_build_centrality_graph`
+#  reconstruían el mismo loop archivo→archivo 3 veces, cada una casi
+#  idéntica. Extraído acá para que `_build_architecture_smells` (abajo) no
+#  sea una 4ta copia — un solo shape de edge, un solo builder de DiGraph.
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def _build_project_edges(parsed_files: list[dict]) -> list[dict]:
+    """Edges archivo→archivo, solo entre archivos que el proyecto ya trae
+    (imports a librerías externas no generan edge, no hay archivo del
+    proyecto que resolver). Shape único `{"from", "to", "via", "line"}` —
+    antes `_build_import_graph` incluía `"line"` y los otros dos builders no;
+    unificado porque ningún test compara el dict completo, solo hace
+    `.get()`/`in` sobre keys puntuales."""
+    file_names = {p["_filename"] for p in parsed_files}
+    edges: list[dict] = []
+    seen: set[str] = set()
+
+    for p in parsed_files:
+        src = p["_filename"]
+        for imp in p.get("imports", []):
+            mod = imp.get("module", "")
+            for candidate in _module_to_candidates(mod, src):
+                if candidate in file_names and candidate != src:
+                    key = f"{src}→{candidate}"
+                    if key not in seen:
+                        seen.add(key)
+                        edges.append({"from": src, "to": candidate, "via": mod, "line": imp.get("line", 0)})
+                    break
+
+    return edges
+
+
+def _build_project_digraph(parsed_files: list[dict], edges: list[dict]) -> nx.DiGraph:
+    """DiGraph con TODOS los archivos como nodos (incluso sin edges) antes de
+    agregar las edges — así un archivo aislado aparece con in/out-degree 0
+    en vez de estar ausente del grafo. `nx.simple_cycles` ignora nodos
+    aislados de todos modos, así que esto no cambia el resultado de
+    `find_cycles_capped` para `_build_circular_graph`."""
+    G = nx.DiGraph()
+    for p in parsed_files:
+        G.add_node(p["_filename"])
+    for e in edges:
+        G.add_edge(e["from"], e["to"])
+    return G
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -181,10 +228,7 @@ def _build_import_graph(parsed_files: list[dict]) -> dict[str, Any]:
     Construye el grafo de dependencias entre archivos.
     Nodo = archivo, Edge = import entre archivos del proyecto.
     """
-    file_names = {p["_filename"] for p in parsed_files}
     nodes: list[dict] = []
-    edges: list[dict] = []
-    seen_edges: set[str] = set()
 
     # Nodos
     for p in parsed_files:
@@ -203,26 +247,7 @@ def _build_import_graph(parsed_files: list[dict]) -> dict[str, Any]:
             }
         )
 
-    # Edges — solo entre archivos del proyecto
-    for p in parsed_files:
-        src = p["_filename"]
-        for imp in p.get("imports", []):
-            mod = imp.get("module", "")
-            # Intentar resolver el módulo a un archivo del proyecto
-            for candidate in _module_to_candidates(mod, src):
-                if candidate in file_names and candidate != src:
-                    key = f"{src}→{candidate}"
-                    if key not in seen_edges:
-                        seen_edges.add(key)
-                        edges.append(
-                            {
-                                "from": src,
-                                "to": candidate,
-                                "via": mod,
-                                "line": imp.get("line", 0),
-                            }
-                        )
-                    break
+    edges = _build_project_edges(parsed_files)
 
     # Generar Mermaid (Tree View)
     mermaid = _import_graph_to_mermaid(nodes, edges, parsed_files)
@@ -254,14 +279,17 @@ def _import_graph_to_mermaid(
     if not nodes:
         return "flowchart TD\n    A[Sin archivos]"
 
-    lang_icon = {"python": "🐍", "typescript": "🟦", "javascript": "🟨", "c": "⚙️", "cpp": "⚙️"}
+    # Abreviatura de lenguaje como texto — mismo criterio que el badge PY/TS/JS
+    # ya usado en el frontend (utils/icons.ts::languageBadge), no un ícono
+    # nuevo/emoji para el mismo concepto.
+    lang_abbr = {"python": "PY", "typescript": "TS", "javascript": "JS", "c": "C", "cpp": "C++"}
     lines = ["flowchart TD"]
 
-    # Nodos con icono de lenguaje
+    # Nodos con abreviatura de lenguaje
     for n in nodes:
         nid = _safe_id(n["id"])
-        icon = lang_icon.get(n["language"], "📄")
-        lines.append(f'    {nid}["{icon} {n["label"]}\\n{n["functions"]} fn · {n["imports"]} imp"]')
+        abbr = lang_abbr.get(n["language"], "?")
+        lines.append(f'    {nid}["[{abbr}] {n["label"]}\\n{n["functions"]} fn · {n["imports"]} imp"]')
 
     # Edges
     for e in edges:
@@ -360,12 +388,12 @@ def _call_graph_to_mermaid(nodes: list[dict], edges: list[dict]) -> str:
 
     lines = ["flowchart TD"]
 
-    # Nodos con Big-O
+    # Nodos con Big-O — la severidad ya se distingue por color en el bloque
+    # "hot paths" de abajo (fill por n["level"]), no hace falta repetirla acá.
     for n in nodes:
         nid = _safe_id(n["id"])
         bigo = n.get("big_o", "")
-        icon = "⚙️" if not bigo or bigo == "O(1)" else "🟡" if bigo in ("O(n)", "O(n log n)") else "🔴"
-        lines.append(f'    {nid}["{icon} {n["label"]}\\n{bigo}"]')
+        lines.append(f'    {nid}["{n["label"]}\\n{bigo}"]')
 
     # Edges
     for e in edges:
@@ -394,28 +422,12 @@ def _build_circular_graph(parsed_files: list[dict]) -> dict[str, Any]:
     """
     Detecta y visualiza ciclos en el grafo de imports.
     """
-    file_names = {p["_filename"] for p in parsed_files}
-    all_edges: list[dict] = []
-    seen: set[str] = set()
-
-    for p in parsed_files:
-        src = p["_filename"]
-        for imp in p.get("imports", []):
-            mod = imp.get("module", "")
-            for candidate in _module_to_candidates(mod, src):
-                if candidate in file_names and candidate != src:
-                    key = f"{src}→{candidate}"
-                    if key not in seen:
-                        seen.add(key)
-                        all_edges.append({"from": src, "to": candidate, "via": mod})
-                    break
+    all_edges = _build_project_edges(parsed_files)
 
     # Detectar ciclos (capado — ver docstring de find_cycles_capped)
     cycles: list[list[str]] = []
     if HAS_NX and all_edges:
-        G = nx.DiGraph()
-        for e in all_edges:
-            G.add_edge(e["from"], e["to"])
+        G = _build_project_digraph(parsed_files, all_edges)
         cycles = find_cycles_capped(G, max_cycles=20)
 
     # Nodos en ciclos
@@ -468,15 +480,16 @@ def _circular_to_mermaid(
 ) -> str:
     lines = ["flowchart TD"]
 
+    # Los nodos en ciclo ya se distinguen por color más abajo (fill rojo);
+    # duplicarlo acá con un ícono sería la misma señal dos veces.
     for n in nodes:
         nid = _safe_id(n["id"])
-        icon = "🔴" if n["in_cycle"] else "📄"
-        lines.append(f'    {nid}["{icon} {n["label"]}"]')
+        lines.append(f'    {nid}["{n["label"]}"]')
 
     for e in edges:
         f = _safe_id(e["from"])
         t = _safe_id(e["to"])
-        arr = " -.->|🔄| " if e.get("is_cycle") else " --> "
+        arr = " -.-> " if e.get("is_cycle") else " --> "
         lines.append(f"    {f}{arr}{t}")
 
     # Resaltar nodos en ciclo
@@ -486,7 +499,7 @@ def _circular_to_mermaid(
             lines.append(f"    style {nid} fill:#ff336630,stroke:#ff3366,stroke-width:2px")
 
     if not cycles:
-        lines.append('    OK["✅ Sin dependencias circulares"]')
+        lines.append('    OK["Sin dependencias circulares"]')
         lines.append("    style OK fill:#00f5a020,stroke:#00f5a0")
 
     return "\n".join(lines) + "\n"
@@ -510,21 +523,7 @@ def _build_centrality_graph(parsed_files: list[dict]) -> dict[str, Any]:
     al menos 2 dependientes, para no marcar como hub un archivo con una sola
     import entrante.
     """
-    file_names = {p["_filename"] for p in parsed_files}
-    all_edges: list[dict] = []
-    seen: set[str] = set()
-
-    for p in parsed_files:
-        src = p["_filename"]
-        for imp in p.get("imports", []):
-            mod = imp.get("module", "")
-            for candidate in _module_to_candidates(mod, src):
-                if candidate in file_names and candidate != src:
-                    key = f"{src}→{candidate}"
-                    if key not in seen:
-                        seen.add(key)
-                        all_edges.append({"from": src, "to": candidate, "via": mod})
-                    break
+    all_edges = _build_project_edges(parsed_files)
 
     if not HAS_NX or not all_edges:
         nodes = [
@@ -546,11 +545,7 @@ def _build_centrality_graph(parsed_files: list[dict]) -> dict[str, Any]:
             "summary": {"total_files": len(nodes), "hubs": [], "max_in_degree": 0},
         }
 
-    G = nx.DiGraph()
-    for p in parsed_files:
-        G.add_node(p["_filename"])
-    for e in all_edges:
-        G.add_edge(e["from"], e["to"])
+    G = _build_project_digraph(parsed_files, all_edges)
 
     degree_centrality = nx.degree_centrality(G)
     in_degree = dict(G.in_degree())
@@ -596,7 +591,7 @@ def _centrality_to_mermaid(nodes: list[dict], edges: list[dict]) -> str:
     lines = ["flowchart TD"]
     for n in nodes:
         nid = _safe_id(n["id"])
-        hub_badge = " 🔥" if n.get("is_hub") else ""
+        hub_badge = " [HUB]" if n.get("is_hub") else ""
         lines.append(f'    {nid}["{n["label"]}{hub_badge}\\nin:{n["in_degree"]} · out:{n["out_degree"]}"]')
 
     for e in edges:
@@ -610,6 +605,112 @@ def _centrality_to_mermaid(nodes: list[dict], edges: list[dict]) -> str:
             lines.append(f"    style {nid} fill:#ff8a0020,stroke:#ff8a00,stroke-width:2px")
 
     return "\n".join(lines) + "\n"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ARCHITECTURE SMELLS (Fase 22 — último ítem de Code Quality Intelligence)
+#  Python-only por ahora: el import graph cross-file (_module_to_candidates,
+#  arriba) solo existe acá — no fue portado a Rust. Portarlo ("Graph Engine")
+#  es un ítem propio y más grande de la Fase 18, deliberadamente no abordado
+#  en esta pasada. Caso espejo de Halstead (Rust-only, sin fallback Python
+#  porque sus datos solo existen en Rust): acá los datos (el grafo cross-
+#  file) solo existen en Python, así que el feature es Python-only por la
+#  razón inversa — no una excepción al mandato Rust-first, su contraparte.
+# ══════════════════════════════════════════════════════════════════════════════
+
+_HIGH_EFFERENT_COUPLING = 15  # sin número de literatura Fowler/Martin para
+# conteos crudos de efferent coupling (a diferencia de LOC/métodos de los
+# structural smells, que sí tienen precedente). Calibrado contra
+# apps/api/main.py, que hoy importa 11 módulos del proyecto como composition
+# root legítimo — el umbral queda arriba de eso para no marcar el propio
+# entrypoint como smell.
+_UNSTABLE_MIN_CA = 3  # un archivo más estricto que el piso de "hub" de
+# _build_centrality_graph (≥2) — una segunda señal de coupling independiente
+# debería ser más exigente, no repetir el mismo umbral.
+_UNSTABLE_INSTABILITY = 0.5  # punto medio natural de la métrica de
+# inestabilidad de Robert Martin (I = Ce/(Ca+Ce)), no un número arbitrario.
+
+
+def _build_architecture_smells(parsed_files: list[dict], cycles: list[list[str]] | None = None) -> list[dict]:
+    """
+    Smells de arquitectura: acoplamiento eferente alto, dependencia inestable
+    (afferent alto + inestabilidad alta — un módulo muy usado por otros que a
+    la vez es frágil, un cambio se propaga en las dos direcciones), y
+    dependencia circular reencuadrada como un smell más (antes solo vivía
+    como su propio grafo en _build_circular_graph) — la "violación de capas
+    general" que pide la Fase 22 del roadmap.
+
+    Mismo shape {kind, name, line, message} que structural_smells/
+    naming_smells, con dos diferencias deliberadas: `line` siempre es 0 acá
+    (estos smells son de archivo/grafo, no de línea) y `name` lleva la ruta
+    completa del archivo en vez de un basename corto — no hay un campo
+    `file` separado como en los otros dos smells (ya son globales, no se
+    agregan por archivo), así que `name` tiene que bastar por sí solo para
+    distinguir dos archivos con el mismo basename en carpetas distintas.
+
+    `cycles`, si se pasa (ej. desde parse_project, que ya corrió
+    _build_circular_graph), evita recalcular find_cycles_capped una segunda
+    vez sobre el mismo grafo.
+    """
+    edges = _build_project_edges(parsed_files)
+    file_names = [p["_filename"] for p in parsed_files]
+    smells: list[dict] = []
+
+    if HAS_NX:
+        G = _build_project_digraph(parsed_files, edges)
+        in_degree = dict(G.in_degree())
+        out_degree = dict(G.out_degree())
+        if cycles is None:
+            cycles = find_cycles_capped(G, max_cycles=20)
+    else:
+        in_degree = {f: 0 for f in file_names}
+        out_degree = {f: 0 for f in file_names}
+        cycles = cycles or []
+
+    for fname in file_names:
+        ca, ce = in_degree.get(fname, 0), out_degree.get(fname, 0)
+        if ce > _HIGH_EFFERENT_COUPLING:
+            smells.append(
+                {
+                    "kind": "high_efferent_coupling",
+                    "name": fname,
+                    "line": 0,
+                    "message": (
+                        f"{ce} imports internos del proyecto (> {_HIGH_EFFERENT_COUPLING}) — si no es "
+                        f"un punto de composición intencional (entrypoint, registro de routers), "
+                        f"considerar dividir responsabilidades."
+                    ),
+                }
+            )
+        instability = ce / (ca + ce) if (ca + ce) else 0.0
+        if ca >= _UNSTABLE_MIN_CA and instability > _UNSTABLE_INSTABILITY:
+            smells.append(
+                {
+                    "kind": "unstable_dependency",
+                    "name": fname,
+                    "line": 0,
+                    "message": (
+                        f"{ca} archivo(s) dependen de este módulo, pero él mismo depende de {ce} — "
+                        f"inestabilidad {instability:.2f} (umbral {_UNSTABLE_INSTABILITY}): un cambio "
+                        f"acá se propaga tanto hacia arriba como hacia abajo."
+                    ),
+                }
+            )
+
+    for cycle in cycles or []:
+        smells.append(
+            {
+                "kind": "circular_dependency",
+                "name": " → ".join(cycle) + f" → {cycle[0]}",  # mismo formato que cycle_descriptions
+                "line": 0,
+                "message": (
+                    f"Ciclo de imports entre {len(cycle)} archivo(s) — ninguno puede entenderse/"
+                    f"testearse en aislamiento del otro."
+                ),
+            }
+        )
+
+    return smells
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -694,16 +795,10 @@ def _heatmap_to_mermaid(functions: list[dict]) -> str:
             fnid = _safe_id(f"{file_short}_{fn['name']}")
             cc = fn["cc"]
             bigo = fn["big_o"]
-            icon = (
-                "🟢"
-                if fn["cc_level"] == "low"
-                else "🟡"
-                if fn["cc_level"] == "medium"
-                else "🟠"
-                if fn["cc_level"] == "high"
-                else "🔴"
-            )
-            lines.append(f'    {fnid}["{icon} {fn["name"]}\\nCC={cc} · {bigo}"]')
+            # El color del nodo (fill/stroke por fn["cc_color"], estilado más
+            # abajo) ya ES el heatmap — un ícono de semáforo acá repetiría la
+            # misma señal de severidad dos veces.
+            lines.append(f'    {fnid}["{fn["name"]}\\nCC={cc} · {bigo}"]')
         lines.append("    end")
 
     # Estilos por nivel de CC
@@ -827,7 +922,7 @@ async def generate_project_graph(req: ProjectGraphRequest) -> dict[str, Any]:
             return _empty_response(req.graph_type)
 
         # Parsear y generar grafo
-        parsed_files = _parse_all(files_for_graph)
+        parsed_files = await _parse_all(files_for_graph)
 
         if req.graph_type == "import":
             result = _build_import_graph(parsed_files)

@@ -9,13 +9,13 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/versión-4.9.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/versión-4.10.0-blue?style=flat-square)
 [![CI](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml/badge.svg)](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml)
 ![Frontend](https://img.shields.io/badge/Frontend-Vite%20%2B%20TypeScript-646cff?style=flat-square)
 ![Backend](https://img.shields.io/badge/Backend-FastAPI%20%2B%20Python-009688?style=flat-square)
 ![Terminal](https://img.shields.io/badge/Terminal-Rust%20%2B%20axum-dea584?style=flat-square)
 ![Deploy](https://img.shields.io/badge/Deploy-Docker%20%2B%20Nginx-2496ed?style=flat-square)
-![Tests](https://img.shields.io/badge/Tests-405%20pasando-00f5a0?style=flat-square)
+![Tests](https://img.shields.io/badge/Tests-436%20pasando-00f5a0?style=flat-square)
 ![Author](https://img.shields.io/badge/Autor-Hepein%20Oficial-b87dff?style=flat-square)
 ![License](https://img.shields.io/badge/Licencia-GPL%203.0-orange?style=flat-square)
 
@@ -96,7 +96,7 @@ sythrall/
 │   │   │   ├── project_service.py
 │   │   │   ├── static_parser.py    ← Parser multi-lenguaje: Python/C/C++/JS/TS
 │   │   │   └── complexity_client.py ← Cliente HTTP del sidecar Rust complexity-engine
-│   │   └── tests/                  ← 405 tests en total (ver sección Tests más abajo)
+│   │   └── tests/                  ← 436 tests en total (ver sección Tests más abajo)
 │   └── web/                        ← Frontend TypeScript (Vite, sin frameworks)
 │       ├── index.html
 │       ├── Dockerfile.frontend
@@ -228,7 +228,7 @@ El proceso `[term]` imprime un token aleatorio al arrancar (`Terminal token: ...
 ```bash
 pip install -r requirements.txt
 cd apps/api
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn main:app --host 0.0.0.0 --port 8420 --reload
 ```
 
 **Frontend** (desde la raíz — ahí viven `package.json`/`vite.config.ts`, el código fuente está en `apps/web/src`):
@@ -248,9 +248,9 @@ npm run dev
 |---|---|
 | **App (Docker)** | http://localhost:8080 |
 | **App (dev)** | http://localhost:5173 |
-| **Backend API** | http://localhost:8000 |
-| **Swagger UI** | http://localhost:8000/docs |
-| **Health** | http://localhost:8000/health |
+| **Backend API** | http://localhost:8420 |
+| **Swagger UI** | http://localhost:8420/docs |
+| **Health** | http://localhost:8420/health |
 | **Sidecar de terminal (Rust)** | ws://127.0.0.1:7681 (proxeado a través de `/terminal` en dev — no está pensado para abrirse directo) |
 | **Sidecar de complejidad (Rust)** | http://127.0.0.1:7682 (lo llama el backend, no el navegador — no está pensado para abrirse directo) |
 
@@ -383,21 +383,24 @@ cd apps/api && pytest
 ```
 
 ```
-test_intelligence.py      120 ✓
-test_analysis.py           62 ✓
-test_graph.py               54 ✓
-test_graph_phase2.py        31 ✓
-test_metrics_live.py        34 ✓
-test_upload.py              29 ✓
-test_security_findings.py   30 ✓
-test_static_analysis.py     24 ✓
-test_structural_smells.py   14 ✓
-test_complexity_client.py    7 ✓
+test_intelligence.py       121 ✓
+test_analysis.py            62 ✓
+test_graph.py                54 ✓
+test_static_analysis.py      37 ✓
+test_metrics_live.py         34 ✓
+test_graph_phase2.py         31 ✓
+test_upload.py                30 ✓
+test_security_findings.py    30 ✓
+test_naming_smells.py        16 ✓
+test_structural_smells.py    14 ✓
+test_complexity_client.py     7 ✓
 ──────────────────────────────
-Total: 405 pasando
+Total: 436 pasando
 ```
 
-Los dos sidecars en Rust tienen sus propios checks — `cargo build --release`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (69 tests unitarios entre complejidad/MI/raw-metrics/Big-O/espacio/recursión/clasificadores CS-Engine/seguridad/smells estructurales, contra valores calculados a mano y con paridad testeada contra la implementación Python) — corridos vía el job `terminal` en [`ci.yml`](.github/workflows/ci.yml), aparte del suite de Python de arriba (el mismo job compila/testea los dos bins, ya que comparten un `Cargo.toml`).
+`pytest` levanta el sidecar Rust (`complexity-engine`) por su cuenta para toda la sesión — ver `tests/conftest.py` — ya que Big-O/complejidad/space/recursión/security/structural+naming smells para archivos `.py` son Rust-only ahora, sin fallback Python contra el cual testear.
+
+Los dos sidecars en Rust tienen sus propios checks — `cargo build --release`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (82 tests unitarios entre complejidad/MI/raw-metrics/Big-O/espacio/recursión/clasificadores CS-Engine/seguridad/smells estructurales+de nombres, contra valores calculados a mano) — corridos vía el job `terminal` en [`ci.yml`](.github/workflows/ci.yml), aparte del suite de Python de arriba (el mismo job compila/testea los dos bins, ya que comparten un `Cargo.toml`).
 
 ---
 
@@ -457,7 +460,7 @@ Cambiar puertos en `docker-compose.yml`:
 services:
   backend:
     ports:
-      - "8000:8000"
+      - "8420:8000"
   frontend:
     ports:
       - "8080:80"
@@ -469,11 +472,12 @@ services:
 
 **Docker no inicia** → Abre Docker Desktop y espera a que el ícono deje de mostrar "Starting".
 
-**Puerto 8000 ocupado**
+**Puerto 8420 ocupado**
 ```bash
-netstat -ano | findstr :8000   # Windows
-lsof -i :8000                  # Linux / Mac
+netstat -ano | findstr :8420   # Windows
+lsof -i :8420                  # Linux / Mac
 ```
+Lo que sea que lo ocupe no es necesariamente un proceso viejo de Sythrall — en Windows en particular, servicios en segundo plano de software instalado sin relación pueden agarrar puertos arbitrarios primero. Si el PID no es `python`/`uvicorn`, no lo mates a ciegas; cambiá el puerto de Sythrall (`scripts/run-backend.mjs` + `getApiBase()` en `apps/web/src/store/state.ts`) o identificá primero qué es ese proceso.
 
 **Backend muestra "Sin backend"**
 ```bash

@@ -10,7 +10,7 @@ Todos los manifiestos (`package.json`, `requirements.txt`, `pyproject.toml`, `bi
 | Script | Qué hace |
 |---|---|
 | `setup` | Crea `.venv` en la raíz, instala dependencias de Python (`requirements.txt` + `requirements-dev.txt`), corre `npm install` y verifica que `cargo` esté disponible (solo avisa si falta — no lo instala). Ejecútalo una vez (o cuando cambien las dependencias). |
-| `dev` | Wrapper de `npm run dev` — `concurrently` levanta backend (`uvicorn --reload`, puerto 8000), frontend (`vite`, puerto 5173) y los sidecars Rust de terminal (`cargo run`, puerto 7681) y complejidad (`cargo run`) juntos en una sola consola, con logs `[web]`/`[api]`/`[term]`/`[cx]`. Si falta `cargo`, todo lo demás funciona igual — solo no arrancan los sidecars nativos (la terminal integrada y el análisis de complejidad caen a su equivalente Python/JS). |
+| `dev` | Wrapper de `npm run dev` — `concurrently` levanta backend (`uvicorn --reload`, puerto 8420), frontend (`vite`, puerto 5173) y los sidecars Rust de terminal (`cargo run`, puerto 7681) y complejidad (`cargo run`) juntos en una sola consola, con logs `[web]`/`[api]`/`[term]`/`[cx]`. Si falta `cargo`, todo lo demás funciona igual — solo no arrancan los sidecars nativos (la terminal integrada y el análisis de complejidad caen a su equivalente Python/JS). |
 | `build` | `tsc --noEmit` + `vite build` en el frontend; valida sintaxis del backend con `compileall`; `cargo build --release` para el sidecar de terminal (si `cargo` está disponible). |
 | `test` | `pytest` (backend) + `tsc --noEmit` (frontend). |
 | `lint` | `biome check` (frontend) + `ruff check` (backend) — solo reporta, no modifica archivos. |

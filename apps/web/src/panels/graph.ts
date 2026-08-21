@@ -143,14 +143,14 @@ export function renderForceGraph(
       ? (result.functions ?? []).map((f) => ({
           id: `${f.file_short}::${f.name}`,
           label: f.name ?? '',
-          color: f.cc_color ?? '#4a5880',
+          color: f.cc_color ?? 'var(--muted)',
           size: Math.max(20, Math.min(50, (f.cc ?? 1) * 5)),
           meta: `${f.file_short} · CC=${f.cc} · ${f.big_o}`,
         }))
       : (result.nodes ?? []).map((n) => ({
           id: n.id,
           label: _shortLabel(n.label || n.id),
-          color: n.in_cycle ? '#ff3366' : n.color ? n.color : _langColor(n.language ?? ''),
+          color: n.in_cycle ? 'var(--err)' : n.color ? n.color : _langColor(n.language ?? ''),
           size: Math.max(18, Math.min(40, 18 + (n.functions ?? 0) * 2)),
           meta: _nodeMetaText(n, result.graph_type),
         }))
@@ -189,7 +189,7 @@ export function renderForceGraph(
       <path d="M0,0 L0,6 L8,3 z" fill="var(--muted)" opacity="0.6"/>
     </marker>
     <marker id="arrow-cycle" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-      <path d="M0,0 L0,6 L8,3 z" fill="#ff3366"/>
+      <path d="M0,0 L0,6 L8,3 z" fill="var(--err)"/>
     </marker>
   `
   svg.appendChild(defs)
@@ -205,7 +205,7 @@ export function renderForceGraph(
   const edgeEls: SVGLineElement[] = []
   for (const e of edges) {
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line')
-    line.setAttribute('stroke', e.is_cycle ? '#ff3366' : 'var(--b2)')
+    line.setAttribute('stroke', e.is_cycle ? 'var(--err)' : 'var(--b2)')
     line.setAttribute('stroke-width', e.is_cycle ? '2' : '1.5')
     line.setAttribute('stroke-opacity', '0.7')
     line.setAttribute('marker-end', e.is_cycle ? 'url(#arrow-cycle)' : 'url(#arrow-normal)')
@@ -394,13 +394,13 @@ export function renderForceGraph(
 
 function _langColor(lang: string): string {
   const map: Record<string, string> = {
-    python: '#3d9eff',
-    typescript: '#b87dff',
-    javascript: '#ffb627',
-    c: '#00f5a0',
-    cpp: '#00f5a0',
+    python: 'var(--info)',
+    typescript: 'var(--purple)',
+    javascript: 'var(--warn)',
+    c: 'var(--ok)',
+    cpp: 'var(--ok)',
   }
-  return map[lang] ?? '#4a5880'
+  return map[lang] ?? 'var(--muted)'
 }
 
 function _shortLabel(s: string): string {
@@ -507,7 +507,7 @@ export function renderDirTree(container: HTMLElement, tree: DirTreeNode, onFileC
   const CC_COLORS: Record<string, string> = {
     low: 'var(--ok)',
     medium: 'var(--warn)',
-    high: '#ff8a00',
+    high: 'var(--orange)',
     critical: 'var(--err)',
   }
 

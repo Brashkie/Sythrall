@@ -149,6 +149,35 @@ class TestUploadAppendToExistingProject:
         )
         assert res.status_code == 404
 
+    def test_appending_without_a_name_preserves_the_original_name(self):
+        # resolve_project_name() existe específicamente para esto: agregar
+        # archivos a un proyecto ya nombrado no debe pisarle el nombre con el
+        # fallback genérico basado en el id, solo porque la request de "append"
+        # no manda project_name (así es como "+ Código" agrega al proyecto
+        # activo, ver components/app.ts::persistFilesToProject).
+        first = client.post(
+            "/api/upload/files",
+            data={"project_name": "mi-proyecto-nombrado"},
+            files=[("files", ("a.py", b"x = 1", "text/plain"))],
+        )
+        pid = first.json()["project_id"]
+        assert first.json()["project_name"] == "mi-proyecto-nombrado"
+
+        second = client.post(
+            "/api/upload/files",
+            data={"project_id": pid},
+            files=[("files", ("b.py", b"y = 2", "text/plain"))],
+        )
+        assert second.status_code == 200
+        assert second.json()["project_name"] == "mi-proyecto-nombrado"
+
+        # Y el nombre queda persistido de verdad — no solo en la respuesta de
+        # esta request — así que "Proyectos recientes" (GET /projects) lo
+        # sigue mostrando después.
+        projects = client.get("/api/upload/projects").json()["projects"]
+        proj = next(p for p in projects if p["project_id"] == pid)
+        assert proj["project_name"] == "mi-proyecto-nombrado"
+
     def test_append_via_folder_endpoint(self):
         first = client.post(
             "/api/upload/folder",

@@ -2,6 +2,7 @@ pub mod bigo;
 pub mod classifiers;
 pub mod complexity;
 pub mod maintainability;
+pub mod naming;
 pub mod parser;
 pub mod raw;
 pub mod recursion;

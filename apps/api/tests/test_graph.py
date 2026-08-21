@@ -82,7 +82,6 @@ class TestGraphTypes:
         for t in data["types"]:
             assert "id" in t
             assert "label" in t
-            assert "icon" in t
             assert "description" in t
 
 
@@ -243,7 +242,7 @@ class TestCircularGraph:
 
     def test_circular_no_cycle_mermaid_ok(self):
         data = client.post("/analyze/graph", json={"files": FILES_SIMPLE, "graph_type": "circular"}).json()
-        assert "✅" in data["mermaid"] or "flowchart" in data["mermaid"]
+        assert "Sin dependencias circulares" in data["mermaid"]
 
     def test_circular_empty(self):
         data = client.post("/analyze/graph", json={"files": FILES_EMPTY, "graph_type": "circular"}).json()
@@ -364,7 +363,7 @@ class TestCentralityGraph:
 
     def test_centrality_mermaid_marks_hub(self):
         data = client.post("/analyze/graph", json={"files": FILES_HUB, "graph_type": "centrality"}).json()
-        assert "🔥" in data["mermaid"]
+        assert "[HUB]" in data["mermaid"]
 
     def test_centrality_empty(self):
         data = client.post("/analyze/graph", json={"files": FILES_EMPTY, "graph_type": "centrality"}).json()
