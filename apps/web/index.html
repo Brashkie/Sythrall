@@ -16,33 +16,35 @@
 
   <!-- ══ NAV RAIL ══ -->
   <nav class="nav-rail" id="nav-rail" aria-label="Navegación principal">
-    <div class="nav-rail-logo"><img class="logo-ring" src="/sythrall-logo.png" alt="Sythrall" /></div>
-    <!-- OVERVIEW -->
+    <div class="nav-rail-logo">
+      <img class="logo-ring" src="/sythrall-logo.png" alt="Sythrall" />
+      <span class="nav-rail-logo-text">Sythrall</span>
+      <button class="nav-rail-collapse-btn" id="nav-rail-collapse-btn" title="Colapsar sidebar">
+        <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9.5" y1="4" x2="9.5" y2="20"/></svg>
+      </button>
+    </div>
+    <div class="nav-rail-project" id="nav-rail-project" data-tab="upload" title="Cambiar proyecto activo">
+      <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      <span class="nav-rail-project-name" id="nav-rail-project-name">Sin proyecto</span>
+    </div>
+
+    <div class="nav-section-label">Overview</div>
     <div class="tab active" id="t-dashboard" data-tab="dashboard" title="Dashboard">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
       <span class="tab-label">Dashboard</span>
     </div>
 
-    <div class="nav-rail-divider"></div>
-
-    <!-- PROJECT -->
+    <div class="nav-section-label">Proyecto</div>
     <div class="tab" id="t-upload" data-tab="upload" title="Proyectos">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
       <span class="tab-label">Proyectos</span>
-    </div>
-    <div class="tab" id="t-editor" data-tab="editor" title="Editor">
-      <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M9 13h6M9 17h4"/></svg>
-      <span class="tab-label">Editor</span>
-      <span class="tbadge tbadge-ok" id="tb-files" style="display:none">0</span>
     </div>
     <div class="tab" id="t-diff" data-tab="diff" title="Diff">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg>
       <span class="tab-label">Diff</span>
     </div>
 
-    <div class="nav-rail-divider"></div>
-
-    <!-- ANALYSIS -->
+    <div class="nav-section-label">Análisis</div>
     <div class="tab" id="t-static" data-tab="static" title="Static Analysis">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="M14.5 14.5 20 20"/></svg>
       <span class="tab-label">Static</span>
@@ -51,20 +53,18 @@
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
       <span class="tab-label">Métricas</span>
     </div>
-    <div class="tab" id="t-diagram" data-tab="diagram" title="Diagrama">
+    <div class="tab" id="t-diagram" data-tab="diagram" title="Arquitectura">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M8.6 7.6 15.4 10.4M8.6 16.4 15.4 13.6"/></svg>
-      <span class="tab-label">Diagrama</span>
+      <span class="tab-label">Arquitectura</span>
       <span class="tbadge tbadge-ok" id="tb-diagram" style="display:none">✓</span>
     </div>
-    <div class="tab" id="t-issues" data-tab="issues" title="Issues">
+    <div class="tab" id="t-issues" data-tab="issues" title="Hallazgos">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v5M12 16h.01"/></svg>
-      <span class="tab-label">Issues</span>
+      <span class="tab-label">Hallazgos</span>
       <span class="tbadge tbadge-err" id="tb-issues" style="display:none">0</span>
     </div>
 
-    <div class="nav-rail-divider"></div>
-
-    <!-- SERVICES -->
+    <div class="nav-section-label">Servicios</div>
     <div class="tab" id="t-apis" data-tab="apis" title="APIs">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 14 0M2 9.5a15 15 0 0 1 20 0"/></svg>
       <span class="tab-label">APIs</span>
@@ -75,9 +75,7 @@
       <span class="tab-label">Logs</span>
     </div>
 
-    <div class="nav-rail-divider"></div>
-
-    <!-- AI / ML -->
+    <div class="nav-section-label">Inteligencia</div>
     <div class="tab" id="t-ml" data-tab="ml" title="ML/DL">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2 2M17.1 17.1l2 2M4.9 19.1l2-2M17.1 6.9l2-2"/></svg>
       <span class="tab-label">ML/DL</span>
@@ -92,19 +90,14 @@
     <button class="btn btn-ghost btn-sm mobile-toggle" id="mobile-toggle">
       <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
-    <div class="logo">
-      <img class="logo-ring" src="/sythrall-logo.png" alt="Sythrall" />
-      <div class="logo-text">Sythrall</div>
-    </div>
     <div id="be-badge" class="be-badge be-loading"><span>●</span><span id="be-txt">Conectando...</span></div>
     <button class="btn btn-ghost btn-sm" id="terminal-toggle-btn" title="Terminal">
       <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>
-      Terminal
+      <span>Terminal</span>
     </button>
     <button class="btn btn-ghost btn-sm" id="theme-toggle-btn" title="Cambiar tema">
       <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>
     </button>
-    <div id="caps-row"></div>
     <div class="url-bar">
       <span class="url-bar-method">GET</span>
       <input id="url-main" placeholder="https://api.com/health" />
@@ -127,9 +120,9 @@
       <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 19h16"/></svg>
       <span>ZIP</span>
     </button>
-    <button class="btn btn-run" id="run-btn">
+    <button class="btn btn-run" id="run-btn" title="Analizar">
       <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>
-      Analizar
+      <span>Analizar</span>
     </button>
   </div>
 
@@ -174,18 +167,10 @@
           <div id="url-list" class="url-list-scroll"></div>
         </div>
         <div class="sb-footer">
-          <button class="btn btn-run sb-footer-run" id="run-btn-sb">
-            <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>
-            Análisis completo
-          </button>
           <div class="sb-footer-row">
             <button class="btn btn-ghost btn-sm sb-footer-btn" id="btn-clear">
               <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
               Limpiar
-            </button>
-            <button class="btn btn-ghost btn-sm sb-footer-btn" id="btn-export-sb">
-              <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 19h16"/></svg>
-              ZIP
             </button>
           </div>
         </div>
@@ -278,6 +263,7 @@
           <div style="flex:1"></div>
           <span id="diag-status" style="font-family:var(--mono);font-size:.65rem;color:var(--muted)"></span>
         </div>
+        <div id="diagram-project-banner" style="padding:10px 16px 0"></div>
         <div class="diag-scroll">
           <div class="diag-viewport" id="diag-viewport">
             <div class="diag-canvas" id="diag-canvas">
@@ -376,21 +362,21 @@
       <div class="resize-handle" id="rp-resize"></div>
       <button class="collapse-btn" id="rp-collapse" title="Colapsar panel">›</button>
       <div class="rp-tabs">
-        <div class="rp-tab active" data-rptab="flow">
+        <div class="rp-tab active" data-rptab="flow" title="Flujo">
           <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
-          Flujo
+          <span class="rp-tab-label">Flujo</span>
         </div>
-        <div class="rp-tab" data-rptab="analysis">
+        <div class="rp-tab" data-rptab="analysis" title="Análisis">
           <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="M14.5 14.5 20 20"/></svg>
-          Análisis
+          <span class="rp-tab-label">Análisis</span>
         </div>
-        <div class="rp-tab" data-rptab="server">
+        <div class="rp-tab" data-rptab="server" title="Servidor">
           <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>
-          Servidor
+          <span class="rp-tab-label">Servidor</span>
         </div>
-        <div class="rp-tab" data-rptab="problems">
+        <div class="rp-tab" data-rptab="problems" title="Problems">
           <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-          Problems
+          <span class="rp-tab-label">Problems</span>
         </div>
       </div>
       <div class="rp-panel active" id="rpp-flow">
@@ -435,7 +421,23 @@
         <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
       </button>
     </div>
-    <div class="terminal-panel-body" id="terminal-body"></div>
+    <div class="terminal-panel-main">
+      <div class="terminal-panel-body" id="terminal-body" style="position:relative">
+        <div class="term-search-bar" id="term-search-bar" style="display:none">
+          <input id="term-search-input" type="text" placeholder="Buscar..." autocomplete="off" />
+          <button id="term-search-prev" title="Anterior (Shift+Enter)">
+            <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg>
+          </button>
+          <button id="term-search-next" title="Siguiente (Enter)">
+            <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <button id="term-search-close" title="Cerrar (Esc)">
+            <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="term-sessions-sidebar" id="term-sessions-sidebar"></div>
+    </div>
     <div class="terminal-panel-body terminal-logs-body" id="terminal-logs-body" style="display:none"></div>
   </div>
 

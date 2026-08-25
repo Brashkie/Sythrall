@@ -1,10 +1,15 @@
 //! Punto de entrada de la Fase 1 de migración: arma el mismo shape que
-//! `_parse_python()` en `static_parser.py` (functions/classes/imports/summary)
-//! para un archivo Python, combinando complexity.rs + bigo.rs + recursion.rs +
-//! classifiers.rs + structure.rs. Deliberadamente NO incluye call_graph,
-//! circular_deps, wasm_hints ni dead_code — esos quedan para una fase
-//! siguiente (necesitan razonamiento cross-archivo). `static_parser.py` sigue
-//! siendo la fuente de verdad para esas piezas.
+//! `_parse_python()` en `static_parser.py` (functions/classes/imports/
+//! call_graph/summary) para un archivo Python, combinando complexity.rs +
+//! bigo.rs + recursion.rs + classifiers.rs + structure.rs. `call_graph` se
+//! agregó después (agregación pura sobre `calls`, ya calculado acá — ver
+//! `build_call_graph` más abajo). Deliberadamente NO incluye `wasm_hints` ni
+//! `dead_code` — esos necesitan razonamiento que Rust todavía no tiene
+//! (heurístico WASM) o son heurísticas triviales que no vale la pena mover
+//! (imports no usados). `static_parser.py` sigue siendo la fuente de verdad
+//! para esas dos piezas. (`circular_deps`, que vivía acá en versiones
+//! anteriores de este comentario, se eliminó del todo — resultó ser código
+//! muerto, cero consumidores en el frontend.)
 
 use rustpython_parser::ast::Stmt;
 use serde::Serialize;
@@ -12,6 +17,7 @@ use serde::Serialize;
 use crate::bigo;
 use crate::classifiers;
 use crate::complexity::cyclomatic;
+use crate::datastructures;
 use crate::naming::{self, NamingSmell};
 use crate::parser::{line_of_offset, parse_module};
 use crate::recursion;
@@ -53,6 +59,8 @@ pub struct RichFunction {
     pub grammar_note: Option<String>,
     pub graph_traversal: Option<String>,
     pub graph_traversal_note: Option<String>,
+    pub data_structure: Option<String>,
+    pub data_structure_note: Option<String>,
     pub calls: Vec<String>,
     pub returns_annotated: bool,
 }
@@ -66,16 +74,44 @@ pub struct RichSummary {
     pub max_loc_function: usize,
 }
 
+#[derive(Serialize, Clone)]
+pub struct RichCallEdge {
+    pub from: String,
+    pub to: String,
+}
+
 #[derive(Serialize)]
 pub struct RichAnalysisResult {
     pub functions: Vec<RichFunction>,
     pub classes: Vec<RichClass>,
     pub imports: Vec<RichImport>,
+    pub call_graph: Vec<RichCallEdge>,
     pub security_findings: Vec<SecurityFinding>,
     pub structural_smells: Vec<StructuralSmell>,
     pub naming_smells: Vec<NamingSmell>,
     pub summary: RichSummary,
     pub error: Option<String>,
+}
+
+/// Agrega edges `{from, to}` entre funciones conocidas del mismo archivo, a
+/// partir de `RichFunction::calls` (ya calculado por `structure::extract_calls`)
+/// — puerto literal de `_build_call_graph` en `static_parser.py`. Pura
+/// agregación, no un algoritmo nuevo: el dato de entrada (`calls`) ya existe.
+fn build_call_graph(functions: &[RichFunction]) -> Vec<RichCallEdge> {
+    let names: std::collections::HashSet<&str> = functions.iter().map(|f| f.name.as_str()).collect();
+    let mut edges = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for f in functions {
+        for callee in &f.calls {
+            if names.contains(callee.as_str()) && callee != &f.name {
+                let key = format!("{}\u{2192}{}", f.name, callee);
+                if seen.insert(key) {
+                    edges.push(RichCallEdge { from: f.name.clone(), to: callee.clone() });
+                }
+            }
+        }
+    }
+    edges
 }
 
 pub fn analyze_rich(content: &str) -> RichAnalysisResult {
@@ -86,6 +122,7 @@ pub fn analyze_rich(content: &str) -> RichAnalysisResult {
                 functions: Vec::new(),
                 classes: Vec::new(),
                 imports: Vec::new(),
+                call_graph: Vec::new(),
                 security_findings: Vec::new(),
                 structural_smells: Vec::new(),
                 naming_smells: Vec::new(),
@@ -137,6 +174,7 @@ pub fn analyze_rich(content: &str) -> RichAnalysisResult {
             avg_complexity: (avg_complexity * 100.0).round() / 100.0,
             max_loc_function,
         },
+        call_graph: build_call_graph(&functions),
         functions,
         classes,
         imports,
@@ -253,6 +291,7 @@ fn build_function(
     let regex = classifiers::regex_info(body);
     let grammar = classifiers::grammar_info(name, body, recursion.is_recursive);
     let graph = classifiers::graph_info(body, recursion.is_recursive);
+    let heap = datastructures::heap_info(body);
 
     RichFunction {
         name: name.to_string(),
@@ -281,6 +320,8 @@ fn build_function(
         grammar_note: classifiers::grammar_note(&grammar),
         graph_traversal: graph.traversal_kind.clone(),
         graph_traversal_note: classifiers::graph_note(&graph),
+        data_structure: heap.uses_heap.then(|| "Heap".to_string()),
+        data_structure_note: datastructures::heap_note(&heap),
         calls: structure::extract_calls(body),
         returns_annotated,
     }
@@ -451,5 +492,120 @@ mod tests {
         assert_eq!(r.summary.total_functions, 2);
         assert_eq!(r.summary.total_classes, 1);
         assert_eq!(r.summary.total_imports, 1);
+    }
+
+    // ── Call graph (agregación, Fase 18) ────────────────────────────────────
+
+    #[test]
+    fn call_graph_detecta_llamada_entre_funciones_conocidas() {
+        let src = "def a():\n    return b()\ndef b():\n    return 1\n";
+        let r = analyze_rich(src);
+        assert_eq!(r.call_graph.len(), 1);
+        assert_eq!(r.call_graph[0].from, "a");
+        assert_eq!(r.call_graph[0].to, "b");
+    }
+
+    #[test]
+    fn call_graph_ignora_llamada_a_funcion_no_definida_en_el_archivo() {
+        let src = "def a():\n    return len([1, 2, 3])\n";
+        let r = analyze_rich(src);
+        assert!(r.call_graph.is_empty());
+    }
+
+    #[test]
+    fn call_graph_ignora_auto_llamada_recursiva() {
+        let src = "def factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)\n";
+        let r = analyze_rich(src);
+        assert!(r.call_graph.iter().all(|e| !(e.from == "factorial" && e.to == "factorial")));
+    }
+
+    #[test]
+    fn call_graph_vacio_sin_funciones() {
+        let r = analyze_rich("x = 1\n");
+        assert!(r.call_graph.is_empty());
+    }
+
+    // ── Data Structure Intelligence (Fase 14) — end-to-end vía analyze_rich ──
+
+    fn class_named<'a>(result: &'a RichAnalysisResult, name: &str) -> &'a RichClass {
+        result
+            .classes
+            .iter()
+            .find(|c| c.name == name)
+            .unwrap_or_else(|| panic!("no se encontró la clase {name}"))
+    }
+
+    #[test]
+    fn heap_detectado_end_to_end() {
+        let src = "def f(nums):\n    h = []\n    heapq.heappush(h, nums[0])\n    return heapq.heappop(h)\n";
+        let r = analyze_rich(src);
+        assert_eq!(func(&r, "f").data_structure.as_deref(), Some("Heap"));
+    }
+
+    #[test]
+    fn trie_detectada_end_to_end_por_nombre() {
+        let src = "class Trie:\n    def __init__(self):\n        self.children = {}\n";
+        let r = analyze_rich(src);
+        assert_eq!(class_named(&r, "Trie").data_structure.as_deref(), Some("Trie"));
+    }
+
+    #[test]
+    fn fenwick_detectado_end_to_end_por_idiom() {
+        let src = "class Tree:\n    def update(self, i, delta):\n        while i <= self.n:\n            self.arr[i] += delta\n            i += i & (-i)\n";
+        let r = analyze_rich(src);
+        assert_eq!(class_named(&r, "Tree").data_structure.as_deref(), Some("Fenwick Tree (BIT)"));
+    }
+
+    #[test]
+    fn clase_sin_ninguna_senal_no_tiene_data_structure() {
+        let src = "class Config:\n    def __init__(self):\n        self.debug = True\n";
+        let r = analyze_rich(src);
+        assert!(class_named(&r, "Config").data_structure.is_none());
+    }
+
+    #[test]
+    fn avl_detectado_end_to_end_por_nombre() {
+        let r = analyze_rich("class AVLTree:\n    def __init__(self):\n        pass\n");
+        assert_eq!(class_named(&r, "AVLTree").data_structure.as_deref(), Some("AVL Tree"));
+    }
+
+    #[test]
+    fn redblack_detectado_end_to_end_por_shape() {
+        let src = "class Node:\n    def __init__(self):\n        self.left = None\n        self.right = None\n        self.color = 'red'\n    def rotate_right(self):\n        pass\n";
+        let r = analyze_rich(src);
+        assert_eq!(class_named(&r, "Node").data_structure.as_deref(), Some("Red-Black Tree"));
+    }
+
+    #[test]
+    fn bloom_filter_detectado_end_to_end() {
+        let src = "class BloomFilter:\n    def add(self, item):\n        pass\n    def contains(self, item):\n        pass\n";
+        let r = analyze_rich(src);
+        assert_eq!(class_named(&r, "BloomFilter").data_structure.as_deref(), Some("Bloom Filter"));
+    }
+
+    #[test]
+    fn segment_tree_detectado_end_to_end() {
+        let src = "class SegmentTree:\n    def build(self, arr):\n        pass\n    def update(self, i, val):\n        pass\n    def query(self, l, r):\n        pass\n";
+        let r = analyze_rich(src);
+        assert_eq!(class_named(&r, "SegmentTree").data_structure.as_deref(), Some("Segment Tree"));
+    }
+
+    #[test]
+    fn btree_detectado_end_to_end() {
+        let r = analyze_rich("class BTree:\n    def __init__(self):\n        pass\n");
+        assert_eq!(class_named(&r, "BTree").data_structure.as_deref(), Some("B-Tree"));
+    }
+
+    #[test]
+    fn skiplist_detectado_end_to_end() {
+        let r = analyze_rich("class SkipList:\n    def __init__(self):\n        pass\n");
+        assert_eq!(class_named(&r, "SkipList").data_structure.as_deref(), Some("Skip List"));
+    }
+
+    #[test]
+    fn hashmap_detectado_end_to_end() {
+        let src = "class HashMap:\n    def _hash(self, key):\n        pass\n    def put(self, key, value):\n        pass\n";
+        let r = analyze_rich(src);
+        assert_eq!(class_named(&r, "HashMap").data_structure.as_deref(), Some("HashMap"));
     }
 }

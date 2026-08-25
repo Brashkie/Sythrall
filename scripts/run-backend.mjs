@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { ascii, color } from 'ansimax'
+import { readAuthSecret } from './lib/authSecret.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const candidates = [join(root, '.venv', 'bin', 'python'), join(root, '.venv', 'Scripts', 'python.exe')]
@@ -28,6 +29,7 @@ if (!python) {
 const child = spawn(python, ['-m', 'uvicorn', 'main:app', '--host', '0.0.0.0', '--port', '8420', '--reload'], {
   cwd: join(root, 'apps', 'api'),
   stdio: 'inherit',
+  env: { ...process.env, SYTHRALL_AUTH_SECRET: readAuthSecret() },
 })
 
 child.on('exit', (code) => process.exit(code ?? 0))

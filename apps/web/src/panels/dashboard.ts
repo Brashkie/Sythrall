@@ -56,24 +56,34 @@ export async function loadProjectHealth(): Promise<void> {
     root.innerHTML = `<div class="empty">Analizando proyecto…</div>`
   }
 
+  state.projectAnalysisRunning = true
+  const { renderFlow } = await import('../components/flow')
+  renderFlow()
   try {
     const [data] = await Promise.all([
       api.staticParseProjectById(state.activeProjectId),
       _engineLanguages ? Promise.resolve(_engineLanguages) : api.staticLanguages().then((r) => (_engineLanguages = r)),
     ])
     state.results.projectDashboard = data
+    // El grid de Proyectos (panels/upload.ts) lee este cache para mostrar
+    // badges de health reales sin tener que disparar su propio análisis —
+    // nunca un score inventado, solo lo que ya se calculó de verdad acá.
+    if (state.activeProjectId) state.projectHealthCache[state.activeProjectId] = data.health
     _lastAnalyzedAt = Date.now()
   } catch (e) {
     toast('Error: ' + (e as Error).message, 'err')
   }
+  state.projectAnalysisRunning = false
+  renderFlow()
   renderDashboard()
 }
 
-/** Nombre a mostrar del proyecto activo — hoy no hay un nombre humano
- * persistido server-side, solo el project_id; se muestra truncado, mismo
+/** Nombre a mostrar del proyecto activo — `state.activeProjectName` (seteado
+ * por `setActiveProject()`) si se conoce, si no cae al id truncado, mismo
  * criterio que ya usa panels/upload.ts en sus logs/toasts. */
 function _projectLabel(): string {
-  return state.activeProjectId ? state.activeProjectId.slice(0, 8) : ''
+  if (!state.activeProjectId) return ''
+  return state.activeProjectName || state.activeProjectId.slice(0, 8)
 }
 
 function _goto(tab: TabId): void {
@@ -360,6 +370,53 @@ function _wireAdHocInteractivity(root: HTMLElement): void {
   })
 }
 
+/** Línea de estado del servicio, chica y opcional — deliberadamente NO 3
+ * filas separadas de "Backend"/"Rust Engine"/"Linters" con Ready/Offline por
+ * cada una (versión anterior de este hero). Ese desglose es exactamente la
+ * fuga de arquitectura interna que un producto SaaS no debería mostrarle al
+ * usuario — el backend es infraestructura de Sythrall, no algo que el
+ * usuario deba percibir como "prendido" o "apagado" pieza por pieza. Una
+ * sola línea, de disponibilidad del servicio en general (mismo dato que ya
+ * calcula `state.backendOk`/`checkBackend()` en app.ts — no un chequeo
+ * nuevo), sin nombrar "backend" ni ningún motor interno por separado. */
+function _serviceStatusLine(): string {
+  const checked = state.backendChecked
+  const ok = checked && state.backendOk
+  const dot = !checked ? 'var(--muted)' : ok ? 'var(--ok)' : 'var(--err)'
+  const text = !checked ? 'Verificando…' : ok ? 'Todo operativo' : 'Servicio no disponible'
+  return `<div class="dash-hero-status">
+    <span class="dash-hero-dot" style="background:${dot}"></span>
+    <span style="color:${dot}">${text}</span>
+  </div>`
+}
+
+/** Estado vacío real (sin proyecto activo NI archivos sueltos) — el punto de
+ * entrada de un usuario que recién abre Sythrall por primera vez. Antes era
+ * un `<div class="empty">` con un mensaje de una línea; eso se sentía roto/
+ * incompleto en vez de "todavía no hay nada que mostrar acá". El foco de
+ * esta vista son las dos acciones (abrir/crear proyecto) — el estado del
+ * servicio es una línea chica debajo, no el contenido principal. */
+function _renderEmptyHero(): string {
+  return `
+  <div class="dash-hero">
+    <div class="dash-hero-mark">SYTHRALL</div>
+    <div class="dash-hero-tag">Code Intelligence Engine</div>
+    <p class="dash-hero-desc">Analiza arquitectura, seguridad, complejidad y calidad de tu proyecto.</p>
+    <div class="dash-hero-actions">
+      <button class="btn btn-run" id="dash-hero-open">Abrir proyecto</button>
+      <button class="btn btn-ghost" id="dash-hero-create">Crear proyecto</button>
+    </div>
+    ${_serviceStatusLine()}
+  </div>`
+}
+
+function _wireEmptyHero(): void {
+  document.getElementById('dash-hero-open')?.addEventListener('click', () => _goto('upload'))
+  document.getElementById('dash-hero-create')?.addEventListener('click', () => {
+    document.getElementById('btn-add-folder')?.click()
+  })
+}
+
 export function renderDashboard(): void {
   const root = document.getElementById('dash-content')
   if (!root) return
@@ -373,12 +430,8 @@ export function renderDashboard(): void {
         _wireAdHocInteractivity(root)
         return
       }
-      root.innerHTML = `
-      <div class="empty">
-Elegí un proyecto activo para ver su Project Health
-        <button class="btn btn-ghost btn-sm" id="dash-health-goto-projects">Proyectos</button>
-      </div>`
-      document.getElementById('dash-health-goto-projects')?.addEventListener('click', () => _goto('upload'))
+      root.innerHTML = _renderEmptyHero()
+      _wireEmptyHero()
     } else {
       root.innerHTML = `
       <div class="empty">

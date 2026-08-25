@@ -1,6 +1,8 @@
 pub mod bigo;
 pub mod classifiers;
 pub mod complexity;
+pub mod datastructures;
+pub mod graph;
 pub mod maintainability;
 pub mod naming;
 pub mod parser;
@@ -13,6 +15,7 @@ pub mod space;
 pub mod structure;
 pub mod walk;
 
+pub use graph::{build_call_graph, build_centrality_graph, build_circular_graph, build_import_graph};
 pub use maintainability::HalsteadMetrics;
 pub use rich::analyze_rich;
 

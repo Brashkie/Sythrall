@@ -12,12 +12,12 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel
 
 from services.static_parser import parse_file, HAS_TREESITTER, HAS_NX
+from shared import UPLOADS_DIR
 from services.project_service import read_project_files
 from routers.graph import _build_circular_graph, _build_architecture_smells
 
@@ -66,7 +66,6 @@ async def supported_languages():
                     "cyclomatic_complexity",
                     "dead_code",
                     "call_graph",
-                    "circular_deps",
                     "wasm_hints",
                 ],
                 "available": True,
@@ -138,7 +137,7 @@ async def parse_project(req: ParseProjectRequest) -> dict[str, Any]:
     Analiza múltiples archivos y arma el resumen global del proyecto.
     """
     if req.project_id:
-        project_dir = Path(f"uploads/projects/{req.project_id}")
+        project_dir = UPLOADS_DIR / req.project_id
         files = read_project_files(project_dir) if project_dir.exists() else []
     else:
         files = req.files
@@ -207,7 +206,7 @@ async def parse_project(req: ParseProjectRequest) -> dict[str, Any]:
     all_complexities = [fn.get("complexity", 1) for r in results for fn in r.get("functions", [])]
     avg_complexity = round(sum(all_complexities) / len(all_complexities), 2) if all_complexities else 0.0
 
-    circular = _build_circular_graph(results)
+    circular = await _build_circular_graph(results)
     total_cycles = circular["summary"]["total_cycles"]
 
     # Fase 22 — Architecture smells: acoplamiento eferente alto, dependencia

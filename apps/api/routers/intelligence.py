@@ -19,6 +19,7 @@ from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from shared import add_log, save_temp, safe_remove
 from services.complexity_client import analyze_complexity, parse_python_rich
@@ -263,11 +264,11 @@ async def heavy_analyze(req: AnalyzeRequest) -> dict[str, Any]:
 
             # flake8
             if "flake8" in req.tools:
-                markers.extend(_run_flake8_markers(tmp_path))
+                markers.extend(await run_in_threadpool(_run_flake8_markers, tmp_path))
 
             # pylint (JSON)
             if "pylint" in req.tools:
-                pylint_markers, score = _run_pylint_markers(tmp_path)
+                pylint_markers, score = await run_in_threadpool(_run_pylint_markers, tmp_path)
                 markers.extend(pylint_markers)
                 if score is not None:
                     metrics["pylint_score"] = score

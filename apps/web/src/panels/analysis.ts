@@ -2,9 +2,11 @@
 //  Sythrall — Analysis Panels
 // ══════════════════════════════════════════
 // panels/analysis.ts
+import { currentIssueSource } from '../panels/apis'
 import { state } from '../store/state'
 import type { CodeFile, HalsteadMetrics } from '../types'
 import { languageBadge } from '../utils/icons'
+import { renderProjectContextBanner, wireProjectContextBanner } from '../utils/projectHeader'
 
 // ── Helper
 const mr = (k: string, v: unknown, color?: string) =>
@@ -114,18 +116,26 @@ export function renderMetrics(): void {
   if (!el) return
   if (!state.files.length) {
     // Sin archivos cargados a mano: si hay proyecto activo y ya se corrió un
-    // análisis (mismos datos que ya trae Issues, no se vuelve a pedir), se
-    // muestra un resumen — igual criterio que Issues/Diagrama/Static.
-    if (state.activeProjectId && state.results.issues.length) {
-      const errors = state.results.issues.filter((i) => i.severity === 'error').length
-      const warnings = state.results.issues.filter((i) => i.severity === 'warning').length
+    // análisis de proyecto (el mismo StaticProjectResult que Static/Dashboard
+    // ya pidieron — no se vuelve a pedir acá), se muestra un resumen usando
+    // los mismos hallazgos ricos que "Hallazgos" ya convierte (no la lista
+    // de lint de state.results.issues, que solo se llena analizando archivo
+    // por archivo y queda vacía aunque el proyecto ya esté analizado — bug
+    // real encontrado al verificar este panel con un proyecto recién
+    // analizado: mostraba "Corré Análisis completo" con datos ya listos).
+    if (state.activeProjectId && state.results.projectDashboard) {
+      const issues = currentIssueSource()
+      const errors = issues.filter((i) => i.severity === 'error').length
+      const warnings = issues.filter((i) => i.severity === 'warning').length
       el.innerHTML = `
+        ${renderProjectContextBanner()}
         <div class="metric-section">
           <div class="ms-title">Proyecto activo</div>
-          ${mr('Total issues', state.results.issues.length, state.results.issues.length > 20 ? 'var(--err)' : state.results.issues.length > 5 ? 'var(--warn)' : 'var(--ok)')}
+          ${mr('Total hallazgos', issues.length, issues.length > 20 ? 'var(--err)' : issues.length > 5 ? 'var(--warn)' : 'var(--ok)')}
           ${mr('Errores', errors, 'var(--err)')}
           ${mr('Warnings', warnings, 'var(--warn)')}
         </div>`
+      wireProjectContextBanner(el)
       return
     }
     el.innerHTML = `<div class="empty">${state.activeProjectId ? 'Corré "Análisis completo" para ver métricas' : 'Sube archivos, o elegí un proyecto activo en Proyectos'}</div>`

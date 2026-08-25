@@ -5,10 +5,8 @@ use std::io::{Read, Write};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::connect_info::ConnectInfo;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
-use axum::http::HeaderMap;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::Router;
@@ -21,12 +19,15 @@ use pty_session::PtySession;
 
 #[derive(Clone)]
 struct AppState {
-    token: Arc<String>,
+    /// Secreto compartido con `apps/api` (único emisor de tokens hoy) para
+    /// verificar la firma HS256 de los JWT de sesión — ver `auth.rs`.
+    secret: Arc<Vec<u8>>,
 }
 
 #[derive(Deserialize)]
 struct WsAuthQuery {
     token: Option<String>,
+    shell: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -40,9 +41,18 @@ enum ClientMsg {
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let token = auth::generate_token();
-    println!("🔑 Terminal token: {token}");
-    println!("   Pegalo en el panel de Terminal del navegador para conectarte.");
+    // El secreto lo genera/persiste `scripts/lib/authSecret.mjs` (llamado
+    // por `dev-banner.mjs`, antes de que `npm run dev` levante nada) y lo
+    // inyecta `run-terminal.mjs` en el entorno de este proceso — acá no se
+    // lee `.env` ni se genera nada: si falta, se falla rápido con un
+    // mensaje claro en vez de arrancar sin poder verificar nada.
+    let secret = std::env::var("SYTHRALL_AUTH_SECRET").unwrap_or_else(|_| {
+        panic!(
+            "SYTHRALL_AUTH_SECRET no está seteada. Corré `npm run dev` (scripts/dev-banner.mjs \
+             la genera sola) o exportala a mano antes de levantar este binario."
+        )
+    });
+    println!("Terminal lista — esperando conexiones autenticadas por token de sesión (JWT).");
 
     let host = std::env::var("TERMINAL_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let port: u16 = std::env::var("TERMINAL_PORT")
@@ -51,7 +61,7 @@ async fn main() {
         .unwrap_or(7681);
 
     let state = AppState {
-        token: Arc::new(token),
+        secret: Arc::new(secret.into_bytes()),
     };
 
     // Registrado con el mismo prefijo "/terminal" que usa el proxy de Vite en
@@ -59,7 +69,7 @@ async fn main() {
     // resto de los proxies hacia el backend Python).
     let app = Router::new()
         .route("/terminal/ws", get(ws_handler))
-        .route("/terminal/token", get(token_handler))
+        .route("/terminal/shells", get(shells_handler))
         .with_state(state);
 
     let addr: SocketAddr = format!("{host}:{port}").parse().expect("host/puerto inválido");
@@ -68,27 +78,9 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .unwrap_or_else(|e| panic!("no se pudo bindear {addr}: {e}"));
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+    axum::serve(listener, app.into_make_service())
         .await
         .expect("servidor caído");
-}
-
-/// True si el pedido viene de esta misma máquina. Si pasó por el proxy de
-/// Vite (`xfwd: true` en vite.config.ts), Vite AGREGA su propia IP real al
-/// final de X-Forwarded-For (ver node-http-proxy: `existing + ',' + real`) —
-/// por eso hay que leer el ÚLTIMO valor, no el primero: el primero es lo que
-/// el cliente mandó (falsificable — un atacante remoto podría poner
-/// "X-Forwarded-For: 127.0.0.1" él mismo para intentar pasar por local). Sin
-/// ese header (conexión directa, sin proxy), se usa la IP del peer.
-fn is_loopback_request(headers: &HeaderMap, peer: SocketAddr) -> bool {
-    if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
-        return xff
-            .rsplit(',')
-            .next()
-            .and_then(|ip| ip.trim().parse::<std::net::IpAddr>().ok())
-            .is_some_and(|ip| ip.is_loopback());
-    }
-    peer.ip().is_loopback()
 }
 
 async fn ws_handler(
@@ -97,29 +89,28 @@ async fn ws_handler(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let provided = query.token.unwrap_or_default();
-    if !auth::tokens_match(&state.token, &provided) {
+    let Some(claims) = auth::verify_terminal_token(&state.secret, &provided) else {
         return axum::http::StatusCode::UNAUTHORIZED.into_response();
-    }
-    ws.on_upgrade(handle_socket)
+    };
+    tracing::info!(sub = %claims.sub, "sesión de terminal autenticada");
+    ws.on_upgrade(move |socket| handle_socket(socket, query.shell))
 }
 
-/// Conveniencia para uso 100% local: si el pedido viene de esta misma
-/// máquina, sirve el token sin que el usuario tenga que copiarlo a mano. Si
-/// alguna vez se expone TERMINAL_HOST más allá de localhost, esto se corta
-/// solo para pedidos remotos — siguen necesitando el token a mano.
-async fn token_handler(
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    headers: HeaderMap,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
-    if !is_loopback_request(&headers, peer) {
-        return axum::http::StatusCode::FORBIDDEN.into_response();
-    }
-    axum::Json(json!({ "token": *state.token })).into_response()
+/// Sin auth a propósito — no expone nada sensible, solo qué binarios de
+/// shell existen para el SO donde corre el sidecar (mismo criterio que
+/// `available_shells()` documenta en `pty_session.rs`). El frontend puebla
+/// el selector con esto en vez de una lista hardcodeada que podría no
+/// calzar con la plataforma real del sidecar.
+async fn shells_handler() -> impl IntoResponse {
+    let shells: Vec<_> = pty_session::available_shells()
+        .into_iter()
+        .map(|(id, label)| json!({"id": id, "label": label}))
+        .collect();
+    axum::Json(json!({ "shells": shells }))
 }
 
-async fn handle_socket(socket: WebSocket) {
-    let (mut session, mut reader, mut writer) = match PtySession::spawn() {
+async fn handle_socket(socket: WebSocket, shell: Option<String>) {
+    let (mut session, mut reader, mut writer) = match PtySession::spawn(shell.as_deref()) {
         Ok(v) => v,
         Err(e) => {
             let (mut sender, _) = socket.split();

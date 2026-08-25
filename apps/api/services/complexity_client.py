@@ -40,9 +40,9 @@ async def analyze_complexity(filename: str, content: str) -> dict:
 
 async def parse_python_rich(filename: str, content: str) -> dict | None:
     """Fase 1 de la migración de `static_parser.py` a Rust: functions/classes/
-    imports/summary vía el sidecar (`POST /parse/python`), mismo shape que
-    `_parse_python()` salvo call_graph/circular_deps/wasm_hints/dead_code
-    (todavía no calculados en Rust — quedan en el path Python). `None` en
+    imports/call_graph/summary vía el sidecar (`POST /parse/python`), mismo
+    shape que `_parse_python()` salvo wasm_hints/dead_code (todavía no
+    calculados en Rust — quedan en el path Python). `None` en
     cualquier falla, para que el caller decida el fallback (no hay un shape
     "vacío" razonable acá como en `analyze_complexity`, porque el caller
     necesita saber si tiene que recurrir a `_parse_python()` entero)."""
@@ -51,6 +51,80 @@ async def parse_python_rich(filename: str, content: str) -> dict | None:
             resp = await client.post(
                 f"{COMPLEXITY_ENGINE_URL}/parse/python",
                 json={"filename": filename, "content": content},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return None if data.get("error") else data
+    except (httpx.HTTPError, ValueError):
+        return None
+
+
+async def build_import_graph_rust(files_summary: list[dict]) -> dict | None:
+    """Fase 18, primer slice del Graph Engine: Import Graph vía el sidecar
+    (`POST /graph/import`). `files_summary` es el resumen ya parseado de cada
+    archivo del proyecto (filename/language/functions/imports/dead_code) —
+    no archivos crudos, el sidecar no parsea. `None` en cualquier falla,
+    mismo criterio que `parse_python_rich`: el caller (`graph.py`) decide
+    el fallback."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(
+                f"{COMPLEXITY_ENGINE_URL}/graph/import",
+                json=files_summary,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return None if data.get("error") else data
+    except (httpx.HTTPError, ValueError):
+        return None
+
+
+async def build_centrality_graph_rust(files_summary: list[dict]) -> dict | None:
+    """Fase 18, segunda porción del Graph Engine: Centrality vía el sidecar
+    (`POST /graph/centrality`). Mismo `files_summary` que `build_import_graph_rust`
+    y mismo criterio de falla (`None`, el caller decide)."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(
+                f"{COMPLEXITY_ENGINE_URL}/graph/centrality",
+                json=files_summary,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return None if data.get("error") else data
+    except (httpx.HTTPError, ValueError):
+        return None
+
+
+async def build_call_graph_rust(files_payload: list[dict]) -> dict | None:
+    """Fase 18, tercera porción del Graph Engine: Call Graph vía el sidecar
+    (`POST /graph/call`). `files_payload` es distinto del `files_summary` de
+    Import/Centrality — Call Graph necesita detalle por función (name/big_o/
+    complexity/line) y el `call_graph` ya calculado por archivo, no imports/
+    dead_code. Mismo criterio de falla (`None`, el caller decide)."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(
+                f"{COMPLEXITY_ENGINE_URL}/graph/call",
+                json=files_payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return None if data.get("error") else data
+    except (httpx.HTTPError, ValueError):
+        return None
+
+
+async def build_circular_graph_rust(files_summary: list[dict]) -> dict | None:
+    """Fase 18, cuarta y última porción del Graph Engine: Circular Deps vía
+    el sidecar (`POST /graph/circular`). Mismo `files_summary` que
+    `build_import_graph_rust`/`build_centrality_graph_rust` y mismo criterio
+    de falla (`None`, el caller decide)."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(
+                f"{COMPLEXITY_ENGINE_URL}/graph/circular",
+                json=files_summary,
             )
             resp.raise_for_status()
             data = resp.json()

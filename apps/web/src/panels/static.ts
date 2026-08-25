@@ -16,6 +16,7 @@ import { state } from '../store/state'
 import { renderHealthCards } from '../utils/health'
 import { appendLog, toast } from '../utils/helpers'
 import { icon, languageBadgeByName } from '../utils/icons'
+import { renderProjectContextBanner, wireProjectContextBanner } from '../utils/projectHeader'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,8 @@ interface ParsedFunction {
   grammar_note?: string | null
   graph_traversal?: string | null
   graph_traversal_note?: string | null
+  data_structure?: string | null
+  data_structure_note?: string | null
   calls?: string[]
   is_async?: boolean
   args?: string[]
@@ -53,6 +56,8 @@ interface ParsedClass {
   bases?: string[]
   methods?: Array<{ name: string; line: number }>
   kind?: string
+  data_structure?: string | null
+  data_structure_note?: string | null
 }
 
 interface ParsedImport {
@@ -158,6 +163,15 @@ export function renderStaticPanel(): void {
   }
 
   _attachStaticEvents(el)
+
+  // Re-hidratar desde el análisis de proyecto ya calculado — sin esto, salir
+  // de Static y volver (o volver a activar el tab) pisaba `#st-body` con el
+  // prompt "click Analizar proyecto" de arriba aunque `state.results.
+  // projectDashboard` ya tuviera el resultado completo, mostrando un estado
+  // "sin analizar" para un proyecto que en realidad ya estaba analizado.
+  if (!state.files.length && state.activeProjectId && state.results.projectDashboard) {
+    _renderProjectResult(state.results.projectDashboard)
+  }
 }
 
 // ─── Eventos ──────────────────────────────────────────────────────────────────
@@ -206,6 +220,9 @@ async function _runProject(): Promise<void> {
   // del disco (mismo patrón que Issues, ver analyzeAllFiles en components/app.ts).
   if (!state.files.length && state.activeProjectId) {
     _setLoading(true)
+    state.projectAnalysisRunning = true
+    const { renderFlow } = await import('../components/flow')
+    renderFlow()
     try {
       const data = await api.staticParseProjectById(state.activeProjectId)
       _renderProjectResult(data)
@@ -215,6 +232,8 @@ async function _runProject(): Promise<void> {
       _showError((e as Error).message)
     } finally {
       _setLoading(false)
+      state.projectAnalysisRunning = false
+      renderFlow()
     }
     return
   }
@@ -335,6 +354,7 @@ function _renderBigOTable(functions: ParsedFunction[]): string {
         ${f.regex_class ? `<span class="bigo-cs-badge bigo-regex" title="${esc(f.regex_note ?? '')}">Regex</span>` : ''}
         ${f.grammar_class ? `<span class="bigo-cs-badge bigo-grammar" title="${esc(f.grammar_note ?? '')}">CFG</span>` : ''}
         ${f.graph_traversal ? `<span class="bigo-cs-badge bigo-graph" title="${esc(f.graph_traversal_note ?? '')}">${esc(f.graph_traversal)}</span>` : ''}
+        ${f.data_structure ? `<span class="bigo-cs-badge bigo-datastruct" title="${esc(f.data_structure_note ?? '')}">${esc(f.data_structure)}</span>` : ''}
       </td>
       <td><span class="bigo-badge" style="color:${color};border-color:${color}">${esc(f.big_o)}</span></td>
       <td class="bigo-thetaomega">${f.big_o_theta ? esc(f.big_o_theta) : '—'} / ${f.big_o_omega ? esc(f.big_o_omega) : '—'}</td>
@@ -422,6 +442,7 @@ function _renderClasses(classes: ParsedClass[], lang: string): string {
           ${c.bases?.length ? `<span style="font-size:.68rem;color:var(--muted)">extends ${c.bases.map(esc).join(', ')}</span>` : ''}
           <span class="st-fn-line">línea ${c.line}</span>
           ${c.kind ? `<span style="font-size:.6rem;color:var(--muted);font-family:var(--mono)">${c.kind}</span>` : ''}
+          ${c.data_structure ? `<span class="bigo-cs-badge bigo-datastruct" title="${esc(c.data_structure_note ?? '')}">${esc(c.data_structure)}</span>` : ''}
         </div>
         ${
           c.methods?.length
@@ -742,6 +763,7 @@ function _renderProjectResult(data: StaticProjectResult): void {
   const candidates = data.wasm_candidates ?? []
 
   body.innerHTML = `
+    ${renderProjectContextBanner()}
     ${data.health ? renderHealthCards(data.health) : ''}
 
     <div class="st-summary-row">
@@ -797,6 +819,7 @@ function _renderProjectResult(data: StaticProjectResult): void {
       Haz clic en Analizar con un archivo seleccionado para ver el detalle completo
     </div>
   `
+  wireProjectContextBanner(body)
 }
 
 // ─── Loading / Error helpers ─────────────────────────────────────────────────

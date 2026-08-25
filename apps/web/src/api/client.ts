@@ -115,7 +115,7 @@ export interface ProjectInfo {
 export interface UploadResult {
   project_id: string
   project_name: string
-  type: 'files' | 'folder' | 'zip'
+  type: 'files' | 'folder' | 'zip' | 'empty'
   total_files: number
   tree: ProjectTreeNode
   info?: ProjectInfo
@@ -465,6 +465,41 @@ export const api = {
     form.append('file', file, file.name)
     if (projectName) form.append('project_name', projectName)
     return xhrPost<UploadResult>('/api/upload/zip', form, onProgress)
+  },
+
+  // Proyecto sin ningún archivo — para codificar desde cero (+ Nuevo archivo)
+  // en vez de partir siempre de algo ya subido. FormData + fetch plano, no
+  // post<T>() (ese manda JSON; el backend espera Form(...) como el resto de
+  // los endpoints de este router).
+  createEmptyProject: async (projectName = ''): Promise<UploadResult> => {
+    const form = new FormData()
+    if (projectName) form.append('project_name', projectName)
+    const res = await fetch(getApiBase() + '/api/upload/empty', { method: 'POST', body: form })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return res.json()
+  },
+
+  // Crea un archivo nuevo (vacío o con contenido inicial) dentro de un
+  // proyecto ya existente — contraparte de escritura de getFileContent.
+  createProjectFile: async (
+    projectId: string,
+    filePath: string,
+    content = '',
+  ): Promise<{ path: string; size: number }> => {
+    const form = new FormData()
+    form.append('path', filePath)
+    form.append('content', content)
+    const res = await fetch(getApiBase() + `/api/upload/projects/${projectId}/file`, { method: 'POST', body: form })
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`
+      try {
+        msg = (await res.json()).detail ?? msg
+      } catch {
+        /* noop */
+      }
+      throw new Error(msg)
+    }
+    return res.json()
   },
 
   listProjects: () => get<{ projects: ProjectSummary[]; total: number }>('/api/upload/projects'),

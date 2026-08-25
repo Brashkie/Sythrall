@@ -7,6 +7,7 @@
 use rustpython_parser::ast::{Constant, Expr, Stmt};
 use serde::Serialize;
 
+use crate::datastructures;
 use crate::parser::line_of_offset;
 use crate::smells;
 use crate::walk::walk_stmts;
@@ -45,6 +46,11 @@ pub struct RichClass {
     /// proxy de cuánto estado mantiene la clase, usado por el check de
     /// god object (Fase 22, `smells.rs`).
     pub attribute_count: usize,
+    /// Fase 14, primera vez que un clasificador vive a nivel de clase (no
+    /// solo de función, como `regex_class`/`grammar_class` en
+    /// `RichFunction`) — ver `datastructures::data_structure_info`.
+    pub data_structure: Option<String>,
+    pub data_structure_note: Option<String>,
 }
 
 pub fn extract_imports(source: &str, suite: &[Stmt]) -> Vec<RichImport> {
@@ -93,7 +99,7 @@ pub fn extract_classes(source: &str, suite: &[Stmt]) -> Vec<RichClass> {
 
 fn collect_classes(source: &str, stmt: &Stmt, out: &mut Vec<RichClass>) {
     if let Stmt::ClassDef(c) = stmt {
-        let methods = c
+        let methods: Vec<RichMethod> = c
             .body
             .iter()
             .filter_map(|item| match item {
@@ -115,12 +121,15 @@ fn collect_classes(source: &str, stmt: &Stmt, out: &mut Vec<RichClass>) {
 
         let line = line_of_offset(source, c.range.start().to_usize());
         let end_line = line_of_offset(source, c.range.end().to_usize());
+        let ds_info = datastructures::data_structure_info(&c.name, &methods, &c.body);
         out.push(RichClass {
             name: c.name.to_string(),
             line,
             end_line,
             loc: end_line.saturating_sub(line) + 1,
             bases: c.bases.iter().map(node_name).collect(),
+            data_structure: ds_info.kind.map(|k| k.to_string()),
+            data_structure_note: datastructures::data_structure_note(&ds_info),
             methods,
             decorators: c.decorator_list.iter().map(decorator_name).collect(),
             docstring: docstring_of(&c.body),

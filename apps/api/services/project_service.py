@@ -87,7 +87,7 @@ CODE_EXTENSIONS = {
 # ─── Árbol de archivos ────────────────────────────────────────────────────────
 
 
-def build_tree(directory: Path, max_depth: int = 10, _depth: int = 0) -> dict:
+def build_tree(directory: Path, max_depth: int = 10, _depth: int = 0, _root: Path | None = None) -> dict:
     """
     Construye un árbol JSON de la estructura de archivos.
 
@@ -102,13 +102,38 @@ def build_tree(directory: Path, max_depth: int = 10, _depth: int = 0) -> dict:
         ]
     }
     """
+    # `_root` es SIEMPRE el directorio del proyecto (el primer `directory` con
+    # el que se llamó, sin importar cuántos niveles de recursión bajemos) —
+    # todo "path" del árbol se calcula relativo a él. Antes se calculaba
+    # relativo al padre inmediato solo en `_depth == 0` y con `base=None` (→
+    # "path" = solo el nombre del archivo, sin ningún directorio) en
+    # cualquier nivel más profundo: un archivo en `src/main.py` quedaba con
+    # "path": "main.py" en vez de "path": "src/main.py". Bug real, encontrado
+    # subiendo un ZIP con una subcarpeta y pegándole directo al endpoint con
+    # curl — el frontend usa ese "path" tal cual para pedir el contenido del
+    # archivo (`/file?path=...`) al clickearlo en el árbol, así que cualquier
+    # archivo que no estuviera en la raíz del proyecto daba 404 al abrirlo.
+    if _root is None:
+        _root = directory
+
+    # El nodo raíz es un caso especial: su "path" es su propio nombre de
+    # directorio (no hay nada "relativo a sí mismo" que tenga sentido acá),
+    # igual que antes. Todo lo que cuelga de él sí es relativo a `_root`.
+    own_path = str(directory.relative_to(directory.parent)) if directory == _root else _relative_path(directory, _root)
+
     if _depth > max_depth:
-        return {"name": directory.name, "type": "directory", "path": str(directory), "children": [], "truncated": True}
+        return {
+            "name": directory.name,
+            "type": "directory",
+            "path": own_path,
+            "children": [],
+            "truncated": True,
+        }
 
     node: dict[str, Any] = {
         "name": directory.name,
         "type": "directory",
-        "path": str(directory.relative_to(directory.parent) if _depth == 0 else directory),
+        "path": own_path,
         "children": [],
     }
 
@@ -122,20 +147,17 @@ def build_tree(directory: Path, max_depth: int = 10, _depth: int = 0) -> dict:
     files = [e for e in entries if e.is_file() and e.name != META_FILENAME]
 
     for subdir in dirs:
-        child = build_tree(subdir, max_depth, _depth + 1)
-        # Reconstruir path relativo al root del proyecto
-        child["path"] = _relative_path(subdir, directory if _depth == 0 else None)
+        child = build_tree(subdir, max_depth, _depth + 1, _root)
         node["children"].append(child)
 
     for file in files:
         stat = file.stat()
         ext = file.suffix.lower()
-        rel_path = _relative_path(file, directory if _depth == 0 else None)
         node["children"].append(
             {
                 "name": file.name,
                 "type": "file",
-                "path": rel_path,
+                "path": _relative_path(file, _root),
                 "size": stat.st_size,
                 "size_fmt": _fmt_size(stat.st_size),
                 "extension": ext,
@@ -151,7 +173,12 @@ def _relative_path(path: Path, base: Path | None) -> str:
     if base is None:
         return path.name
     try:
-        return str(path.relative_to(base))
+        # .as_posix(), no str(): en Windows str(Path(...)) usa "\" — el
+        # frontend (openProjectFile) hace filePath.split('/').pop() para
+        # sacar el nombre del archivo, así que un separador "\" rompía esa
+        # lógica (devolvía el path entero como "nombre") además de ser
+        # inconsistente si este mismo backend corre en Linux en producción.
+        return path.relative_to(base).as_posix()
     except ValueError:
         return path.name
 

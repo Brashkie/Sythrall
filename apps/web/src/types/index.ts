@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════
 //  Sythrall — Types
 // ══════════════════════════════════════════
-import type { StaticProjectResult } from '../api/client'
+import type { ProjectHealth, StaticProjectResult } from '../api/client'
 
 export type Severity = 'error' | 'warning' | 'info'
 export type Status = 'ok' | 'warning' | 'down' | 'unknown' | 'error'
@@ -197,17 +197,43 @@ export interface AppState {
     projectDashboard: StaticProjectResult | null
   }
   running: boolean
+  /** Un análisis de PROYECTO (parse-project, disparado desde Static o el
+   * Dashboard) está en curso — distinto de `running` (el pipeline ad-hoc de
+   * "▶ Analizar" del topbar) para no acoplar el guard de ese botón a un
+   * análisis de proyecto en curso en otro lado. Señal real para el widget
+   * Flujo (components/flow.ts) — nunca un estado "en progreso" decorativo. */
+  projectAnalysisRunning: boolean
   autoOn: boolean
   autoTimer: ReturnType<typeof setInterval> | null
   history: RunHistoryEntry[]
-  steps: Record<string, StepState>
   currentFile: CodeFile | null
   backendOk: boolean
+  /** Si ya se resolvió (éxito o error) al menos un `checkBackend()` — sin
+   * esto, `!backendOk` no distingue "todavía verificando" de "confirmado
+   * caído", y el hero vacío del Dashboard mostraría un falso "Offline" por
+   * el instante que tarda el primer chequeo al arrancar la app. */
+  backendChecked: boolean
+  /** Resultado crudo del último `/capabilities` exitoso — reusado por el hero
+   * vacío del Dashboard para mostrar qué motores están realmente vivos
+   * (nunca un estado inventado), en vez de repetir el fetch. `null` mientras
+   * no hay backend confirmado. */
+  capabilities: Capabilities | null
   currentMermaid: string
   /** Proyecto elegido en el panel Proyectos — Issues/Diagrama/Static/ML/DL lo
    * usan para pedirle al backend datos de ese proyecto sin necesitar que el
    * usuario cargue cada archivo a mano con "+ Código". */
   activeProjectId: string | null
+  /** Nombre humano del proyecto activo (no solo el id) — mostrado en el
+   * indicador persistente del nav-rail. `null` si no hay proyecto activo o
+   * si por algún motivo no se conoce el nombre (cae al id truncado). */
+  activeProjectName: string | null
+  /** Cache de `ProjectHealth` por proyecto, poblado por
+   * `loadProjectHealth()` (dashboard.ts) cada vez que un análisis completo
+   * resuelve para ese proyecto EN ESTA SESIÓN — nunca inventado. El grid de
+   * Proyectos lo usa para mostrar badges de score solo cuando ya existen
+   * datos reales, y un pill neutro "Sin analizar" en caso contrario, en vez
+   * de forzar un re-análisis caro solo para poblar la lista. */
+  projectHealthCache: Record<string, ProjectHealth>
 }
 
 export interface LogError {

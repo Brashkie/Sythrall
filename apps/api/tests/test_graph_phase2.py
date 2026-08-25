@@ -101,9 +101,17 @@ class TestProjectGraphBasic:
         data = client.post("/analyze/graph/project", json={"project_id": pid, "graph_type": "import"}).json()
         assert "flowchart" in data.get("mermaid", "")
 
-    def test_all_4_types_work(self):
+    def test_all_5_types_work(self):
+        """"centrality" agregado acá — el test original ("test_all_4_types_work")
+        es de antes de que centrality existiera como 5º tipo, así que la rama
+        `graph_type == "centrality"` de `generate_project_graph` (a diferencia
+        de `generate_graph`, cubierta por TestCentralityGraph en test_graph.py)
+        no tenía ningún test que la ejercite — el mismo tipo de bug que se
+        encontró en el slice de Import Graph (llamar a una función que pasó a
+        `async` sin `await`, devolviendo un coroutine en vez de un dict) no
+        tendría quién lo atrape acá."""
         pid = _upload_project(SINGLE_FOLDER, "t5")
-        for gtype in ["import", "call", "circular", "heatmap"]:
+        for gtype in ["import", "call", "circular", "heatmap", "centrality"]:
             r = client.post("/analyze/graph/project", json={"project_id": pid, "graph_type": gtype})
             assert r.status_code == 200, f"Falló para tipo {gtype}"
             assert r.json().get("graph_type") == gtype

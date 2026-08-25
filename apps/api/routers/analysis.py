@@ -13,8 +13,9 @@ from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
-from shared import add_log, now, save_temp, safe_remove, API_HISTORY
+from shared import add_log, now, save_temp, safe_remove, API_HISTORY, UPLOADS_DIR
 from services.project_service import read_project_files
 from services.complexity_client import analyze_complexity
 
@@ -77,11 +78,11 @@ async def analyze_code(req: AnalyzeCodeRequest):
             tmp_path = save_temp(content, ".py")
 
         if ext == ".py" and "flake8" in tools:
-            result["issues"].extend(_run_flake8(tmp_path))
+            result["issues"].extend(await run_in_threadpool(_run_flake8, tmp_path))
             result["tools_used"].append("flake8")
 
         if ext == ".py" and "pylint" in tools:
-            pl_issues, score = _run_pylint(tmp_path)
+            pl_issues, score = await run_in_threadpool(_run_pylint, tmp_path)
             result["issues"].extend(pl_issues)
             result["metrics"]["pylint_score"] = score
             result["tools_used"].append("pylint")
@@ -148,7 +149,7 @@ async def analyze_project(req: AnalyzeProjectRequest) -> dict[str, Any]:
     cuando se le pasan varios archivos juntos, no uno por archivo.
     """
     if req.project_id:
-        project_dir = Path(f"uploads/projects/{req.project_id}")
+        project_dir = UPLOADS_DIR / req.project_id
         files = read_project_files(project_dir) if project_dir.exists() else []
     else:
         files = req.files
@@ -194,13 +195,13 @@ async def analyze_project(req: AnalyzeProjectRequest) -> dict[str, Any]:
             tmp_paths = list(tmp_by_filename.values())
 
             if "flake8" in req.tools:
-                f8_by_tmp = _run_flake8_batch(tmp_paths)
+                f8_by_tmp = await run_in_threadpool(_run_flake8_batch, tmp_paths)
                 for fname, tmp in tmp_by_filename.items():
                     results[fname]["issues"].extend(f8_by_tmp.get(tmp, []))
                     results[fname]["tools_used"].append("flake8")
 
             if "pylint" in req.tools:
-                pl_by_tmp = _run_pylint_batch(tmp_paths)
+                pl_by_tmp = await run_in_threadpool(_run_pylint_batch, tmp_paths)
                 for fname, tmp in tmp_by_filename.items():
                     results[fname]["issues"].extend(pl_by_tmp.get(tmp, []))
                     results[fname]["metrics"]["pylint_score"] = None

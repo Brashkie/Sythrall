@@ -181,14 +181,14 @@ class TestUploadAppendToExistingProject:
     def test_append_via_folder_endpoint(self):
         first = client.post(
             "/api/upload/folder",
-            files=[("files", ("src/a.py", b"x = 1", "text/plain"))],
+            files=[("files", ("myproject/src/a.py", b"x = 1", "text/plain"))],
         )
         pid = first.json()["project_id"]
 
         second = client.post(
             "/api/upload/folder",
             data={"project_id": pid},
-            files=[("files", ("src/b.py", b"y = 2", "text/plain"))],
+            files=[("files", ("myproject/src/b.py", b"y = 2", "text/plain"))],
         )
         assert second.status_code == 200
         assert second.json()["project_id"] == pid
@@ -203,12 +203,15 @@ class TestUploadAppendToExistingProject:
 
 class TestUploadFolder:
     def test_upload_folder_structure(self):
+        # Nombres realistas de `webkitRelativePath` — el browser SIEMPRE
+        # antepone el nombre de la carpeta elegida ("myproject") a cada
+        # archivo, nunca manda "src/app.ts" pelado como se simulaba antes acá.
         res = client.post(
             "/api/upload/folder",
             files=[
-                ("files", ("src/app.ts", b"export {}", "text/plain")),
-                ("files", ("src/components/btn.ts", b"export {}", "text/plain")),
-                ("files", ("package.json", b"{}", "text/plain")),
+                ("files", ("myproject/src/app.ts", b"export {}", "text/plain")),
+                ("files", ("myproject/src/components/btn.ts", b"export {}", "text/plain")),
+                ("files", ("myproject/package.json", b"{}", "text/plain")),
             ],
         )
         assert res.status_code == 200
@@ -220,10 +223,72 @@ class TestUploadFolder:
         assert "src" in children_names
         assert "package.json" in children_names
 
+    def test_upload_folder_strips_top_level_wrapper(self):
+        """Regresión: el picker de carpeta manda "myproject/..." en cada
+        archivo — sin descartar ese primer segmento, los archivos quedaban
+        anidados un nivel de más (myproject/src/... en vez de src/... en la
+        raíz), y el árbol recién subido mostraba solo una carpeta "myproject"
+        colapsada — reportado por el usuario como "solo aparece carpetas"."""
+        res = client.post(
+            "/api/upload/folder",
+            files=[
+                ("files", ("myproject/src/app.ts", b"export {}", "text/plain")),
+                ("files", ("myproject/README.md", b"# demo", "text/plain")),
+            ],
+        )
+        assert res.status_code == 200
+        data = res.json()
+        children_names = {c["name"] for c in data["tree"]["children"]}
+        # "myproject" NO debe aparecer como carpeta — src/ y README.md deben
+        # estar directo en la raíz del árbol, sin el wrapper de más.
+        assert "myproject" not in children_names
+        assert "src" in children_names
+        assert "README.md" in children_names
+
+    def test_upload_folder_single_flat_file_not_emptied(self):
+        """Caso límite: un solo archivo sin ruta relativa (sin pasar por el
+        picker de carpeta real) — `safe_parts` tiene un solo segmento, no debe
+        vaciarse al intentar descartar "el primero"."""
+        res = client.post(
+            "/api/upload/folder",
+            files=[("files", ("standalone.py", b"x = 1", "text/plain"))],
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["total_files"] == 1
+        children_names = {c["name"] for c in data["tree"]["children"]}
+        assert "standalone.py" in children_names
+
     def test_upload_empty_folder_returns_4xx(self):
         # FastAPI retorna 422 cuando falta el campo requerido 'files'
         res = client.post("/api/upload/folder", files=[])
         assert res.status_code in (400, 422)
+
+    def test_upload_folder_skips_ignored_dirs(self):
+        """Regresión: subir la carpeta raíz de un proyecto JS típico (con
+        node_modules presente, casi inevitable con el picker de carpeta del
+        browser) no debía mandar esos archivos a disco — antes se guardaban
+        igual, un caso real reportado por el usuario tiró 27614 archivos/
+        513 MB en una subida que terminó con la conexión cortada."""
+        res = client.post(
+            "/api/upload/folder",
+            files=[
+                ("files", ("myproject/src/app.ts", b"export {}", "text/plain")),
+                ("files", ("myproject/node_modules/lodash/index.js", b"module.exports = {}", "text/plain")),
+                ("files", ("myproject/.git/HEAD", b"ref: refs/heads/main", "text/plain")),
+                ("files", ("myproject/dist/bundle.js", b"//built", "text/plain")),
+                ("files", ("myproject/package.json", b"{}", "text/plain")),
+            ],
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["total_files"] == 2  # solo src/app.ts y package.json
+        children_names = {c["name"] for c in data["tree"]["children"]}
+        assert "node_modules" not in children_names
+        assert ".git" not in children_names
+        assert "dist" not in children_names
+        assert "src" in children_names
+        assert "package.json" in children_names
 
 
 # ─── Upload ZIP ───────────────────────────────────────────────────────────────
@@ -332,6 +397,74 @@ class TestProjectTree:
         assert res.status_code in (400, 404)
 
 
+# ─── Crear proyecto vacío + agregar archivos nuevos ───────────────────────────
+
+
+class TestEmptyProjectAndNewFile:
+    def test_create_empty_project(self):
+        res = client.post("/api/upload/empty", data={"project_name": "mi-proyecto-vacio"})
+        assert res.status_code == 200
+        data = res.json()
+        assert data["project_name"] == "mi-proyecto-vacio"
+        assert data["total_files"] == 0
+        assert data["tree"]["children"] == []
+
+    def test_create_empty_project_default_name(self):
+        res = client.post("/api/upload/empty")
+        assert res.status_code == 200
+        assert res.json()["project_name"] == "proyecto-vacío"
+
+    def test_create_file_in_empty_project(self):
+        pid = client.post("/api/upload/empty").json()["project_id"]
+
+        res = client.post(
+            "/api/upload/projects/{}/file".format(pid),
+            data={"path": "src/app.py", "content": "print('hola')"},
+        )
+        assert res.status_code == 200
+        assert res.json()["path"] == "src/app.py"
+
+        # El archivo debe poder leerse de vuelta con el mismo contenido
+        read = client.get(f"/api/upload/projects/{pid}/file?path=src/app.py")
+        assert read.status_code == 200
+        assert read.json()["content"] == "print('hola')"
+
+        # Y debe aparecer en el árbol
+        tree = client.get(f"/api/upload/projects/{pid}/tree").json()["tree"]
+        src_dir = next(c for c in tree["children"] if c["name"] == "src")
+        assert any(c["name"] == "app.py" for c in src_dir["children"])
+
+    def test_create_file_empty_content_allowed(self):
+        pid = client.post("/api/upload/empty").json()["project_id"]
+        res = client.post(
+            "/api/upload/projects/{}/file".format(pid),
+            data={"path": "notes.txt"},
+        )
+        assert res.status_code == 200
+        assert res.json()["size"] == 0
+
+    def test_create_file_duplicate_returns_409(self):
+        pid = client.post("/api/upload/empty").json()["project_id"]
+        client.post("/api/upload/projects/{}/file".format(pid), data={"path": "a.py", "content": "1"})
+        res = client.post("/api/upload/projects/{}/file".format(pid), data={"path": "a.py", "content": "2"})
+        assert res.status_code == 409
+
+    def test_create_file_nonexistent_project_returns_404(self):
+        res = client.post(
+            "/api/upload/projects/nonexistent-id-123/file",
+            data={"path": "a.py", "content": "x"},
+        )
+        assert res.status_code == 404
+
+    def test_create_file_path_traversal_blocked(self):
+        pid = client.post("/api/upload/empty").json()["project_id"]
+        res = client.post(
+            "/api/upload/projects/{}/file".format(pid),
+            data={"path": "../../etc/passwd", "content": "x"},
+        )
+        assert res.status_code == 400
+
+
 # ─── Projects list ────────────────────────────────────────────────────────────
 
 
@@ -388,6 +521,33 @@ class TestProjectService:
         children_names = {c["name"] for c in tree["children"]}
         assert "app.py" in children_names
         assert "src" in children_names
+
+    def test_build_tree_nested_file_path_includes_parent_dir(self, tmp_path: Path):
+        """Regresión: un archivo dentro de una subcarpeta debía traer "path"
+        relativo a la raíz del proyecto (ej. "src/utils.py"), no solo su
+        nombre ("utils.py") — bug real que rompía abrir ese archivo desde el
+        árbol (el frontend usa "path" tal cual contra /file?path=...). Y
+        siempre con "/" como separador (incluso en Windows) — el frontend
+        hace filePath.split('/').pop() para sacar el nombre del archivo."""
+        from services.project_service import build_tree
+
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "utils.py").write_text("def helper(): pass")
+        (tmp_path / "src" / "nested").mkdir()
+        (tmp_path / "src" / "nested" / "deep.py").write_text("x = 1")
+
+        tree = build_tree(tmp_path)
+        src_node = next(c for c in tree["children"] if c["name"] == "src")
+        assert src_node["path"] == "src"
+
+        utils_node = next(c for c in src_node["children"] if c["name"] == "utils.py")
+        assert utils_node["path"] == "src/utils.py"
+
+        nested_dir_node = next(c for c in src_node["children"] if c["name"] == "nested")
+        assert nested_dir_node["path"] == "src/nested"
+
+        deep_node = next(c for c in nested_dir_node["children"] if c["name"] == "deep.py")
+        assert deep_node["path"] == "src/nested/deep.py"
 
     def test_extract_zip_extracts_files(self, tmp_path: Path):
         from services.project_service import extract_zip

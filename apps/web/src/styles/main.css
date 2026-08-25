@@ -47,7 +47,11 @@
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
-  --nav-rail-w: 72px;
+  --nav-rail-w: 210px;
+  /* La sidebar colapsada desaparece del todo (pedido explícito del usuario,
+   * estilo Claude) — este ancho es solo el hueco justo para el botón de
+   * expandir, no un rail angosto de solo-íconos como antes. */
+  --nav-rail-w-collapsed: 44px;
   /* Tints reusables (glass/ghost/hairline) — dependen del tema */
   --glass-bg:        rgba(10,13,26,.97);
   --glass-bg-soft:   rgba(10,13,26,.85);
@@ -97,8 +101,9 @@ html, body {
 /* ── Badge de lenguaje por extensión (reemplaza emoji, ver utils/icons.ts) ── */
 .lang-badge {
   display: inline-flex; align-items: center; justify-content: center;
-  min-width: 26px; height: 16px; padding: 0 4px;
-  border-radius: 4px; font-size: .58rem; font-weight: 700;
+  /* height sube junto con el font-size de arriba, para no clippear el texto. */
+  min-width: 28px; height: 18px; padding: 0 4px;
+  border-radius: 4px; font-size: .73rem; font-weight: 700;
   font-family: var(--mono); letter-spacing: .2px;
   color: var(--bg); flex-shrink: 0;
 }
@@ -130,6 +135,10 @@ html, body {
 .app {
   display: flex; flex-direction: row;
   height: 100vh; overflow: hidden;
+  /* Ancla el position:absolute de .nav-rail.peeking (preview flotante del
+   * nav-rail colapsado) — sin esto, quedaría posicionado relativo al
+   * viewport en vez de acá adentro. */
+  position: relative;
 }
 .app-main {
   display: flex; flex-direction: column;
@@ -149,36 +158,26 @@ html, body {
 }
 .topbar::-webkit-scrollbar { height: 0; }
 
-.logo { display: flex; align-items: center; gap: 9px; flex-shrink: 0; }
+/* .logo-ring: ícono reusado en .nav-rail-logo (nav-rail más abajo) — el
+ * topbar ya no tiene su propio logo, uno solo evita el duplicado que se
+ * veía arriba a la izquierda (ícono suelto en el nav-rail + ícono+texto en
+ * el topbar, reportado por el usuario). */
 .logo-ring {
   width: 34px; height: 34px; flex-shrink: 0; object-fit: contain; display: block;
 }
-.logo-text { font-size: .95rem; font-weight: 800; white-space: nowrap; }
 
 .be-badge {
   display: flex; align-items: center; gap: 5px;
   padding: 4px 10px; border-radius: 6px;
-  font-family: var(--mono); font-size: .65rem;
+  /* sans, no mono — desde que dejó de decir "Backend OK"/puerto y pasó a
+   * prosa normal ("Todo operativo"), ya no es un valor técnico. */
+  font-family: var(--sans); font-size: .8rem;
   border: 1px solid; cursor: pointer; transition: all .2s;
   white-space: nowrap; flex-shrink: 0;
 }
 .be-ok      { border-color: rgba(0,245,160,.3); background: rgba(0,245,160,.07);  color: var(--ok);   }
 .be-err     { border-color: rgba(255,51,102,.3); background: rgba(255,51,102,.07); color: var(--err);  }
 .be-loading { border-color: rgba(255,182,39,.3); background: rgba(255,182,39,.07); color: var(--warn); }
-
-#caps-row {
-  display: flex; gap: 3px; overflow-x: auto; max-width: 520px; flex-shrink: 0;
-}
-#caps-row::-webkit-scrollbar { height: 0; }
-
-.cap-chip {
-  display: inline-flex; align-items: center; gap: 2px;
-  padding: 2px 6px; border-radius: 3px;
-  font-family: var(--mono); font-size: .57rem; font-weight: 600;
-  white-space: nowrap; flex-shrink: 0;
-}
-.cap-on  { background: rgba(0,245,160,.12);  color: var(--ok);   }
-.cap-off { background: rgba(80,96,128,.12);  color: var(--muted); }
 
 .url-bar {
   display: flex; align-items: center;
@@ -190,11 +189,11 @@ html, body {
 .url-bar:focus-within { border-color: var(--info); }
 .url-bar input {
   background: none; border: none; outline: none;
-  color: var(--txt); font-family: var(--mono); font-size: .72rem;
+  color: var(--txt); font-family: var(--mono); font-size: .87rem;
   width: 100%; padding: 7px 0;
 }
 .url-bar input::placeholder { color: var(--muted); }
-.url-bar-method { color: var(--muted); font-size: .65rem; font-family: var(--mono); }
+.url-bar-method { color: var(--muted); font-size: .8rem; font-family: var(--mono); }
 
 .quick-urls { display: flex; gap: 4px; }
 .topbar-spacer { flex: 1; }
@@ -213,16 +212,20 @@ html, body {
 /* ── Buttons ── */
 .btn {
   padding: 7px 13px; border-radius: 7px; border: none; cursor: pointer;
-  font-family: var(--sans); font-size: .85rem; font-weight: 600;
+  font-family: var(--sans); font-size: 1rem; font-weight: 600;
   transition: all .18s; display: inline-flex; align-items: center;
   gap: 5px; white-space: nowrap; flex-shrink: 0;
 }
+/* Genérico — antes solo .btn-run tenía estado disabled propio; el botón de
+ * Terminal (deshabilitado sin proyecto activo, ver updateTerminalAvailability
+ * en store/state.ts) usa .btn-ghost, sin ningún estilo :disabled hasta ahora. */
+.btn:disabled { opacity: .4; cursor: not-allowed; }
 .btn-run     { background: linear-gradient(135deg, var(--info), var(--purple)); color: #fff; padding: 7px 16px; }
 .btn-run:hover { opacity: .88; transform: translateY(-1px); }
 .btn-run:disabled { opacity: .35; cursor: not-allowed; transform: none; }
 .btn-ghost   { background: var(--ghost-tint); color: var(--txt); border: 1px solid var(--b1); }
 .btn-ghost:hover { background: var(--ghost-tint-hover); }
-.btn-sm      { padding: 4px 9px; font-size: .67rem; }
+.btn-sm      { padding: 4px 9px; font-size: .82rem; }
 .btn-danger  { background: rgba(255,51,102,.1); color: var(--err); border: 1px solid rgba(255,51,102,.2); }
 .btn-danger:hover { background: rgba(255,51,102,.2); }
 
@@ -230,7 +233,9 @@ html, body {
 .pill {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 4px 12px; border-radius: 99px;
-  font-family: var(--mono); font-size: .65rem; font-weight: 600;
+  /* sans, no mono — el contenido siempre es una palabra de estado en
+   * prosa ("Activo"/"ERRORES"/"SIN ANÁLISIS"), no un valor técnico. */
+  font-family: var(--sans); font-size: .8rem; font-weight: 600;
   border: 1px solid; transition: all .3s; white-space: nowrap; flex-shrink: 0;
 }
 .pill-idle { color: var(--muted); border-color: var(--b1); }
@@ -258,30 +263,103 @@ html, body {
   background: var(--s0); border-right: 1px solid var(--b0);
   overflow-y: auto; overflow-x: hidden;
   padding: var(--space-2) 0;
+  transition: width .18s ease;
 }
 .nav-rail::-webkit-scrollbar { width: 0; }
-.nav-rail-logo { display: flex; justify-content: center; padding: var(--space-1) 0 var(--space-3); }
-.nav-rail-divider { height: 1px; background: var(--b0); margin: var(--space-2) var(--space-3); flex-shrink: 0; }
+
+/* Logo — único en toda la app (antes también vivía, redundante, en el
+ * topbar). Vive acá y no en el topbar porque el nav-rail es el ancla de
+ * marca persistente de la app (siempre visible, incluso colapsado a solo
+ * ícono), mismo criterio que llevó el indicador de proyecto activo acá.
+ * El botón de colapsar vive en esta misma fila, a la derecha del texto —
+ * pedido explícito del usuario, con la ubicación de Claude como referencia
+ * (ícono junto al nombre, arriba, no un botón aparte al final del rail). */
+.nav-rail-logo {
+  display: flex; align-items: center; gap: 9px; flex-shrink: 0;
+  padding: var(--space-1) var(--space-3) var(--space-2);
+}
+.nav-rail-logo-text { font-family: var(--sans); font-size: 1.1rem; font-weight: 800; white-space: nowrap; overflow: hidden; flex: 1; min-width: 0; }
+.nav-rail.collapsed .nav-rail-logo { justify-content: center; gap: 4px; padding: var(--space-1) 0 var(--space-2); }
+.nav-rail.collapsed .nav-rail-logo-text { display: none; }
+
+/* Indicador de proyecto activo — persistente, visible desde cualquier tab,
+ * no solo desde el Dashboard (que ya tenía su propio ".dash-project-head"
+ * pero solo se veía estando parado ahí). */
+.nav-rail-project {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  margin: 0 var(--space-2) var(--space-2);
+  padding: 8px 10px; border-radius: var(--radius);
+  background: var(--s1); border: 1px solid var(--b0);
+  cursor: pointer; overflow: hidden; transition: border-color .15s;
+}
+.nav-rail-project:hover { border-color: var(--info); }
+.nav-rail-project-name {
+  /* sans, no mono — el nombre de un proyecto es un título, no un valor de
+   * código (mismo criterio en .dash-project-name/.project-context-name). */
+  font-family: var(--sans); font-size: .87rem; color: var(--txt);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Encabezados de sección — mismo patrón visual que .bn-more-section-label
+ * (menú "Más" del bottom-nav mobile), generalizado a la sidebar de escritorio. */
+.nav-section-label {
+  font-size: .75rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--muted); padding: 10px var(--space-3) 4px; white-space: nowrap;
+  overflow: hidden; flex-shrink: 0;
+}
 .nav-rail .tab {
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  padding: var(--space-2) var(--space-1);
+  display: flex; flex-direction: row; align-items: center; gap: 10px;
+  padding: 7px var(--space-3);
   margin: 1px var(--space-2);
   border-radius: var(--radius);
-  font-size: .62rem; font-weight: 600; color: var(--muted);
+  font-size: .89rem; font-weight: 600; color: var(--muted);
   cursor: pointer; border-left: none; position: relative;
-  transition: all .2s; user-select: none;
+  transition: all .2s; user-select: none; flex-shrink: 0;
 }
 .nav-rail .tab:hover  { color: var(--txt); background: var(--ghost-tint); }
 .nav-rail .tab.active { color: var(--info); background: rgba(61,158,255,.1); }
-.nav-rail .tab-label  { white-space: nowrap; }
+.nav-rail .tab-label  { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tbadge {
-  position: absolute; top: 2px; right: 6px;
-  border-radius: 99px; min-width: 14px; height: 14px; padding: 0 4px;
-  font-size: .58rem; font-family: var(--mono); line-height: 14px; text-align: center;
+  position: absolute; top: 50%; right: 10px; transform: translateY(-50%);
+  /* min-width/height/line-height suben junto con el font-size de arriba —
+   * a 14px de alto el texto quedaba clippeado, no solo apretado. */
+  border-radius: 99px; min-width: 17px; height: 17px; padding: 0 4px;
+  font-size: .73rem; font-family: var(--mono); line-height: 17px; text-align: center;
 }
 .tbadge-err  { background: var(--err);  color: #fff; }
 .tbadge-ok   { background: var(--ok);   color: #000; }
 .tbadge-warn { background: var(--warn); color: #000; }
+
+.nav-rail-collapse-btn {
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  padding: 5px; border-radius: var(--radius);
+  background: transparent; border: none; color: var(--muted); cursor: pointer;
+}
+.nav-rail-collapse-btn:hover { color: var(--txt); background: var(--ghost-tint); }
+
+/* ── Colapsado: vuelve exactamente al layout compacto original (ícono
+ * centrado, sin texto) — no un panel que desaparece, solo más angosto. ── */
+/* Colapsado: desaparece por completo, solo queda el botón de expandir
+   (igual que el sidebar de Claude) — nada de rail de iconos intermedio. */
+.nav-rail.collapsed { width: var(--nav-rail-w-collapsed); }
+.nav-rail.collapsed .logo-ring,
+.nav-rail.collapsed .nav-rail-logo-text,
+.nav-rail.collapsed .nav-rail-project,
+.nav-rail.collapsed .nav-section-label,
+.nav-rail.collapsed .tab { display: none; }
+.nav-rail.collapsed .nav-rail-logo { justify-content: center; gap: 0; padding: var(--space-1) 0 var(--space-2); }
+
+/* Peek: hover sobre el rail colapsado muestra el contenido completo como
+   overlay flotante, sin empujar el layout de .app-main (position:absolute
+   ancla en .app, que ahora es position:relative). Como .collapsed se quita
+   por JS antes de agregar .peeking, todo el contenido hijo vuelve a su
+   estilo expandido por defecto — acá solo hace falta el "flotar encima". */
+.nav-rail.peeking {
+  position: absolute; top: 0; bottom: 0; left: 0;
+  /* Por encima del topbar (z-index 200) para que el preview no quede
+     tapado por él. */
+  z-index: 250; box-shadow: 2px 0 24px rgba(0,0,0,.35);
+}
 
 /* ══════════════════
    WORKSPACE — 3 paneles con resize
@@ -360,23 +438,92 @@ html, body {
   display: flex; align-items: center; gap: 8px;
   padding: 0 10px; height: 32px; flex-shrink: 0;
   border-bottom: 1px solid var(--b0);
-  font-family: var(--mono); font-size: .68rem; color: var(--muted);
+  font-family: var(--mono); font-size: .83rem; color: var(--muted);
 }
 .terminal-panel-title { color: var(--txt); font-weight: 700; }
-.terminal-panel-body { flex: 1; min-height: 0; padding: 4px 8px; }
+.terminal-panel-main { display: flex; flex: 1; min-height: 0; }
+.terminal-panel-body { flex: 1; min-height: 0; min-width: 0; padding: 4px 8px; }
 .terminal-panel-body .xterm { height: 100%; }
-.terminal-logs-body { overflow-y: auto; font-family: var(--mono); font-size: .68rem; }
+.terminal-logs-body { overflow-y: auto; font-family: var(--mono); font-size: .83rem; }
 
 /* ── Selector Terminal / Logs (estilo tabs de VSCode) ── */
 .tp-view-tabs { display: flex; gap: 2px; }
 .tp-view-tab {
   background: transparent; border: none; cursor: pointer;
   padding: 5px 10px; border-radius: 5px 5px 0 0;
-  font-family: var(--mono); font-size: .66rem; color: var(--muted);
+  /* sans, no mono — es un selector de tab ("Terminal"/"Logs"), como el
+   * resto de los tabs de la app (.rp-tab/.nav-rail .tab), no un valor de
+   * código. */
+  font-family: var(--sans); font-size: .81rem; color: var(--muted);
   transition: all .15s;
 }
 .tp-view-tab:hover { color: var(--txt); background: var(--ghost-tint); }
 .tp-view-tab.active { color: var(--info); background: var(--ghost-tint); border-bottom: 2px solid var(--info); }
+
+/* ── Lista de sesiones (columna vertical a la derecha, estilo VSCode — no
+ * un dropdown que aparece al click, sino una barra fija dentro del panel de
+ * terminal, igual que el panel real: cada shell real es una fila propia con
+ * ícono+nombre, y el botón de cerrar aparece recién al pasar el mouse en vez
+ * de ocupar espacio siempre) ── */
+.term-sessions-sidebar {
+  display: flex; flex-direction: column; flex-shrink: 0;
+  width: 170px; overflow-y: auto;
+  border-left: 1px solid var(--b0); background: var(--s1);
+}
+.term-session-row {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+  padding: 6px 6px 6px 10px; cursor: pointer; white-space: nowrap;
+  /* sans, no mono — un nombre de sesión ("bash"/"PowerShell", o uno
+   * renombrado a mano) es un label, igual que VSCode usa su fuente de UI acá
+   * y reserva monospace para el contenido real de la terminal. */
+  font-family: var(--sans); font-size: .83rem; color: var(--muted);
+  border-left: 2px solid transparent; background: transparent;
+  transition: background .15s, color .15s;
+}
+.term-session-row:hover { color: var(--txt); background: var(--ghost-tint); }
+.term-session-row.active { color: var(--info); background: var(--ghost-tint); border-left-color: var(--info); }
+.term-session-icon { display: flex; flex-shrink: 0; }
+.term-session-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; outline: none; }
+.term-session-name[contenteditable='true'] {
+  outline: 1px solid var(--info); border-radius: 3px; padding: 0 3px; cursor: text; color: var(--txt);
+}
+.term-session-close {
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 16px; height: 16px; border-radius: 3px; color: inherit; opacity: 0;
+}
+.term-session-row:hover .term-session-close,
+.term-session-row.active .term-session-close { opacity: .6; }
+.term-session-close:hover { opacity: 1 !important; background: var(--err); color: #fff; }
+.term-shell-menu {
+  position: absolute; z-index: 20; background: var(--s1); border: 1px solid var(--b1);
+  border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.4); min-width: 140px; overflow: hidden;
+}
+.term-shell-menu-item {
+  display: block; width: 100%; text-align: left; padding: 6px 10px;
+  /* sans, no mono — es un ítem de menú ("PowerShell"/"cmd.exe"/"bash"). */
+  font-family: var(--sans); font-size: .83rem; color: var(--txt); background: transparent;
+}
+.term-shell-menu-item:hover { background: var(--ghost-tint); color: var(--info); }
+.term-session-body { position: absolute; inset: 4px 8px; }
+.term-session-body .xterm { height: 100%; }
+
+/* ── Buscador en la terminal (Ctrl+F) ── */
+.term-search-bar {
+  position: absolute; top: 6px; right: 6px; z-index: 15;
+  display: flex; align-items: center; gap: 4px;
+  background: var(--s1); border: 1px solid var(--b1); border-radius: 6px;
+  padding: 3px 4px; box-shadow: 0 6px 18px rgba(0,0,0,.35);
+}
+.term-search-bar input {
+  background: var(--s0); border: 1px solid var(--b1); border-radius: 4px;
+  color: var(--txt); font-family: var(--mono); font-size: .83rem;
+  padding: 3px 6px; width: 140px;
+}
+.term-search-bar button {
+  display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 4px; color: var(--muted); background: transparent;
+}
+.term-search-bar button:hover { color: var(--txt); background: var(--ghost-tint); }
 .resize-handle-h {
   position: absolute; left: 0; right: 0; top: -4px;
   height: 8px; cursor: row-resize; z-index: 10;
@@ -403,6 +550,27 @@ html, body {
   overflow: hidden;
 }
 
+/* Layout modular por tab (components/app.ts::applyTabLayout) — un panel que
+ * no aporta nada al contexto del tab activo directamente no ocupa espacio,
+ * en vez de quedar colapsado a una franja angosta "por si acaso". .center
+ * ya es flex:1, así que ocultar .sidebar/.rp acá alcanza para que se
+ * expanda solo. !important porque #rp-fab ya recibe un style.display inline
+ * de events.ts::updateResponsiveUI() según el ancho de ventana — sin esto,
+ * ese inline style ganaría en mobile. */
+.tab-hidden { display: none !important; }
+/* #mobile-toggle NO recibe inline style de JS (solo #rp-fab/#bottom-nav lo
+ * reciben) — se muestra puramente vía `@media(max-width:680px){.mobile-
+ * toggle{display:flex!important}}` más abajo. Esa regla y esta tienen la
+ * misma especificidad (una sola clase) + !important, así que en el empate
+ * gana la que aparece último en el archivo — la media query, no esta —
+ * dejando el botón visible aunque el tab activo no tenga Archivos para
+ * abrir (encontrado midiendo overflow del topbar con Playwright: ese
+ * hueco de 38px de un botón que no debería estar ahí fue lo que terminaba
+ * de desbordar a 600px de ancho). El selector compuesto de abajo tiene más
+ * especificidad que cualquiera de los dos por separado, así que gana
+ * siempre, sin depender del orden. */
+.mobile-toggle.tab-hidden { display: none !important; }
+
 /* ── Panel derecho ── */
 .rp {
   width: var(--rightpanel-w);
@@ -424,7 +592,7 @@ html, body {
 ══════════════════ */
 .sb-head {
   padding: 9px 13px 8px;
-  font-size: .58rem; font-weight: 700; letter-spacing: 1.6px;
+  font-size: .73rem; font-weight: 700; letter-spacing: 1.6px;
   text-transform: uppercase; color: var(--muted);
   border-bottom: 1px solid var(--b0);
   /* .sb-actions (3 botones "+ Código/+ Log/+ Carpeta") necesita ~180px sin
@@ -449,11 +617,10 @@ html, body {
   padding: var(--space-3); border-top: 1px solid var(--b0);
   display: flex; flex-direction: column; gap: var(--space-2); flex-shrink: 0;
 }
-.sb-footer-run { width: 100%; justify-content: center; }
 .sb-footer-row { display: flex; gap: var(--space-2); }
 .sb-footer-btn { flex: 1; justify-content: center; }
 .rp-section-title {
-  font-size: .58rem; font-weight: 700; letter-spacing: 1.4px;
+  font-size: .73rem; font-weight: 700; letter-spacing: 1.4px;
   text-transform: uppercase; color: var(--muted); margin-bottom: 11px;
 }
 .run-meta-wrap { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--b0); }
@@ -466,8 +633,8 @@ html, body {
 }
 .dropzone:hover, .dropzone.over { border-color: var(--info); background: rgba(61,158,255,.06); }
 .dz-icon  { display: flex; justify-content: center; color: var(--muted); margin-bottom: 4px; }
-.dz-text  { font-size: .72rem; color: var(--muted); }
-.dz-ext   { font-size: .6rem; color: var(--b2); font-family: var(--mono); margin-top: 2px; }
+.dz-text  { font-size: .87rem; color: var(--muted); }
+.dz-ext   { font-size: .75rem; color: var(--b2); font-family: var(--mono); margin-top: 2px; }
 
 .file-node {
   display: flex; align-items: center; gap: 6px;
@@ -479,8 +646,8 @@ html, body {
 .file-node.active  { background: rgba(61,158,255,.08); border-left-color: var(--info); }
 .file-node.has-err { border-left-color: var(--err); background: rgba(255,51,102,.04); }
 .file-node.analyzed{ border-left-color: var(--ok); }
-.fn-name  { font-size: .82rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fn-badge { font-family: var(--mono); font-size: .57rem; padding: 1px 5px; border-radius: 3px; flex-shrink: 0; }
+.fn-name  { font-size: .97rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fn-badge { font-family: var(--mono); font-size: .72rem; padding: 1px 5px; border-radius: 3px; flex-shrink: 0; }
 .fn-err     { background: rgba(255,51,102,.15); color: var(--err);   }
 .fn-ok      { background: rgba(0,245,160,.1);   color: var(--ok);    }
 .fn-pending { background: rgba(80,96,128,.15);  color: var(--muted); }
@@ -488,12 +655,12 @@ html, body {
 .url-item {
   display: flex; align-items: center; gap: 6px;
   padding: 7px 12px; border-bottom: 1px solid var(--b0);
-  font-family: var(--mono); font-size: .76rem; flex-shrink: 0;
+  font-family: var(--mono); font-size: .91rem; flex-shrink: 0;
 }
 .ui-dot  { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; transition: background .3s; }
 .ui-url  { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ui-ms   { font-size: .6rem; color: var(--ok); }
-.ui-code { font-size: .6rem; color: var(--muted); }
+.ui-ms   { font-size: .75rem; color: var(--ok); }
+.ui-code { font-size: .75rem; color: var(--muted); }
 
 /* ══════════════════
    TAB PANELS
@@ -506,40 +673,53 @@ html, body {
 .stats-row   { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; flex-shrink: 0; min-width: 0; }
 .stat-card   { background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius); padding: 14px; transition: border-color .2s; min-height: 0; min-width: 0; overflow: hidden; }
 .stat-card:hover { border-color: var(--b2); }
-.sc-lbl { font-size: .67rem; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.sc-lbl { font-size: .82rem; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
 .sc-val { font-family: var(--mono); font-size: 2rem; font-weight: 500; line-height: 1; }
-.sc-sub { font-size: .78rem; color: var(--muted); margin-top: 4px; }
+.sc-sub { font-size: .93rem; color: var(--muted); margin-top: 4px; }
 .charts-row  { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; flex-shrink: 0; min-width: 0; }
 .chart-card  { background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius); padding: 14px; min-height: 0; min-width: 0; overflow: hidden; }
 .chart-card.wide { grid-column: span 2; min-width: 0; }
-.cc-head { font-size: .57rem; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+.cc-head { font-size: .72rem; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
 .chart-wrap  { position: relative; height: 130px; max-height: 130px; overflow: hidden; }
 
 /* ── Dashboard: widgets project-centric (rediseño Fase 2) ── */
 .dash-project-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.dash-project-lbl  { font-size: .67rem; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); }
-.dash-project-name { font-family: var(--mono); font-size: .85rem; color: var(--txt); }
+.dash-project-lbl  { font-size: .82rem; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); }
+.dash-project-name { font-family: var(--sans); font-size: 1rem; color: var(--txt); }
+
+/* Banner compartido de "proyecto activo" — utils/projectHeader.ts, usado por
+ * Static/Métricas/Arquitectura/Hallazgos (paneles que no son el Dashboard
+ * pero sí muestran datos del proyecto activo cuando hay uno). */
+.project-context-banner {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; margin-bottom: 12px;
+  background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius);
+}
+.project-context-lbl {
+  font-size: .77rem; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted);
+}
+.project-context-name { font-family: var(--sans); font-size: .93rem; color: var(--txt); }
 
 .dash-findings-list { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; max-height: 220px; overflow-y: auto; }
 .dash-finding-row   { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--b0); }
 .dash-finding-row:last-child { border-bottom: none; }
 .dash-finding-body  { flex: 1; min-width: 0; }
-.dash-finding-label { font-size: .74rem; color: var(--txt); }
-.dash-finding-loc   { font-family: var(--mono); font-size: .62rem; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-finding-label { font-size: .89rem; color: var(--txt); }
+.dash-finding-loc   { font-family: var(--mono); font-size: .77rem; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .dash-sev-rows { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
-.dash-sev-row  { display: grid; grid-template-columns: 60px 1fr 24px; align-items: center; gap: 8px; font-size: .72rem; }
+.dash-sev-row  { display: grid; grid-template-columns: 60px 1fr 24px; align-items: center; gap: 8px; font-size: .87rem; }
 .dash-sev-bar-wrap { height: 8px; background: var(--b0); border-radius: 4px; overflow: hidden; }
 .dash-sev-bar      { height: 100%; border-radius: 4px; transition: width .4s ease; opacity: .8; }
 
 .dash-cc-fn-list   { display: flex; flex-direction: column; gap: 9px; margin-top: 6px; }
 .dash-cc-fn-row    { display: grid; grid-template-columns: minmax(0,1fr) 110px 34px 78px; align-items: center; gap: 10px; cursor: pointer; padding: 3px 0; }
 .dash-cc-fn-row:hover .dash-cc-fn-name { color: var(--info); }
-.dash-cc-fn-name   { font-family: var(--mono); font-size: .72rem; color: var(--txt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-cc-fn-name   { font-family: var(--mono); font-size: .87rem; color: var(--txt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dash-cc-fn-bar-wrap { height: 6px; background: var(--b0); border-radius: 3px; overflow: hidden; }
 .dash-cc-fn-bar    { height: 100%; border-radius: 3px; transition: width .4s ease; }
-.dash-cc-fn-cc     { font-family: var(--mono); font-size: .72rem; text-align: right; }
-.dash-cc-fn-bigo   { font-family: var(--mono); font-size: .65rem; color: var(--muted); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-cc-fn-cc     { font-family: var(--mono); font-size: .87rem; text-align: right; }
+.dash-cc-fn-bigo   { font-family: var(--mono); font-size: .8rem; color: var(--muted); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Resumen de archivos sueltos (sin proyecto activo, ver dashboard.ts::
    _renderAdHocSummary) — mismo criterio de hover que .dash-cc-fn-row de
@@ -554,7 +734,7 @@ html, body {
 .dash-adhoc-file-row:hover { background: var(--ghost-tint); }
 .dash-adhoc-file-row:hover .dash-adhoc-file-name { color: var(--info); }
 .dash-adhoc-file-name {
-  font-family: var(--mono); font-size: .72rem; color: var(--txt);
+  font-family: var(--mono); font-size: .87rem; color: var(--txt);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   transition: color .12s ease;
 }
@@ -562,7 +742,7 @@ html, body {
 .cc-head-link:hover { text-decoration: underline; }
 
 .dash-lang-support-grid { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 8px; }
-.dash-lang-support-row  { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: .68rem; color: var(--txt); }
+.dash-lang-support-row  { display: flex; align-items: center; gap: 6px; font-family: var(--sans); font-size: .83rem; color: var(--txt); }
 
 /* ── Editor ── */
 .editor-bar { padding: 7px 14px; background: var(--s0); border-bottom: 1px solid var(--b0); display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
@@ -585,18 +765,18 @@ html, body {
 .ii-warn { background: rgba(255,182,39,.06); border-color: rgba(255,182,39,.2); }
 .ii-info { background: rgba(61,158,255,.05); border-color: rgba(61,158,255,.15); }
 .ii-head { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; flex-wrap: wrap; }
-.ii-tool { font-size: .7rem; padding: 2px 6px; border-radius: 3px; font-weight: 700; font-family: var(--mono); }
+.ii-tool { font-size: .85rem; padding: 2px 6px; border-radius: 3px; font-weight: 700; font-family: var(--mono); }
 .t-flake8 { background: rgba(184,125,255,.15); color: var(--purple); }
 .t-pylint { background: rgba(61,158,255,.15);  color: var(--info);   }
 .t-complexity  { background: rgba(0,245,160,.12);   color: var(--ok);     }
 .t-ast    { background: rgba(255,182,39,.12);   color: var(--warn);  }
-.ii-sev { font-size: .7rem; font-weight: 700; padding: 2px 6px; border-radius: 3px; }
+.ii-sev { font-size: .85rem; font-weight: 700; padding: 2px 6px; border-radius: 3px; }
 .sev-error   { background: rgba(255,51,102,.2); color: var(--err);  }
 .sev-warning { background: rgba(255,182,39,.2); color: var(--warn); }
 .sev-info    { background: rgba(61,158,255,.15); color: var(--info); }
-.ii-file    { font-family: var(--mono); font-size: .72rem; font-weight: 600; }
-.ii-msg     { font-size: .82rem; color: var(--muted); }
-.ii-preview { font-family: var(--mono); font-size: .63rem; color: var(--b2); margin-top: 2px; }
+.ii-file    { font-family: var(--mono); font-size: .87rem; font-weight: 600; }
+.ii-msg     { font-size: .97rem; color: var(--muted); }
+.ii-preview { font-family: var(--mono); font-size: .78rem; color: var(--b2); margin-top: 2px; }
 /* Varios tools reportando sobre la misma línea (ej. flake8 + pylint, mismo
    import no usado) comparten un solo header (.ii-head) en vez de repetirlo
    por cada uno — cada hallazgo sigue con su propia fila acá abajo, nada se
@@ -607,18 +787,18 @@ html, body {
 /* ── APIs ── */
 .api-scroll { overflow-y: auto; flex: 1; padding: 12px; }
 .api-card { background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px; }
-.ac-url { font-family: var(--mono); font-size: .82rem; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-url { font-family: var(--mono); font-size: .97rem; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ac-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
 .acm   { background: var(--s2); border-radius: 6px; padding: 7px; }
-.acm-k { font-size: .67rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px; }
-.acm-v { font-family: var(--mono); font-size: .88rem; font-weight: 500; }
+.acm-k { font-size: .82rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px; }
+.acm-v { font-family: var(--mono); font-size: 1.03rem; font-weight: 500; }
 
 /* ── Diagram ── */
-.diag-sel { background: var(--s2); border: 1px solid var(--b1); border-radius: 6px; padding: 5px 9px; color: var(--txt); font-family: var(--mono); font-size: .68rem; outline: none; cursor: pointer; }
+.diag-sel { background: var(--s2); border: 1px solid var(--b1); border-radius: 6px; padding: 5px 9px; color: var(--txt); font-family: var(--sans); font-size: .83rem; outline: none; cursor: pointer; }
 .diag-sel:focus { border-color: var(--info); }
 .diag-scroll { overflow-y: auto; overflow-x: auto; flex: 1; padding: 16px; }
 #mermaid-output { min-height: 200px; background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius); padding: 18px; overflow: auto; }
-.mermaid-code  { background: var(--s2); border: 1px solid var(--b0); border-radius: 7px; padding: 12px; font-family: var(--mono); font-size: .68rem; line-height: 1.7; color: var(--info); overflow-x: auto; white-space: pre; margin-top: 12px; max-height: 180px; overflow-y: auto; }
+.mermaid-code  { background: var(--s2); border: 1px solid var(--b0); border-radius: 7px; padding: 12px; font-family: var(--mono); font-size: .83rem; line-height: 1.7; color: var(--info); overflow-x: auto; white-space: pre; margin-top: 12px; max-height: 180px; overflow-y: auto; }
 
 /* ── ML/DL ── */
 .ml-scroll  { overflow-y: auto; flex: 1; padding: 16px; }
@@ -626,16 +806,57 @@ html, body {
 /* ── Metrics ── */
 .metrics-scroll  { overflow-y: auto; flex: 1; padding: 14px; }
 .metric-section  { background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius); padding: 12px; margin-bottom: 12px; }
-.ms-title { font-size: .68rem; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); margin-bottom: 9px; padding-bottom: 6px; border-bottom: 1px solid var(--b0); }
-.metric-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--b0); font-size: .82rem; }
+.ms-title { font-size: .83rem; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); margin-bottom: 9px; padding-bottom: 6px; border-bottom: 1px solid var(--b0); }
+.metric-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--b0); font-size: .97rem; }
 .metric-row:last-child { border: none; }
-.mr-k { color: var(--muted); font-family: var(--mono); font-size: .76rem; }
+.mr-k { color: var(--muted); font-family: var(--mono); font-size: .91rem; }
 .mr-v { font-family: var(--mono); font-weight: 500; }
 .complexity-bar { height: 5px; background: var(--b0); border-radius: 3px; margin-top: 3px; overflow: hidden; }
 .cb-fill { height: 100%; border-radius: 3px; transition: width .6s; }
 .rank-A { color: var(--ok);  } .rank-B { color: #8ef5c0; }
 .rank-C { color: var(--warn);} .rank-D { color: var(--orange); }
 .rank-E, .rank-F { color: var(--err); }
+
+/* ── Proyectos: grid de tarjetas (reemplaza la lista plana anterior) ── */
+.up-project-grid-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 16px 0 10px;
+}
+.up-form-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.up-project-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.up-project-card {
+  position: relative;
+  background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius);
+  padding: 12px; cursor: pointer; transition: border-color .15s, background .15s;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.up-project-card:hover { border-color: var(--info); }
+.up-project-card.active { border-color: var(--info); background: rgba(61,158,255,.06); }
+.up-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.up-card-name {
+  font-weight: 700; font-size: .97rem; color: var(--txt);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.up-card-del {
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 22px; height: 22px; border-radius: 4px; color: var(--muted); opacity: .6;
+  background: transparent; border: none; cursor: pointer;
+}
+.up-card-del:hover { opacity: 1; background: var(--err); color: #fff; }
+.up-active-badge { align-self: flex-start; }
+.up-card-langs { display: flex; gap: 4px; flex-wrap: wrap; min-height: 18px; }
+.up-card-health { display: flex; gap: 10px; flex-wrap: wrap; font-family: var(--mono); font-size: .83rem; font-weight: 600; }
+.up-card-health-pill {
+  font-family: var(--mono); font-size: .79rem; color: var(--muted);
+  background: var(--ghost-tint); border-radius: 3px; padding: 2px 6px;
+}
+.up-card-meta { font-size: .83rem; color: var(--muted); margin-top: auto; }
 
 /* ── Diff ── */
 .diff-scroll { overflow-y: auto; flex: 1; padding: 14px; }
@@ -644,10 +865,10 @@ html, body {
 #diff-out { overflow-wrap: break-word; word-break: break-word; }
 
 /* ── Log stream ── */
-.log-stream  { flex: 1; overflow-y: auto; padding: 8px; font-family: var(--mono); font-size: .75rem; line-height: 1.75; }
+.log-stream  { flex: 1; overflow-y: auto; padding: 8px; font-family: var(--mono); font-size: .9rem; line-height: 1.75; }
 .ls-row  { display: flex; gap: 8px; padding: 2px 0; border-bottom: 1px solid var(--hairline); }
-.ls-ts   { color: var(--muted); flex-shrink: 0; min-width: 52px; font-size: .62rem; }
-.ls-src  { flex-shrink: 0; font-size: .58rem; padding: 0 4px; border-radius: 3px; }
+.ls-ts   { color: var(--muted); flex-shrink: 0; min-width: 52px; font-size: .77rem; }
+.ls-src  { flex-shrink: 0; font-size: .73rem; padding: 0 4px; border-radius: 3px; }
 .src-be  { background: rgba(184,125,255,.12); color: var(--purple); }
 .src-fe  { background: rgba(61,158,255,.1);   color: var(--info);   }
 /* Mensaje (último span de logRowHtml, ver utils/helpers.ts) — sin min-width:0
@@ -660,22 +881,38 @@ html, body {
  * drawer mobile (@media max-width:900px, ver .rp) — "Problems" quedaba
  * directamente cortado por el borde de la pantalla, no solo apretado.
  * overflow-x:auto los hace deslizables en vez de invisibles/inalcanzables. */
-.rp-tabs { display: flex; border-bottom: 1px solid var(--b0); flex-shrink: 0; overflow-x: auto; scrollbar-width: none; }
-.rp-tabs::-webkit-scrollbar { display: none; }
-.rp-tab  { padding: 10px 13px; font-size: .76rem; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; white-space: nowrap; flex-shrink: 0; }
+/* Los 4 tabs se reparten el ancho disponible (flex:1 cada uno) en vez de un
+ * scroll horizontal con scrollbar oculta — con esa versión anterior, "Problems"
+ * (el más largo de los 4 con su ícono) quedaba cortado a la mitad contra el
+ * borde del panel en anchos normales, sin ningún indicio visual de que había
+ * más para hacer scroll: se veía roto, no "hay más contenido acá". Con
+ * flex:1 + min-width:0 + ellipsis en el label, los 4 caben siempre — en el
+ * caso límite de un panel angostísimo, el label trunca con "…" (el ícono
+ * nunca desaparece) y el `title` del HTML sigue mostrando el nombre completo. */
+.rp-tabs { display: flex; border-bottom: 1px solid var(--b0); flex-shrink: 0; }
+.rp-tab  {
+  /* flex:0 1 auto (no 1 1 0): repartir el ancho EN PARTES IGUALES entre los 4
+   * hacía que "Problems" (el label más largo) truncara aunque sobrara espacio
+   * total de sobra — cada tab pide solo lo que su contenido necesita, y recién
+   * si eso no entra (panel angosto de verdad) se achica de a uno. */
+  flex: 0 1 auto; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 10px 6px; font-size: .91rem; font-weight: 600; color: var(--muted); cursor: pointer;
+  border-bottom: 2px solid transparent; transition: all .2s; overflow: hidden;
+}
 .rp-tab.active { color: var(--info); border-bottom-color: var(--info); }
+.rp-tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rp-panel { display: none; flex: 1; overflow-y: auto; padding: 14px 16px; }
 .rp-panel.active { display: block; }
 
 /* ── Flow steps ── */
 .fstep   { display: flex; align-items: stretch; }
 .fconn   { width: 28px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
-.fnode   { width: 22px; height: 22px; border-radius: 50%; border: 2px solid; display: grid; place-items: center; font-family: var(--mono); font-size: .6rem; font-weight: 700; transition: all .4s; flex-shrink: 0; }
+.fnode   { width: 22px; height: 22px; border-radius: 50%; border: 2px solid; display: grid; place-items: center; font-family: var(--mono); font-size: .75rem; font-weight: 700; transition: all .4s; flex-shrink: 0; }
 .fline   { width: 2px; flex: 1; min-height: 10px; margin: 0 auto; background: var(--b0); transition: background .4s; }
 .fline.ok{ background: linear-gradient(to bottom, var(--ok), var(--b0)); }
 .fcontent{ flex: 1; padding: 1px 0 10px 8px; min-width: 0; overflow: hidden; }
-.fname   { font-size: .84rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fdetail { font-size: .71rem; color: var(--muted); margin-top: 2px; font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fname   { font-size: .99rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fdetail { font-size: .86rem; color: var(--muted); margin-top: 2px; font-family: var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fstate-idle { border-color: var(--muted); color: var(--muted); }
 .fstate-run  { border-color: var(--warn);  color: var(--warn);  animation: spin .7s linear infinite; }
 .fstate-ok   { border-color: var(--ok);    color: var(--ok);    }
@@ -683,15 +920,41 @@ html, body {
 .fstate-warn { border-color: var(--warn);  color: var(--warn);  }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── Dashboard: hero vacío (sin proyecto activo ni archivos sueltos) ── */
+.dash-hero {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: 64px 24px; margin: 0 auto; max-width: 460px;
+}
+.dash-hero-mark {
+  font-family: var(--mono); font-size: 1.9rem; font-weight: 700; letter-spacing: 3px;
+  background: linear-gradient(90deg, var(--info), var(--purple), var(--ok));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.dash-hero-tag { font-family: var(--sans); font-size: 1rem; color: var(--muted); margin-top: 6px; }
+.dash-hero-desc { font-size: .93rem; color: var(--muted); line-height: 1.6; margin: 14px 0 22px; }
+.dash-hero-actions { display: flex; gap: 10px; }
+/* Una sola línea chica de disponibilidad del servicio, no un panel de 3
+ * filas Backend/Rust Engine/Linters (versión anterior) — deliberadamente
+ * discreta, el foco del hero vacío son las dos acciones de arriba. */
+.dash-hero-status {
+  display: flex; align-items: center; gap: 8px; margin-top: 28px;
+  font-family: var(--sans); font-size: .85rem;
+}
+.dash-hero-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
 /* ── Misc ── */
-.empty       { text-align: center; padding: 24px; color: var(--muted); font-size: .75rem; font-family: var(--mono); }
+/* sans, no mono — .empty son mensajes de estado vacío en prosa
+ * ("Todavía no hay nada que mostrar acá"), no valores de código; usado en
+ * muchos paneles distintos. */
+.empty       { text-align: center; padding: 24px; color: var(--muted); font-size: .9rem; font-family: var(--sans); }
 .empty-icon  { font-size: 26px; display: block; margin-bottom: 7px; }
 .empty .btn  { margin-top: 10px; pointer-events: auto; }
-.tag         { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 3px; font-family: var(--mono); font-size: .6rem; font-weight: 700; }
+.tag         { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 3px; font-family: var(--mono); font-size: .75rem; font-weight: 700; }
 .tg-ok   { background: rgba(0,245,160,.12);  color: var(--ok);   }
 .tg-err  { background: rgba(255,51,102,.12); color: var(--err);  }
 .tg-warn { background: rgba(255,182,39,.12); color: var(--warn); }
-.search-input { background: var(--s2); border: 1px solid var(--b0); border-radius: 6px; padding: 6px 10px; color: var(--txt); font-family: var(--mono); font-size: .78rem; outline: none; transition: border-color .2s; }
+/* sans, no mono — es un campo de búsqueda de texto libre, no un valor técnico. */
+.search-input { background: var(--s2); border: 1px solid var(--b0); border-radius: 6px; padding: 6px 10px; color: var(--txt); font-family: var(--sans); font-size: .93rem; outline: none; transition: border-color .2s; }
 .search-input:focus { border-color: var(--info); }
 input[type=file] { display: none; }
 
@@ -707,8 +970,8 @@ input[type=file] { display: none; }
 /* ══════════════════════════════════════════════════════════
    RESPONSIVE — Sistema completo
    ──────────────────────────────────────────────────────────
-   1650px+  Desktop grande    → topbar completo (logo, badges, caps, url-bar, atajos)
-   1650px   Topbar compacto   → oculta caps-row y atajos de puerto (no caben)
+   1650px+  Desktop grande    → topbar completo (logo, badges, url-bar, atajos)
+   1650px   Topbar compacto   → oculta atajos de puerto (no caben)
    1100px   Desktop normal    → panel derecho más angosto
     900px   Tablet landscape  → panel derecho como drawer
     680px   Tablet portrait   → sidebar drawer + topbar slim
@@ -717,12 +980,11 @@ input[type=file] { display: none; }
 ══════════════════════════════════════════════════════════ */
 
 /* ━━━ 1650px: Topbar compacto ━━━
-   El topbar tiene demasiados elementos con flex-shrink:0 (logo, badge, hasta
-   15 cap-chips, url-bar, 3 atajos de puerto, pill, auto, export, run) para
-   caber en anchos "de laptop" normales — sin este breakpoint, el botón
-   ▶ Analizar queda fuera de pantalla (scroll horizontal sin scrollbar visible). */
+   El topbar tiene demasiados elementos con flex-shrink:0 (logo, badge,
+   url-bar, 3 atajos de puerto, pill, auto, export, run) para caber en
+   anchos "de laptop" normales — sin este breakpoint, el botón ▶ Analizar
+   queda fuera de pantalla (scroll horizontal sin scrollbar visible). */
 @media (max-width: 1650px) {
-  #caps-row                { display: none; }
   .topbar [data-quick-url] { display: none; }
   .topbar [data-quick-url] + * { display: none; }
   .url-bar                 { max-width: 320px; }
@@ -735,12 +997,22 @@ input[type=file] { display: none; }
     --sidebar-w:    220px;
   }
   .rp         { min-width: 240px; }
-  #caps-row   { max-width: 280px; }
   /* .url-bar ya estaba clavado en su min-width:160px con max-width:240px —
    * reducir el max-width no achicaba nada, el piso ya era el límite real.
    * Es chrome secundario (probador de API, ya oculto del todo a 480px) —
    * ocultarlo acá en vez de perseguir un ancho que no lo iba a mover. */
   .url-bar    { display: none; }
+  /* Los 4 labels de .rp-tabs necesitan ~286px para no truncar (medido);
+   * a 240px cada uno quedaría en 1-2 letras + "…", ilegible aunque ya no se
+   * vea "roto". Solo ícono + tooltip (title=) es más legible que texto
+   * truncado a la mitad en este ancho. */
+  .rp-tab-label { display: none; }
+  /* Regresión real del type-scale pass: "Todo operativo" (14 caracteres,
+   * más largo que el viejo "Backend OK") + fuentes más grandes en todo el
+   * topbar hacían desbordar acá para abajo (medido con Playwright: overflow
+   * real desde ~1000px, empeorando hasta ~174px de sobra a 600px) — el
+   * punto de color ya comunica lo mismo sin el texto. */
+  #be-txt     { display: none; }
 }
 
 /* ━━━ 750px: cierra el último hueco angosto (681-749px) donde el botón
@@ -751,6 +1023,12 @@ input[type=file] { display: none; }
    solo el texto de estos 2 botones. ━━━ */
 @media (max-width: 750px) {
   #auto-btn span, #btn-export span { display: none; }
+  /* Regresión real del type-scale pass: con las fuentes más grandes,
+   * "Terminal" (#terminal-toggle-btn) pasó a ser, junto con el badge de
+   * estado de arriba, uno de los elementos más anchos del topbar en este
+   * rango — medido con Playwright: sin esto, overflow real de 600px hasta
+   * ~680px. El ícono solo (mismo patrón que Auto/ZIP acá arriba) alcanza. */
+  #terminal-toggle-btn span { display: none; }
 }
 
 /* ━━━ 900px: Tablet landscape ━━━ */
@@ -819,7 +1097,6 @@ input[type=file] { display: none; }
   /* Topbar — .url-bar no necesita regla acá: ya está display:none desde el
      tier de 1100px de arriba, y eso se mantiene en todos los tiers más
      angostos también (no "expira" al cruzar a un breakpoint más chico). */
-  #caps-row   { max-width: 160px; }
   .pill       { display: none; }
 }
 
@@ -850,10 +1127,7 @@ input[type=file] { display: none; }
     padding: 0 12px;
     gap: 8px;
   }
-  .logo-ring                      { width: 30px; height: 30px; }
-  .logo-text                      { font-size: .85rem; }
   .pill                           { display: none; }
-  #caps-row                       { display: none; }
   #auto-btn                       { display: none; }
   #btn-export                     { display: none; }
   .topbar [data-quick-url]        { display: none; }
@@ -866,7 +1140,7 @@ input[type=file] { display: none; }
   .stats-row  { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 6px; }
   .stat-card  { padding: 12px; }
   .sc-val     { font-size: 1.7rem; }
-  .sc-lbl     { font-size: .6rem; }
+  .sc-lbl     { font-size: .75rem; }
   .charts-row { grid-template-columns: minmax(0,1fr); gap: 10px; }
   .chart-card.wide { grid-column: span 1; }
   .chart-wrap { height: 112px; }
@@ -889,7 +1163,7 @@ input[type=file] { display: none; }
   /* Diff — los dos selectores de archivo ya wrappean (inline flex-wrap en
    * index.html), acá solo se achica el contenido para no forzar scroll-x. */
   .diff-scroll { padding: 10px; }
-  #diff-out    { font-size: .64rem; }
+  #diff-out    { font-size: .79rem; }
 
   /* Logs — timestamp más angosto deja más lugar al mensaje. */
   .ls-ts { min-width: 44px; }
@@ -907,11 +1181,11 @@ input[type=file] { display: none; }
     padding: 0 10px;
     gap: 6px;
   }
-  .logo-text  { font-size: .78rem; }
-  .logo-ring  { width: 26px; height: 26px; }
-  #run-btn    { padding: 5px 10px; font-size: .72rem; }
+  #run-btn    { padding: 5px 10px; font-size: .87rem; }
   .topbar [data-quick-url] { display: none; }
-  .be-badge   { padding: 3px 7px; font-size: .58rem; }
+  .be-badge   { padding: 3px 7px; font-size: .73rem; }
+  /* #be-txt ya se ocultó desde el tier de 1100px de arriba — acá abajo no
+   * hace falta repetirlo, sigue aplicando en cascada. */
 
   /* BOTTOM NAVIGATION (nav-rail ya se ocultó arriba) */
   .bottom-nav {
@@ -939,7 +1213,7 @@ input[type=file] { display: none; }
     gap: 3px;
     cursor: pointer;
     color: var(--muted);
-    font-size: .58rem;
+    font-size: .73rem;
     font-family: var(--sans);
     transition: color .2s, background .2s;
     border: none;
@@ -966,11 +1240,11 @@ input[type=file] { display: none; }
     top: 4px; right: calc(50% - 18px);
     background: var(--err);
     color: #fff;
-    font-size: .5rem;
+    font-size: .65rem;
     font-family: var(--mono);
     padding: 1px 4px;
     border-radius: 99px;
-    min-width: 14px;
+    min-width: 16px;
     text-align: center;
   }
 
@@ -979,12 +1253,12 @@ input[type=file] { display: none; }
   .stats-row    { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 6px; }
   .stat-card    { padding: 10px 8px; }
   .sc-val       { font-size: 1.5rem; }
-  .sc-lbl       { font-size: .58rem; letter-spacing: .8px; margin-bottom: 5px; }
-  .sc-sub       { font-size: .65rem; }
+  .sc-lbl       { font-size: .73rem; letter-spacing: .8px; margin-bottom: 5px; }
+  .sc-sub       { font-size: .8rem; }
   .charts-row   { grid-template-columns: minmax(0,1fr); gap: 8px; }
   .chart-card.wide { grid-column: span 1; }
   .chart-card   { padding: 10px; }
-  .cc-head      { font-size: .58rem; margin-bottom: 8px; }
+  .cc-head      { font-size: .73rem; margin-bottom: 8px; }
   .chart-wrap   { height: 110px; }
   .dash-cc-fn-row { grid-template-columns: minmax(0,1fr) 60px 26px; gap: 5px; }
   .dash-cc-fn-bigo { display: none; }
@@ -997,30 +1271,30 @@ input[type=file] { display: none; }
    * angosta que la que ya lo redujo a 2 a 680px). */
   .ac-metrics { grid-template-columns: repeat(2,1fr); gap: 4px; }
   .acm        { padding: 5px; }
-  .acm-k      { font-size: .58rem; }
-  .acm-v      { font-size: .78rem; }
+  .acm-k      { font-size: .73rem; }
+  .acm-v      { font-size: .93rem; }
 
   /* Diag / ML */
   .diag-toolbar { padding: 8px 10px; }
   .ml-toolbar   { padding: 8px 10px; }
-  .diag-sel     { font-size: .65rem; padding: 4px 7px; }
+  .diag-sel     { font-size: .8rem; padding: 4px 7px; }
 
   /* Metrics */
   .metric-section { padding: 10px; }
-  .ms-title       { font-size: .62rem; }
-  .metric-row     { font-size: .72rem; }
+  .ms-title       { font-size: .77rem; }
+  .metric-row     { font-size: .87rem; }
 
   /* Editor */
   #editor-container { min-height: 240px; }
 
   /* Diff */
   .diff-scroll { padding: 8px; }
-  #diff-out    { font-size: .6rem; line-height: 1.6; }
+  #diff-out    { font-size: .75rem; line-height: 1.6; }
 
   /* Logs */
-  .log-stream { font-size: .68rem; }
-  .ls-ts      { min-width: 38px; font-size: .58rem; }
-  .ls-src     { font-size: .55rem; }
+  .log-stream { font-size: .83rem; }
+  .ls-ts      { min-width: 38px; font-size: .73rem; }
+  .ls-src     { font-size: .7rem; }
 }
 
 /* More menu items */
@@ -1033,7 +1307,7 @@ input[type=file] { display: none; }
   border-bottom: 1px solid var(--b0);
   color: var(--txt);
   font-family: var(--sans);
-  font-size: .85rem;
+  font-size: 1rem;
   cursor: pointer;
   text-align: left;
   gap: 10px;
@@ -1044,7 +1318,7 @@ input[type=file] { display: none; }
 .bn-more-item:last-child { border-bottom: none; }
 .bn-more-section-label {
   padding: 12px 20px 6px;
-  font-size: .62rem; font-weight: 700; letter-spacing: 1.2px;
+  font-size: .77rem; font-weight: 700; letter-spacing: 1.2px;
   text-transform: uppercase; color: var(--muted);
 }
 .bn-more-section-label:first-child { padding-top: 16px; }
@@ -1052,12 +1326,22 @@ input[type=file] { display: none; }
 /* ━━━ 360px: Móvil pequeño ━━━ */
 @media (max-width: 360px) {
   .topbar { gap: 4px; padding: 0 8px; }
-  #run-btn { display: none; }
+  /* Antes ocultaba #run-btn del todo acá — dependía en silencio del botón
+   * duplicado "Análisis completo" del sidebar como único disparador de
+   * análisis a este ancho. Con el duplicado eliminado (era una repetición
+   * real de la misma acción, reportada por el usuario), este es el único
+   * disparador que queda — se achica a solo ícono (mismo patrón que Auto/ZIP
+   * ya usan desde los 750px) en vez de desaparecer, con `title=` como
+   * respaldo de accesibilidad. */
+  #run-btn span { display: none; }
+  /* Medido con Playwright: sin esto, #run-btn queda matemáticamente fuera
+   * de pantalla a 340-360px (el badge de estado y "Terminal" ya se ocultan
+   * desde los tiers de 1100px/750px de arriba, en cascada hasta acá). */
   .stats-row { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 4px; }
   .stat-card { padding: 8px 6px; }
   .sc-val    { font-size: 1.3rem; }
   .bottom-nav { height: 56px; }
-  .bn-item    { font-size: .52rem; }
+  .bn-item    { font-size: .67rem; }
 }
 
 
@@ -1085,7 +1369,7 @@ input[type=file] { display: none; }
   background: transparent;
   color: var(--txt);
   cursor: pointer;
-  font-size: .82rem;
+  font-size: .97rem;
   font-weight: 700;
   font-family: var(--mono);
   display: flex;
@@ -1098,13 +1382,13 @@ input[type=file] { display: none; }
 .zoom-btn:active { background: var(--b2); }
 
 .zoom-btn-fit {
-  font-size: .95rem;
+  font-size: 1.1rem;
   width: 28px;
 }
 
 .zoom-level {
   font-family: var(--mono);
-  font-size: .65rem;
+  font-size: .8rem;
   color: var(--muted);
   min-width: 36px;
   text-align: center;
@@ -1164,7 +1448,7 @@ input[type=file] { display: none; }
   border-radius: 6px;
   padding: 4px 10px;
   font-family: var(--mono);
-  font-size: .68rem;
+  font-size: .83rem;
   color: var(--info);
   pointer-events: none;
   opacity: 0;
@@ -1184,7 +1468,7 @@ input[type=file] { display: none; }
 @media (max-width: 680px) {
   .zoom-level { display: none; }
   .zoom-controls { gap: 1px; padding: 2px 3px; }
-  .zoom-btn { width: 24px; height: 24px; font-size: .78rem; }
+  .zoom-btn { width: 24px; height: 24px; font-size: .93rem; }
 }
 @media (max-width: 480px) {
   .zoom-controls { display: none; }

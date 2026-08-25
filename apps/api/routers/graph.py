@@ -10,12 +10,17 @@ from __future__ import annotations
 
 import asyncio
 import re
-from pathlib import Path
 from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from shared import add_log
+from shared import add_log, UPLOADS_DIR
+from services.complexity_client import (
+    build_call_graph_rust,
+    build_centrality_graph_rust,
+    build_circular_graph_rust,
+    build_import_graph_rust,
+)
 from services.static_parser import find_cycles_capped
 from services.project_service import read_project_files
 
@@ -131,15 +136,15 @@ async def generate_graph(req: GraphRequest) -> dict[str, Any]:
 
     try:
         if req.graph_type == "import":
-            return _build_import_graph(parsed_files)
+            return await _build_import_graph(parsed_files)
         elif req.graph_type == "call":
-            return _build_call_graph(parsed_files)
+            return await _build_call_graph(parsed_files)
         elif req.graph_type == "circular":
-            return _build_circular_graph(parsed_files)
+            return await _build_circular_graph(parsed_files)
         elif req.graph_type == "heatmap":
             return _build_heatmap(parsed_files)
         elif req.graph_type == "centrality":
-            return _build_centrality_graph(parsed_files)
+            return await _build_centrality_graph(parsed_files)
         else:
             return {"error": f"Tipo de grafo desconocido: {req.graph_type}"}
     except Exception as e:
@@ -207,7 +212,9 @@ def _build_project_digraph(parsed_files: list[dict], edges: list[dict]) -> nx.Di
     agregar las edges — así un archivo aislado aparece con in/out-degree 0
     en vez de estar ausente del grafo. `nx.simple_cycles` ignora nodos
     aislados de todos modos, así que esto no cambia el resultado de
-    `find_cycles_capped` para `_build_circular_graph`."""
+    `find_cycles_capped` para `_build_architecture_smells` — su único caller
+    ahora que Import/Centrality/Call/Circular Graph ya se portaron todos a
+    Rust (Fase 18)."""
     G = nx.DiGraph()
     for p in parsed_files:
         G.add_node(p["_filename"])
@@ -221,91 +228,55 @@ def _build_project_digraph(parsed_files: list[dict], edges: list[dict]) -> nx.Di
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def _build_import_graph(parsed_files: list[dict]) -> dict[str, Any]:
+def _files_summary_for_sidecar(parsed_files: list[dict]) -> list[dict]:
+    """Resumen ya parseado de cada archivo (filename/language/functions-count/
+    imports/dead-code-count) — el shape que espera el sidecar Rust para
+    construir cualquier grafo a nivel de proyecto (`FileSummary` en
+    `services/complexity/src/graph.rs`). Compartido por `_build_import_graph`
+    y `_build_centrality_graph` (Fase 18, Graph Engine) — ambos necesitan
+    exactamente el mismo payload, solo cambia a qué endpoint del sidecar se
+    postea."""
+    return [
+        {
+            "filename": p["_filename"],
+            "language": p.get("language", "?"),
+            "functions": len(p.get("functions", [])),
+            "imports": [
+                {"module": imp.get("module", ""), "line": imp.get("line", 0)} for imp in p.get("imports", [])
+            ],
+            "dead_code": len(p.get("dead_code", [])),
+        }
+        for p in parsed_files
+    ]
+
+
+async def _build_import_graph(parsed_files: list[dict]) -> dict[str, Any]:
     """
     Construye el grafo de dependencias entre archivos.
     Nodo = archivo, Edge = import entre archivos del proyecto.
+
+    Fase 18, primer slice del Graph Engine: el cómputo (nodos/edges/mermaid/
+    entry_points/summary) vive ahora en el sidecar Rust
+    (`services/complexity/src/graph.rs::build_import_graph`, expuesto vía
+    `POST /graph/import`) — mismo criterio Rust-only que Halstead/seguridad/
+    smells en esta misma fase: sin fallback Python, degradación explícita si
+    el sidecar no responde. `_build_project_edges`/`_short_name`/`_safe_id`/
+    `_module_to_candidates` siguen viviendo acá porque Call/Circular Graph
+    todavía los usan (slices siguientes de esta misma fase).
     """
-    nodes: list[dict] = []
-
-    # Nodos
-    for p in parsed_files:
-        fname = p["_filename"]
-        n_funcs = len(p.get("functions", []))
-        n_imports = len(p.get("imports", []))
-        nodes.append(
-            {
-                "id": fname,
-                "label": _short_name(fname),
-                "full": fname,
-                "language": p.get("language", "?"),
-                "functions": n_funcs,
-                "imports": n_imports,
-                "dead_code": len(p.get("dead_code", [])),
-            }
-        )
-
-    edges = _build_project_edges(parsed_files)
-
-    # Generar Mermaid (Tree View)
-    mermaid = _import_graph_to_mermaid(nodes, edges, parsed_files)
-
-    # Detectar entrypoints (sin incoming edges)
-    targets = {e["to"] for e in edges}
-    sources = {e["from"] for e in edges}
-    entry = [n["id"] for n in nodes if n["id"] not in targets]
-
-    return {
-        "graph_type": "import",
-        "nodes": nodes,
-        "edges": edges,
-        "mermaid": mermaid,
-        "entry_points": entry,
-        "summary": {
-            "total_files": len(nodes),
-            "total_imports": len(edges),
-            "isolated": sum(1 for n in nodes if n["id"] not in sources and n["id"] not in targets),
-        },
-    }
-
-
-def _import_graph_to_mermaid(
-    nodes: list[dict],
-    edges: list[dict],
-    parsed_files: list[dict],
-) -> str:
-    if not nodes:
-        return "flowchart TD\n    A[Sin archivos]"
-
-    # Abreviatura de lenguaje como texto — mismo criterio que el badge PY/TS/JS
-    # ya usado en el frontend (utils/icons.ts::languageBadge), no un ícono
-    # nuevo/emoji para el mismo concepto.
-    lang_abbr = {"python": "PY", "typescript": "TS", "javascript": "JS", "c": "C", "cpp": "C++"}
-    lines = ["flowchart TD"]
-
-    # Nodos con abreviatura de lenguaje
-    for n in nodes:
-        nid = _safe_id(n["id"])
-        abbr = lang_abbr.get(n["language"], "?")
-        lines.append(f'    {nid}["[{abbr}] {n["label"]}\\n{n["functions"]} fn · {n["imports"]} imp"]')
-
-    # Edges
-    for e in edges:
-        f = _safe_id(e["from"])
-        t = _safe_id(e["to"])
-        lines.append(f"    {f} --> {t}")
-
-    # Estilos: entrypoints en azul, hojas en verde
-    targets = {e["to"] for e in edges}
-    sources = {e["from"] for e in edges}
-    for n in nodes:
-        nid = _safe_id(n["id"])
-        if n["id"] not in targets and n["id"] in sources:
-            lines.append(f"    style {nid} fill:#3d9eff20,stroke:#3d9eff")
-        elif n["id"] not in sources:
-            lines.append(f"    style {nid} fill:#00f5a020,stroke:#00f5a0")
-
-    return "\n".join(lines) + "\n"
+    result = await build_import_graph_rust(_files_summary_for_sidecar(parsed_files))
+    if result is None:
+        add_log("warn", "graph error (import): complexity-engine sidecar no disponible")
+        return {
+            "graph_type": "import",
+            "nodes": [],
+            "edges": [],
+            "mermaid": "flowchart TD\n    A[complexity-engine no disponible]",
+            "entry_points": [],
+            "summary": {"total_files": 0, "total_imports": 0, "isolated": 0},
+            "error": "complexity-engine sidecar no disponible",
+        }
+    return result
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -313,102 +284,56 @@ def _import_graph_to_mermaid(
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def _build_call_graph(parsed_files: list[dict]) -> dict[str, Any]:
+def _call_graph_payload(parsed_files: list[dict]) -> list[dict]:
+    """Shape que espera el sidecar Rust para Call Graph (`CallGraphFileInput`
+    en `services/complexity/src/graph.rs`) — distinto de
+    `_files_summary_for_sidecar`: acá hace falta detalle por función
+    (name/big_o/complexity/line) y el `call_graph` ya calculado por archivo,
+    no imports/dead_code."""
+    return [
+        {
+            "filename": p["_filename"],
+            "functions": [
+                {
+                    "name": fn["name"],
+                    "big_o": fn.get("big_o", "?"),
+                    "complexity": fn.get("complexity", 1),
+                    "line": fn.get("line", 0),
+                }
+                for fn in p.get("functions", [])
+            ],
+            "call_graph": [{"from": e["from"], "to": e["to"]} for e in p.get("call_graph", [])],
+        }
+        for p in parsed_files
+    ]
+
+
+async def _build_call_graph(parsed_files: list[dict]) -> dict[str, Any]:
     """
     Call graph: qué función llama a cuál.
     Agrupa por archivo, muestra las conexiones intra e inter archivo.
+
+    Fase 18, tercera porción del Graph Engine: el cómputo (pura agregación
+    del `call_graph` que cada archivo ya trae precalculado — no construye
+    nada nuevo) vive ahora en el sidecar Rust
+    (`services/complexity/src/graph.rs::build_call_graph`, expuesto vía
+    `POST /graph/call`) — mismo criterio Rust-only que Import Graph/Centrality:
+    sin fallback Python, degradación explícita si el sidecar no responde.
+    `_bigo_color`/`_bigo_level` no se tocan — `_build_heatmap` (todavía
+    Python) también los usa.
     """
-    all_funcs: dict[str, dict] = {}  # name → {file, big_o, cc}
-    all_edges: list[dict] = []
-
-    for p in parsed_files:
-        fname = p["_filename"]
-        for fn in p.get("functions", []):
-            all_funcs[fn["name"]] = {
-                "file": fname,
-                "big_o": fn.get("big_o", "?"),
-                "cc": fn.get("complexity", 1),
-                "line": fn.get("line", 0),
-            }
-
-    for p in parsed_files:
-        fname = p["_filename"]
-        for edge in p.get("call_graph", []):
-            all_edges.append(
-                {
-                    "from": edge["from"],
-                    "to": edge["to"],
-                    "from_file": fname,
-                    "to_file": all_funcs.get(edge["to"], {}).get("file", fname),
-                }
-            )
-
-    # Construir nodos desde funciones que participan en el grafo
-    active_names = {e["from"] for e in all_edges} | {e["to"] for e in all_edges}
-    # Si no hay edges, mostrar todas las funciones igual
-    if not active_names:
-        active_names = set(all_funcs.keys())
-
-    nodes = []
-    for name, info in all_funcs.items():
-        if name in active_names:
-            nodes.append(
-                {
-                    "id": name,
-                    "label": name,
-                    "file": info["file"],
-                    "big_o": info["big_o"],
-                    "cc": info["cc"],
-                    "line": info["line"],
-                    "color": _bigo_color(info["big_o"]),
-                    "level": _bigo_level(info["big_o"]),
-                }
-            )
-
-    mermaid = _call_graph_to_mermaid(nodes, all_edges)
-
-    return {
-        "graph_type": "call",
-        "nodes": nodes,
-        "edges": all_edges,
-        "mermaid": mermaid,
-        "summary": {
-            "total_functions": len(nodes),
-            "total_calls": len(all_edges),
-            "hot_paths": [n for n in nodes if n["level"] == "expensive"],
-        },
-    }
-
-
-def _call_graph_to_mermaid(nodes: list[dict], edges: list[dict]) -> str:
-    if not nodes:
-        return "flowchart TD\n    A[Sin funciones]"
-
-    lines = ["flowchart TD"]
-
-    # Nodos con Big-O — la severidad ya se distingue por color en el bloque
-    # "hot paths" de abajo (fill por n["level"]), no hace falta repetirla acá.
-    for n in nodes:
-        nid = _safe_id(n["id"])
-        bigo = n.get("big_o", "")
-        lines.append(f'    {nid}["{n["label"]}\\n{bigo}"]')
-
-    # Edges
-    for e in edges:
-        f = _safe_id(e["from"])
-        t = _safe_id(e["to"])
-        lines.append(f"    {f} --> {t}")
-
-    # Colorear hot paths
-    for n in nodes:
-        if n.get("level") == "expensive":
-            nid = _safe_id(n["id"])
-            lines.append(f"    style {nid} fill:#ff336620,stroke:#ff3366")
-        elif n.get("level") == "moderate":
-            nid = _safe_id(n["id"])
-            lines.append(f"    style {nid} fill:#ffb62720,stroke:#ffb627")
-
-    return "\n".join(lines) + "\n"
+    result = await build_call_graph_rust(_call_graph_payload(parsed_files))
+    if result is None:
+        add_log("warn", "graph error (call): complexity-engine sidecar no disponible")
+        return {
+            "graph_type": "call",
+            "nodes": [],
+            "edges": [],
+            "mermaid": "flowchart TD\n    A[complexity-engine no disponible]",
+            "summary": {"total_functions": 0, "total_calls": 0, "hot_paths": []},
+            "error": "complexity-engine sidecar no disponible",
+        }
+    return result
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -416,91 +341,38 @@ def _call_graph_to_mermaid(nodes: list[dict], edges: list[dict]) -> str:
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def _build_circular_graph(parsed_files: list[dict]) -> dict[str, Any]:
+async def _build_circular_graph(parsed_files: list[dict]) -> dict[str, Any]:
     """
     Detecta y visualiza ciclos en el grafo de imports.
+
+    Fase 18, cuarta y última porción del Graph Engine: el cómputo (incluyendo
+    la enumeración de ciclos, antes vía `find_cycles_capped`/`nx.simple_cycles`)
+    vive ahora en el sidecar Rust
+    (`services/complexity/src/graph.rs::build_circular_graph`, expuesto vía
+    `POST /graph/circular`) — mismo criterio Rust-only que el resto de esta
+    fila: sin fallback Python, degradación explícita si el sidecar no
+    responde. El buscador de ciclos en Rust es un DFS acotado, no un puerto
+    de Johnson's algorithm (`nx.simple_cycles`) — ningún test depende del
+    orden/contenido exacto de la enumeración de NetworkX, solo de cuenta/
+    pertenencia, así que no hacía falta replicarlo ni agregar `petgraph`
+    (ver el comentario de sección de `graph.rs` para el detalle del
+    algoritmo). `find_cycles_capped`/`_build_project_digraph`/`HAS_NX`/`nx`
+    no se tocan — `_build_architecture_smells` (Fase 22) los sigue usando.
     """
-    all_edges = _build_project_edges(parsed_files)
-
-    # Detectar ciclos (capado — ver docstring de find_cycles_capped)
-    cycles: list[list[str]] = []
-    if HAS_NX and all_edges:
-        G = _build_project_digraph(parsed_files, all_edges)
-        cycles = find_cycles_capped(G, max_cycles=20)
-
-    # Nodos en ciclos
-    cycle_nodes: set[str] = set()
-    for c in cycles:
-        cycle_nodes.update(c)
-
-    # Edges en ciclos
-    cycle_edge_keys: set[str] = set()
-    for c in cycles:
-        for i in range(len(c)):
-            cycle_edge_keys.add(f"{c[i]}→{c[(i+1) % len(c)]}")
-
-    nodes = []
-    for p in parsed_files:
-        fname = p["_filename"]
-        nodes.append(
-            {
-                "id": fname,
-                "label": _short_name(fname),
-                "in_cycle": fname in cycle_nodes,
-                "cycles": [c for c in cycles if fname in c],
-            }
-        )
-
-    edges_annotated = [{**e, "is_cycle": f"{e['from']}→{e['to']}" in cycle_edge_keys} for e in all_edges]
-
-    mermaid = _circular_to_mermaid(nodes, edges_annotated, cycles)
-
-    return {
-        "graph_type": "circular",
-        "nodes": nodes,
-        "edges": edges_annotated,
-        "cycles": cycles,
-        "mermaid": mermaid,
-        "has_cycles": len(cycles) > 0,
-        "summary": {
-            "total_files": len(nodes),
-            "total_cycles": len(cycles),
-            "affected_files": len(cycle_nodes),
-            "cycle_descriptions": [" → ".join(c) + f" → {c[0]}" for c in cycles],
-        },
-    }
-
-
-def _circular_to_mermaid(
-    nodes: list[dict],
-    edges: list[dict],
-    cycles: list[list[str]],
-) -> str:
-    lines = ["flowchart TD"]
-
-    # Los nodos en ciclo ya se distinguen por color más abajo (fill rojo);
-    # duplicarlo acá con un ícono sería la misma señal dos veces.
-    for n in nodes:
-        nid = _safe_id(n["id"])
-        lines.append(f'    {nid}["{n["label"]}"]')
-
-    for e in edges:
-        f = _safe_id(e["from"])
-        t = _safe_id(e["to"])
-        arr = " -.-> " if e.get("is_cycle") else " --> "
-        lines.append(f"    {f}{arr}{t}")
-
-    # Resaltar nodos en ciclo
-    for n in nodes:
-        if n["in_cycle"]:
-            nid = _safe_id(n["id"])
-            lines.append(f"    style {nid} fill:#ff336630,stroke:#ff3366,stroke-width:2px")
-
-    if not cycles:
-        lines.append('    OK["Sin dependencias circulares"]')
-        lines.append("    style OK fill:#00f5a020,stroke:#00f5a0")
-
-    return "\n".join(lines) + "\n"
+    result = await build_circular_graph_rust(_files_summary_for_sidecar(parsed_files))
+    if result is None:
+        add_log("warn", "graph error (circular): complexity-engine sidecar no disponible")
+        return {
+            "graph_type": "circular",
+            "nodes": [],
+            "edges": [],
+            "cycles": [],
+            "mermaid": "flowchart TD\n    A[complexity-engine no disponible]",
+            "has_cycles": False,
+            "summary": {"total_files": 0, "total_cycles": 0, "affected_files": 0, "cycle_descriptions": []},
+            "error": "complexity-engine sidecar no disponible",
+        }
+    return result
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -508,101 +380,39 @@ def _circular_to_mermaid(
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def _build_centrality_graph(parsed_files: list[dict]) -> dict[str, Any]:
+async def _build_centrality_graph(parsed_files: list[dict]) -> dict[str, Any]:
     """
     Centralidad/hub detection sobre el import graph: qué archivos son más
     "influyentes" en el proyecto — mismo concepto que centralidad en redes
     sociales (grado de conexión), aplicado a dependencias entre módulos.
-    Reusa NetworkX, ya dependencia del proyecto (el detector de dependencias
-    circulares ya lo usa) — no una librería nueva para esto.
+
+    Fase 18, segunda porción del Graph Engine: el cómputo vive ahora en el
+    sidecar Rust (`services/complexity/src/graph.rs::build_centrality_graph`,
+    expuesto vía `POST /graph/centrality`) — mismo criterio Rust-only que
+    Import Graph (slice anterior de esta misma fase): sin fallback Python,
+    degradación explícita si el sidecar no responde. Esto resuelve además la
+    nota que dejó Fase 14 al shippear esto por primera vez ("deliberately
+    still Python — Phase 18's Graph Engine needs the import/call graph
+    construction itself in Rust first, which doesn't exist yet") — esa
+    construcción ya está en Rust desde el slice de Import Graph.
 
     "Hub" = entre los 5 archivos con más in-degree (más otros archivos
     dependen de él — cambiarlo tiene el radio de impacto más grande) Y con
     al menos 2 dependientes, para no marcar como hub un archivo con una sola
     import entrante.
     """
-    all_edges = _build_project_edges(parsed_files)
-
-    if not HAS_NX or not all_edges:
-        nodes = [
-            {
-                "id": p["_filename"],
-                "label": _short_name(p["_filename"]),
-                "in_degree": 0,
-                "out_degree": 0,
-                "centrality": 0.0,
-                "is_hub": False,
-            }
-            for p in parsed_files
-        ]
+    result = await build_centrality_graph_rust(_files_summary_for_sidecar(parsed_files))
+    if result is None:
+        add_log("warn", "graph error (centrality): complexity-engine sidecar no disponible")
         return {
             "graph_type": "centrality",
-            "nodes": nodes,
+            "nodes": [],
             "edges": [],
-            "mermaid": _centrality_to_mermaid(nodes, []),
-            "summary": {"total_files": len(nodes), "hubs": [], "max_in_degree": 0},
+            "mermaid": "flowchart TD\n    A[complexity-engine no disponible]",
+            "summary": {"total_files": 0, "hubs": [], "max_in_degree": 0},
+            "error": "complexity-engine sidecar no disponible",
         }
-
-    G = _build_project_digraph(parsed_files, all_edges)
-
-    degree_centrality = nx.degree_centrality(G)
-    in_degree = dict(G.in_degree())
-    out_degree = dict(G.out_degree())
-
-    nodes = []
-    for p in parsed_files:
-        fname = p["_filename"]
-        nodes.append(
-            {
-                "id": fname,
-                "label": _short_name(fname),
-                "in_degree": in_degree.get(fname, 0),
-                "out_degree": out_degree.get(fname, 0),
-                "centrality": round(degree_centrality.get(fname, 0.0), 3),
-            }
-        )
-
-    ranked = sorted(nodes, key=lambda n: n["in_degree"], reverse=True)
-    hub_ids = {n["id"] for n in ranked[:5] if n["in_degree"] >= 2}
-    for n in nodes:
-        n["is_hub"] = n["id"] in hub_ids
-
-    mermaid = _centrality_to_mermaid(nodes, all_edges)
-
-    return {
-        "graph_type": "centrality",
-        "nodes": nodes,
-        "edges": all_edges,
-        "mermaid": mermaid,
-        "summary": {
-            "total_files": len(nodes),
-            "hubs": [n["id"] for n in nodes if n["is_hub"]],
-            "max_in_degree": max((n["in_degree"] for n in nodes), default=0),
-        },
-    }
-
-
-def _centrality_to_mermaid(nodes: list[dict], edges: list[dict]) -> str:
-    if not nodes:
-        return "flowchart TD\n    A[Sin archivos]"
-
-    lines = ["flowchart TD"]
-    for n in nodes:
-        nid = _safe_id(n["id"])
-        hub_badge = " [HUB]" if n.get("is_hub") else ""
-        lines.append(f'    {nid}["{n["label"]}{hub_badge}\\nin:{n["in_degree"]} · out:{n["out_degree"]}"]')
-
-    for e in edges:
-        f = _safe_id(e["from"])
-        t = _safe_id(e["to"])
-        lines.append(f"    {f} --> {t}")
-
-    for n in nodes:
-        if n.get("is_hub"):
-            nid = _safe_id(n["id"])
-            lines.append(f"    style {nid} fill:#ff8a0020,stroke:#ff8a00,stroke-width:2px")
-
-    return "\n".join(lines) + "\n"
+    return result
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -909,7 +719,7 @@ async def generate_project_graph(req: ProjectGraphRequest) -> dict[str, Any]:
 
     try:
         # Obtener árbol del proyecto
-        project_dir = Path(f"uploads/projects/{req.project_id}")
+        project_dir = UPLOADS_DIR / req.project_id
 
         if not project_dir.exists():
             return {"error": f"Proyecto {req.project_id} no encontrado", "mermaid": "", "nodes": [], "edges": []}
@@ -923,15 +733,15 @@ async def generate_project_graph(req: ProjectGraphRequest) -> dict[str, Any]:
         parsed_files = await _parse_all(files_for_graph)
 
         if req.graph_type == "import":
-            result = _build_import_graph(parsed_files)
+            result = await _build_import_graph(parsed_files)
         elif req.graph_type == "call":
-            result = _build_call_graph(parsed_files)
+            result = await _build_call_graph(parsed_files)
         elif req.graph_type == "circular":
-            result = _build_circular_graph(parsed_files)
+            result = await _build_circular_graph(parsed_files)
         elif req.graph_type == "heatmap":
             result = _build_heatmap(parsed_files)
         elif req.graph_type == "centrality":
-            result = _build_centrality_graph(parsed_files)
+            result = await _build_centrality_graph(parsed_files)
         else:
             return {"error": f"Tipo desconocido: {req.graph_type}"}
 

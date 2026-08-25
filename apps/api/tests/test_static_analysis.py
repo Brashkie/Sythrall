@@ -56,6 +56,202 @@ class TestBigO:
         assert r.status_code == 200
 
 
+class TestCallGraphSingleFile:
+    """Fase 18: `call_graph` de `/static/parse` ahora viene de
+    `graph.rs::build_call_graph` (vía `parse_python_rich`) cuando el sidecar
+    responde — antes 100% Python (`static_parser.py::_build_call_graph`,
+    que se mantiene solo como fallback sin sidecar). Sin cobertura dedicada
+    hasta este slice."""
+
+    def test_call_graph_detects_call_between_known_functions(self):
+        src = "def a():\n    return b()\n\ndef b():\n    return 1\n"
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        assert {"from": "a", "to": "b"} in data["call_graph"]
+
+    def test_call_graph_ignores_call_to_undefined_function(self):
+        src = "def a():\n    return len([1, 2, 3])\n"
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        assert data["call_graph"] == []
+
+    def test_call_graph_ignores_self_recursion(self):
+        src = "def factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)\n"
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        assert all(not (e["from"] == "factorial" and e["to"] == "factorial") for e in data["call_graph"])
+
+    def test_call_graph_empty_without_functions(self):
+        data = client.post("/static/parse", json={"filename": "test.py", "content": "x = 1\n"}).json()
+        assert data["call_graph"] == []
+
+
+class TestDataStructureDetection:
+    """Fase 14 — las 10 estructuras del ROADMAP, completas.
+    Primera porción: Heap (function-level, uso de `heapq`), Trie y Fenwick
+    Tree (class-level) — primera vez que un clasificador vive en `classes`,
+    no solo en `functions`. Segunda porción: AVL Tree y Red-Black Tree
+    (mismo shape "BST con rotación", distinguidas por height vs. color) y
+    Bloom Filter (a diferencia de Trie/Fenwick, acá el nombre es
+    obligatorio — add+contains es shape demasiado genérico solo). Tercera
+    porción: Segment Tree, B-Tree, Skip List, HashMap — nombre obligatorio
+    para las 4, HashMap además exige un método con "hash" en el nombre
+    (para no marcar cualquier wrapper de `dict` como HashMap)."""
+
+    def test_heap_detected_via_heapq(self):
+        src = "def top_k(nums):\n    h = []\n    heapq.heappush(h, nums[0])\n    return heapq.heappop(h)\n"
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        fn = next(f for f in data["functions"] if f["name"] == "top_k")
+        assert fn["data_structure"] == "Heap"
+        assert "heapq" in fn["data_structure_note"].lower() or "priority queue" in fn["data_structure_note"].lower()
+
+    def test_function_without_heapq_has_no_data_structure(self):
+        src = "def f():\n    return sorted([3, 1, 2])\n"
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        fn = next(f for f in data["functions"] if f["name"] == "f")
+        assert fn["data_structure"] is None
+
+    def test_trie_detected_by_name(self):
+        src = "class Trie:\n    def __init__(self):\n        self.children = {}\n"
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        cls = next(c for c in data["classes"] if c["name"] == "Trie")
+        assert cls["data_structure"] == "Trie"
+
+    def test_trie_detected_by_shape_without_name(self):
+        src = (
+            "class Node:\n"
+            "    def __init__(self):\n"
+            "        self.children = {}\n"
+            "    def insert(self, word):\n"
+            "        pass\n"
+            "    def search(self, word):\n"
+            "        pass\n"
+        )
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        cls = next(c for c in data["classes"] if c["name"] == "Node")
+        assert cls["data_structure"] == "Trie"
+
+    def test_fenwick_detected_via_low_bit_idiom(self):
+        src = (
+            "class Tree:\n"
+            "    def update(self, i, delta):\n"
+            "        while i <= self.n:\n"
+            "            self.arr[i] += delta\n"
+            "            i += i & (-i)\n"
+        )
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        cls = next(c for c in data["classes"] if c["name"] == "Tree")
+        assert cls["data_structure"] == "Fenwick Tree (BIT)"
+
+    def test_generic_class_has_no_data_structure(self):
+        src = "class Config:\n    def __init__(self):\n        self.debug = True\n"
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        cls = next(c for c in data["classes"] if c["name"] == "Config")
+        assert cls["data_structure"] is None
+
+    def test_avl_detected_by_name(self):
+        src = "class AVLTree:\n    def __init__(self):\n        pass\n"
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        cls = next(c for c in data["classes"] if c["name"] == "AVLTree")
+        assert cls["data_structure"] == "AVL Tree"
+
+    def test_avl_detected_by_shape_without_name(self):
+        src = (
+            "class Node:\n"
+            "    def __init__(self):\n"
+            "        self.left = None\n"
+            "        self.right = None\n"
+            "        self.height = 1\n"
+            "    def rotate_left(self):\n"
+            "        pass\n"
+        )
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        cls = next(c for c in data["classes"] if c["name"] == "Node")
+        assert cls["data_structure"] == "AVL Tree"
+
+    def test_redblack_detected_by_shape_without_name(self):
+        src = (
+            "class Node:\n"
+            "    def __init__(self):\n"
+            "        self.left = None\n"
+            "        self.right = None\n"
+            "        self.color = 'red'\n"
+            "    def rotate_right(self):\n"
+            "        pass\n"
+        )
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        cls = next(c for c in data["classes"] if c["name"] == "Node")
+        assert cls["data_structure"] == "Red-Black Tree"
+
+    def test_balanced_bst_without_height_or_color_has_no_data_structure(self):
+        src = (
+            "class Node:\n"
+            "    def __init__(self):\n"
+            "        self.left = None\n"
+            "        self.right = None\n"
+            "    def rotate_left(self):\n"
+            "        pass\n"
+        )
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        cls = next(c for c in data["classes"] if c["name"] == "Node")
+        assert cls["data_structure"] is None
+
+    def test_bloom_filter_detected_by_name_and_shape(self):
+        src = "class BloomFilter:\n    def add(self, item):\n        pass\n    def contains(self, item):\n        pass\n"
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        cls = next(c for c in data["classes"] if c["name"] == "BloomFilter")
+        assert cls["data_structure"] == "Bloom Filter"
+
+    def test_add_contains_without_bloom_name_has_no_data_structure(self):
+        src = "class MySet:\n    def add(self, item):\n        pass\n    def contains(self, item):\n        pass\n"
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        cls = next(c for c in data["classes"] if c["name"] == "MySet")
+        assert cls["data_structure"] is None
+
+    def test_segment_tree_detected_by_name_and_methods(self):
+        src = (
+            "class SegmentTree:\n"
+            "    def build(self, arr):\n"
+            "        pass\n"
+            "    def update(self, i, val):\n"
+            "        pass\n"
+            "    def query(self, l, r):\n"
+            "        pass\n"
+        )
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        cls = next(c for c in data["classes"] if c["name"] == "SegmentTree")
+        assert cls["data_structure"] == "Segment Tree"
+
+    def test_segment_tree_name_without_methods_has_no_data_structure(self):
+        src = "class SegmentTree:\n    def __init__(self):\n        pass\n"
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        cls = next(c for c in data["classes"] if c["name"] == "SegmentTree")
+        assert cls["data_structure"] is None
+
+    def test_btree_detected_by_name(self):
+        src = "class BTree:\n    def __init__(self):\n        pass\n"
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        cls = next(c for c in data["classes"] if c["name"] == "BTree")
+        assert cls["data_structure"] == "B-Tree"
+
+    def test_skiplist_detected_by_name(self):
+        src = "class SkipList:\n    def __init__(self):\n        pass\n"
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        cls = next(c for c in data["classes"] if c["name"] == "SkipList")
+        assert cls["data_structure"] == "Skip List"
+
+    def test_hashmap_detected_by_name_and_hash_method(self):
+        src = "class HashMap:\n    def _hash(self, key):\n        pass\n    def put(self, key, value):\n        pass\n"
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        cls = next(c for c in data["classes"] if c["name"] == "HashMap")
+        assert cls["data_structure"] == "HashMap"
+
+    def test_hashmap_name_without_hash_method_has_no_data_structure(self):
+        # Un wrapper de dict llamado "HashMap" sin hashing propio no debería
+        # dispararse — sería lo mismo que marcar cualquier uso de `dict`.
+        src = "class HashMap:\n    def __init__(self):\n        self.data = {}\n    def get(self, key):\n        pass\n"
+        data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
+        cls = next(c for c in data["classes"] if c["name"] == "HashMap")
+        assert cls["data_structure"] is None
+
+
 class TestCyclomaticComplexityElseIf:
     """Regresión: `else if` no debe contarse dos veces (una vez por " if "
     como substring de "else if", y otra vez aparte) — 1 if + 2 else-if debe

@@ -19,6 +19,10 @@ import asyncio
 import services.complexity_client as complexity_client
 from services.complexity_client import (
     analyze_complexity,
+    build_call_graph_rust,
+    build_centrality_graph_rust,
+    build_circular_graph_rust,
+    build_import_graph_rust,
     check_complexity_engine_sync,
     check_complexity_engine,
     parse_python_rich,
@@ -68,4 +72,76 @@ class TestParsePythonRichUnavailable:
     def test_does_not_raise_on_empty_content(self, monkeypatch):
         monkeypatch.setattr(complexity_client, "COMPLEXITY_ENGINE_URL", _UNREACHABLE_URL)
         result = asyncio.run(parse_python_rich("empty.py", ""))
+        assert result is None
+
+
+class TestBuildImportGraphRustUnavailable:
+    """Fase 18, primer slice del Graph Engine
+    (services/complexity_client.py::build_import_graph_rust). Mismo espíritu
+    que TestParsePythonRichUnavailable — `None` es el resultado correcto
+    cuando el sidecar no está disponible, no una excepción."""
+
+    def test_returns_none_when_unreachable(self, monkeypatch):
+        monkeypatch.setattr(complexity_client, "COMPLEXITY_ENGINE_URL", _UNREACHABLE_URL)
+        files_summary = [{"filename": "a.py", "language": "python", "functions": 1, "imports": [], "dead_code": 0}]
+        result = asyncio.run(build_import_graph_rust(files_summary))
+        assert result is None
+
+    def test_does_not_raise_on_empty_list(self, monkeypatch):
+        monkeypatch.setattr(complexity_client, "COMPLEXITY_ENGINE_URL", _UNREACHABLE_URL)
+        result = asyncio.run(build_import_graph_rust([]))
+        assert result is None
+
+
+class TestBuildCentralityGraphRustUnavailable:
+    """Fase 18, segunda porción del Graph Engine
+    (services/complexity_client.py::build_centrality_graph_rust). Mismo
+    espíritu que TestBuildImportGraphRustUnavailable — `None` es el resultado
+    correcto cuando el sidecar no está disponible, no una excepción."""
+
+    def test_returns_none_when_unreachable(self, monkeypatch):
+        monkeypatch.setattr(complexity_client, "COMPLEXITY_ENGINE_URL", _UNREACHABLE_URL)
+        files_summary = [{"filename": "a.py", "language": "python", "functions": 1, "imports": [], "dead_code": 0}]
+        result = asyncio.run(build_centrality_graph_rust(files_summary))
+        assert result is None
+
+    def test_does_not_raise_on_empty_list(self, monkeypatch):
+        monkeypatch.setattr(complexity_client, "COMPLEXITY_ENGINE_URL", _UNREACHABLE_URL)
+        result = asyncio.run(build_centrality_graph_rust([]))
+        assert result is None
+
+
+class TestBuildCallGraphRustUnavailable:
+    """Fase 18, tercera porción del Graph Engine
+    (services/complexity_client.py::build_call_graph_rust). Mismo espíritu
+    que las 2 anteriores — `None` es el resultado correcto cuando el sidecar
+    no está disponible, no una excepción."""
+
+    def test_returns_none_when_unreachable(self, monkeypatch):
+        monkeypatch.setattr(complexity_client, "COMPLEXITY_ENGINE_URL", _UNREACHABLE_URL)
+        files_payload = [{"filename": "a.py", "functions": [{"name": "f", "big_o": "O(1)"}], "call_graph": []}]
+        result = asyncio.run(build_call_graph_rust(files_payload))
+        assert result is None
+
+    def test_does_not_raise_on_empty_list(self, monkeypatch):
+        monkeypatch.setattr(complexity_client, "COMPLEXITY_ENGINE_URL", _UNREACHABLE_URL)
+        result = asyncio.run(build_call_graph_rust([]))
+        assert result is None
+
+
+class TestBuildCircularGraphRustUnavailable:
+    """Fase 18, cuarta y última porción del Graph Engine
+    (services/complexity_client.py::build_circular_graph_rust). Mismo
+    espíritu que las 3 anteriores — `None` es el resultado correcto cuando
+    el sidecar no está disponible, no una excepción."""
+
+    def test_returns_none_when_unreachable(self, monkeypatch):
+        monkeypatch.setattr(complexity_client, "COMPLEXITY_ENGINE_URL", _UNREACHABLE_URL)
+        files_summary = [{"filename": "a.py", "language": "python", "functions": 1, "imports": [], "dead_code": 0}]
+        result = asyncio.run(build_circular_graph_rust(files_summary))
+        assert result is None
+
+    def test_does_not_raise_on_empty_list(self, monkeypatch):
+        monkeypatch.setattr(complexity_client, "COMPLEXITY_ENGINE_URL", _UNREACHABLE_URL)
+        result = asyncio.run(build_circular_graph_rust([]))
         assert result is None

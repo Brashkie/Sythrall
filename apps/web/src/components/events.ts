@@ -8,7 +8,7 @@ import { api } from '../api/client'
 import { filterAPIs, filterIssues, renderIssuesList, setIssueFilter } from '../panels/apis'
 import { state } from '../store/state'
 import type { TabId } from '../types'
-import { appendLog } from '../utils/helpers'
+import { appendLog, debounce } from '../utils/helpers'
 import { icon } from '../utils/icons'
 import { toggleTheme } from '../utils/theme'
 import {
@@ -37,6 +37,80 @@ export function wireAllEvents(): void {
   document.querySelectorAll<HTMLElement>('.tab[data-tab]').forEach((el) => {
     el.addEventListener('click', () => switchTab(el.dataset['tab'] as TabId))
   })
+
+  // ── Indicador de proyecto activo (nav-rail) — no es un ".tab" (estilo
+  // propio, no debe heredar el hover/active de las pestañas) así que se
+  // wirea aparte en vez de sumarlo al selector de arriba.
+  document.getElementById('nav-rail-project')?.addEventListener('click', () => switchTab('upload'))
+
+  // ── Colapsar/expandir el nav-rail — colapsado significa DESAPARECE del
+  // todo (solo el botón de abajo queda visible, ver .nav-rail.collapsed en
+  // main.css), no una versión angosta con íconos como antes — pedido
+  // explícito del usuario, con la sidebar de Claude como referencia: al
+  // pasar el mouse por encima (sin clickear) aparece como preview flotante
+  // ("fantasma") sin comprometerse a expandir de verdad; recién clickear el
+  // botón cambia la preferencia persistida. No reusa createResizer/
+  // createCollapseToggle de utils/resizer.ts (esas colapsan a 0px liso, sin
+  // ningún handle para volver — acá siempre queda el botón accesible).
+  const navRail = document.getElementById('nav-rail')
+  const navRailCollapseBtn = document.getElementById('nav-rail-collapse-btn')
+  if (navRail && navRailCollapseBtn) {
+    const NAV_RAIL_COLLAPSED_KEY = 'sythrall:nav-rail-collapsed'
+    let collapsed = false
+    let peeking = false
+    let leaveTimer: ReturnType<typeof setTimeout> | null = null
+
+    const applyCollapsed = (next: boolean) => {
+      collapsed = next
+      peeking = false
+      navRail.classList.remove('peeking')
+      navRail.classList.toggle('collapsed', collapsed)
+      navRailCollapseBtn.title = collapsed ? 'Expandir sidebar' : 'Colapsar sidebar'
+    }
+    try {
+      collapsed = localStorage.getItem(NAV_RAIL_COLLAPSED_KEY) === '1'
+    } catch {
+      /* localStorage puede no estar disponible */
+    }
+    applyCollapsed(collapsed)
+
+    navRailCollapseBtn.addEventListener('click', () => {
+      applyCollapsed(!collapsed)
+      try {
+        localStorage.setItem(NAV_RAIL_COLLAPSED_KEY, collapsed ? '1' : '0')
+      } catch {
+        /* localStorage puede no estar disponible */
+      }
+    })
+
+    // Preview "fantasma" al pasar el mouse — solo tiene sentido si la
+    // preferencia real es colapsado (si ya está expandido, hover no hace
+    // nada). Saca `.collapsed` y pone `.peeking` en vez de sumar reglas CSS
+    // que dupliquen "cómo se ve expandido": sin `.collapsed`, el rail vuelve
+    // solo a verse exactamente como expandido — `.peeking` solo agrega el
+    // posicionamiento flotante (position:absolute, sombra) por encima del
+    // contenido, sin empujarlo ni correr el layout de `.app-main`.
+    navRail.addEventListener('mouseenter', () => {
+      if (!collapsed) return
+      if (leaveTimer) {
+        clearTimeout(leaveTimer)
+        leaveTimer = null
+      }
+      peeking = true
+      navRail.classList.remove('collapsed')
+      navRail.classList.add('peeking')
+    })
+    navRail.addEventListener('mouseleave', () => {
+      if (!peeking) return
+      // Pequeño delay para que mover el mouse hacia un ítem puntual no cierre
+      // el preview a mitad de camino por un instante fuera del área.
+      leaveTimer = setTimeout(() => {
+        peeking = false
+        navRail.classList.remove('peeking')
+        navRail.classList.add('collapsed')
+      }, 200)
+    })
+  }
 
   // ── Right panel tabs
   document.querySelectorAll<HTMLElement>('.rp-tab[data-rptab]').forEach((el) => {
@@ -77,9 +151,8 @@ export function wireAllEvents(): void {
     fiFolder.value = ''
   })
 
-  // ── Main run buttons
+  // ── Main run button
   document.getElementById('run-btn')?.addEventListener('click', runAll)
-  document.getElementById('run-btn-sb')?.addEventListener('click', runAll)
 
   // ── Auto analysis
   document.getElementById('auto-btn')?.addEventListener('click', toggleAuto)
@@ -104,7 +177,6 @@ export function wireAllEvents(): void {
 
   // ── Export
   document.getElementById('btn-export')?.addEventListener('click', exportZip)
-  document.getElementById('btn-export-sb')?.addEventListener('click', exportZip)
 
   // ── Clear
   document.getElementById('btn-clear')?.addEventListener('click', clearAll)
@@ -157,9 +229,11 @@ export function wireAllEvents(): void {
   document.querySelectorAll<HTMLElement>('[data-sev]').forEach((el) => {
     el.addEventListener('click', () => setIssueFilter(el.dataset['sev'] ?? 'all'))
   })
-  document
-    .getElementById('issue-search')
-    ?.addEventListener('input', (e) => filterIssues((e.target as HTMLInputElement).value))
+  // Debounced — filterIssues reconstruye la lista completa de hallazgos en
+  // cada llamada, no vale la pena hacerlo en cada tecla.
+  const issueSearchInput = document.getElementById('issue-search') as HTMLInputElement | null
+  const filterIssuesDebounced = debounce(() => filterIssues(issueSearchInput?.value ?? ''), 200)
+  issueSearchInput?.addEventListener('input', filterIssuesDebounced)
   document
     .getElementById('tool-filter')
     ?.addEventListener('change', (e) => setIssueFilter(null, (e.target as HTMLSelectElement).value))

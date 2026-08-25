@@ -10,12 +10,19 @@ heurísticas necesitan el sidecar real corriendo — Python ya no tiene una
 reimplementación paralela contra la cual testear en su ausencia.
 """
 
+import os
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 import httpx
+
+# routers/auth.py exige esta env var al importarse (falla rápido si falta,
+# a propósito — ver ese archivo). En dev la genera scripts/lib/authSecret.mjs,
+# pero los tests no pasan por ahí, así que se fija un valor fijo acá, antes
+# de que cualquier módulo de test haga `from main import app`.
+os.environ.setdefault("SYTHRALL_AUTH_SECRET", "test-secret-not-for-real-use")
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 

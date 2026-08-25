@@ -7,6 +7,19 @@ import os
 import sys
 import tempfile
 from datetime import datetime
+from pathlib import Path
+
+# ── Directorio de proyectos subidos ───────────────────────────────────────────
+# Absoluto y anclado a la raíz del repo (no relativo al cwd del proceso, que en
+# dev es apps/api/ — ver scripts/run-backend.mjs) y, sobre todo, AFUERA del
+# árbol que uvicorn --reload vigila (ese mismo apps/api/). Antes vivía en
+# apps/api/uploads/projects/: cada archivo que un upload escribía (y cada
+# archivo que un delete borraba) caía dentro del propio directorio observado,
+# disparando un reload del proceso a mitad de la request — el pedido en curso
+# veía "socket hang up"/500 (encontrado en vivo subiendo un ZIP: la extracción
+# escribe varios archivos seguidos, dispara el reload con más probabilidad que
+# un upload de un solo archivo, aunque el bug afecta a upload/delete por igual).
+UPLOADS_DIR = Path(__file__).resolve().parent.parent.parent / "uploads" / "projects"
 
 # En consolas Windows con codepage no-UTF8 (cp1252, etc.), imprimir emojis
 # revienta con UnicodeEncodeError y tumba el proceso. Forzar UTF-8 en stdout/

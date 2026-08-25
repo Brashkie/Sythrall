@@ -5,19 +5,20 @@
 
 import { api } from '../api/client'
 import { renderFileAnalysis, renderMetrics } from '../panels/analysis'
-import { renderAPICards, renderIssuesList } from '../panels/apis'
+import { currentIssueSource, renderAPICards, renderIssuesList } from '../panels/apis'
 import { renderDashboard } from '../panels/dashboard'
 import { generateCodeGraph, generateProjectGraph } from '../panels/graph'
 import { clientMLAnalysis, renderMLResults } from '../panels/ml'
 import { clearSession, restoreSession, saveSession } from '../panels/problems'
-import { loadPersistedActiveProject, setActiveProject, state } from '../store/state'
+import { loadPersistedActiveProject, setActiveProject, state, updateTerminalAvailability } from '../store/state'
 import type { TabId } from '../types'
-import { appendLog, delay, fmtBytes, getExt, nowStr, setProgress, toast, uniqueId } from '../utils/helpers'
+import { appendLog, delay, esc, fmtBytes, getExt, nowStr, setProgress, toast, uniqueId } from '../utils/helpers'
 import { icon } from '../utils/icons'
+import { renderProjectContextBanner, wireProjectContextBanner } from '../utils/projectHeader'
 import { createCollapseToggle, createResizer } from '../utils/resizer'
 import { applyMarkers, getEditorValue, initEditor, loadFileInEditor } from './editor'
 import { explorerAddFile, explorerClearAll, explorerRefreshTree, initExplorer } from './explorer'
-import { renderFlow, setStep, updateRunMeta } from './flow'
+import { renderFlow, updateRunMeta } from './flow'
 import { initMermaid, renderDiagram } from './mermaid'
 
 // ── Tab system — 'upload' agregado
@@ -35,11 +36,65 @@ const TABS: TabId[] = [
   'static',
 ]
 
+interface TabLayout {
+  files: boolean
+  flow: boolean
+}
+
+// Tabla fija por tab (no depende de si hay proyecto activo — a diferencia
+// de una primera versión de esto, Static/Métricas/Diagrama/Hallazgos
+// mantienen Archivos visible con proyecto activo a propósito: el sidebar
+// no es solo el dropzone ad-hoc, también sirve para navegar el árbol del
+// proyecto activo y saltar a un archivo puntual mientras se miran sus
+// resultados — apagarlo ahí sería tirar esa navegación, no solo un
+// dropzone que ya no hace falta).
+const TAB_LAYOUT: Record<TabId, TabLayout> = {
+  dashboard: { files: false, flow: true },
+  editor: { files: true, flow: true },
+  apis: { files: false, flow: false },
+  issues: { files: true, flow: true },
+  diagram: { files: true, flow: true },
+  ml: { files: false, flow: false },
+  metrics: { files: true, flow: true },
+  diff: { files: true, flow: false },
+  logs: { files: false, flow: false },
+  upload: { files: false, flow: false },
+  static: { files: true, flow: true },
+}
+
+/** "Si un panel no aporta información al contexto actual, no ocupa
+ * espacio" — sidebar de Archivos y panel Flujo se ocultan por completo
+ * (no colapsados a una franja angosta) en los tabs/estados donde no
+ * aportan nada, en vez de ser siempre los mismos 3 paneles sin importar
+ * el tab activo. `.center` ya es flex:1, así que ocultarlos alcanza para
+ * que el centro se expanda solo (ver `.tab-hidden` en main.css). */
+export function applyTabLayout(tab: TabId): void {
+  const { files, flow } = TAB_LAYOUT[tab]
+  document.getElementById('sidebar')?.classList.toggle('tab-hidden', !files)
+  document.getElementById('right-panel')?.classList.toggle('tab-hidden', !flow)
+  // En mobile no hay nada que abrir en el drawer si el tab no usa ese panel.
+  document.getElementById('mobile-toggle')?.classList.toggle('tab-hidden', !files)
+  document.getElementById('rp-fab')?.classList.toggle('tab-hidden', !flow)
+}
+
 export function switchTab(name: TabId): void {
+  // 'editor' ya no tiene ítem propio en el nav-rail (es una vista contextual
+  // dentro de un proyecto, no un destino de nivel superior) — al mostrarlo,
+  // el nav-rail resalta 'upload' (Proyectos) en su lugar, para que siempre
+  // quede algo marcado como "acá estás" en vez de ningún ítem activo.
+  const navHighlight = name === 'editor' ? 'upload' : name
   TABS.forEach((t) => {
-    document.getElementById('t-' + t)?.classList.toggle('active', t === name)
+    document.getElementById('t-' + t)?.classList.toggle('active', t === navHighlight)
     document.getElementById('panel-' + t)?.classList.toggle('active', t === name)
   })
+  // Bottom-nav mobile: sí tiene un ítem "editor" propio (a diferencia del
+  // nav-rail de escritorio) — mantenerlo en sync acá también, para que abrir
+  // un archivo desde el árbol de Proyectos (sin pasar por un click directo
+  // en el bottom-nav) lo marque activo igual.
+  document.querySelectorAll<HTMLElement>('.bn-item[data-bn-tab]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset['bnTab'] === name)
+  })
+  applyTabLayout(name)
 
   // Monaco necesita relayout después de que el panel sea visible
   if (name === 'editor') {
@@ -74,6 +129,17 @@ export function switchTab(name: TabId): void {
   // vería el empty state viejo hasta disparar algo más.
   if (name === 'dashboard') {
     renderDashboard()
+  }
+
+  // Mismo motivo que el Dashboard — desde que Hallazgos/Métricas leen datos
+  // del proyecto activo (state.results.projectDashboard), un análisis nuevo
+  // en Static no los actualiza reactivamente; sin esto se vería el estado
+  // viejo hasta disparar algo más al volver a estos tabs.
+  if (name === 'issues') {
+    renderIssuesList()
+  }
+  if (name === 'metrics') {
+    renderMetrics()
   }
 }
 
@@ -114,7 +180,7 @@ export function updateBadges(): void {
   const ta = document.getElementById('tb-apis')
   if (ta) ta.style.display = nDown ? '' : 'none'
 
-  const n = state.results.issues.filter((i) => i.severity === 'error').length
+  const n = currentIssueSource().filter((i) => i.severity === 'error').length
   const ti = document.getElementById('tb-issues')!
   ti.textContent = String(n)
   ti.style.display = n ? '' : 'none'
@@ -123,10 +189,11 @@ export function updateBadges(): void {
     bni.textContent = String(n)
     bni.style.display = n ? '' : 'none'
   }
-  const tf = document.getElementById('tb-files')!
+  // "Editor" ya no tiene su propio ítem en el nav-rail de escritorio (se
+  // abre eligiendo un archivo, ver CHANGELOG.md) — el badge de cantidad de
+  // archivos solo sigue existiendo en el bottom-nav mobile, que sí lo
+  // mantiene como uno de sus 5 accesos fijos.
   const nf = state.files.length
-  tf.textContent = String(nf)
-  tf.style.display = nf ? '' : 'none'
   const bnf = document.getElementById('bn-badge-files')
   if (bnf) {
     bnf.textContent = String(nf)
@@ -134,7 +201,13 @@ export function updateBadges(): void {
   }
 }
 
-// ── Backend check
+// ── Chequeo de disponibilidad del servicio — el texto del badge deliberadamente
+// no dice "Backend"/"Conectado al backend": para un producto SaaS el backend
+// es infraestructura propia de Sythrall, no algo que el usuario "prenda" o
+// cuya existencia deba percibir — mismo motivo por el que `_renderEmptyHero()`
+// (dashboard.ts) ya no muestra filas separadas de Backend/Rust Engine/
+// Linters. El chequeo en sí (y el estado interno `state.backendOk`) sigue
+// igual; solo cambia cómo se lo describe al usuario.
 export async function checkBackend(): Promise<void> {
   const badge = document.getElementById('be-badge')!
   const txt = document.getElementById('be-txt')!
@@ -143,29 +216,9 @@ export async function checkBackend(): Promise<void> {
   try {
     const d = await api.capabilities()
     state.backendOk = true
+    state.capabilities = d
     badge.className = 'be-badge be-ok'
-    txt.textContent = 'Backend OK'
-    const allCaps = [
-      'flake8',
-      'pylint',
-      'complexity',
-      'numpy',
-      'pandas',
-      'polars',
-      'sklearn',
-      'lightgbm',
-      'torch',
-      'tensorflow',
-      'scipy',
-      'opencv',
-      'plotly',
-      'spacy',
-      'icecream',
-    ]
-    const capsRow = document.getElementById('caps-row')!
-    capsRow.innerHTML = allCaps
-      .map((k) => `<span class="cap-chip ${d[k] ? 'cap-on' : 'cap-off'}">${d[k] ? '✓' : '✗'} ${k}</span>`)
-      .join('')
+    txt.textContent = 'Todo operativo'
     const serverInfo = document.getElementById('server-info')!
     serverInfo.innerHTML = `
       <div class="metric-section">
@@ -183,12 +236,18 @@ export async function checkBackend(): Promise<void> {
     appendLog('ok', 'Backend OK — ' + d.server, 'be')
   } catch (e) {
     state.backendOk = false
+    state.capabilities = null
     badge.className = 'be-badge be-err'
-    txt.textContent = 'Sin backend'
-    document.getElementById('caps-row')!.innerHTML =
-      '<span style="font-size:.62rem;color:var(--err);font-family:var(--mono)">docker compose up</span>'
+    txt.textContent = 'Servicio no disponible'
     appendLog('err', 'Backend no disponible: ' + (e as Error).message, 'fe')
   }
+  state.backendChecked = true
+  // El hero vacío del Dashboard (sin proyecto activo ni archivos sueltos)
+  // muestra el estado de backendOk/capabilities — si ya se renderizó antes de
+  // que esto resolviera (ej. arranque en frío), refrescarlo acá es lo único
+  // que lo saca de "verificando…". No toca la vista si hay un proyecto real
+  // o archivos sueltos renderizados (esos no dependen de este chequeo).
+  if (!state.activeProjectId && !state.files.length) renderDashboard()
 }
 
 function mr(k: string, v: unknown, color?: string): string {
@@ -205,8 +264,8 @@ async function tryRestoreSession(): Promise<void> {
   if (!projectId) return
 
   try {
-    await api.getProjectTree(projectId) // confirma que el proyecto sigue existiendo
-    setActiveProject(projectId)
+    const tree = await api.getProjectTree(projectId) // confirma que el proyecto sigue existiendo
+    setActiveProject(projectId, tree.info?.project_name)
     appendLog('ok', `Proyecto activo restaurado (${projectId.slice(0, 8)}…)`, 'be')
 
     // El Dashboard ya se renderizó una vez durante initApp() (con
@@ -279,7 +338,7 @@ export async function persistFilesToProject(files: File[], mode: 'files' | 'fold
     const name = window.prompt('Nombre del proyecto nuevo (cancelar = no guardar, solo en esta sesión):', '')
     if (name === null) return
     const result = await upload(files, name)
-    setActiveProject(result.project_id)
+    setActiveProject(result.project_id, result.project_name)
     appendLog('ok', `Proyecto "${result.project_name}" creado y activo`, 'be')
     toast('Proyecto creado — activo', 'ok')
   } catch (e) {
@@ -365,10 +424,10 @@ function renderURLList(): void {
         'var(--muted)'
       return `<div class="url-item">
       <div class="ui-dot" style="background:${c}"></div>
-      <span class="ui-url" title="${url}">${url}</span>
+      <span class="ui-url" title="${esc(url)}">${esc(url)}</span>
       ${r?.ms ? `<span class="ui-ms">${r.ms}ms</span>` : ''}
       ${r?.code ? `<span class="ui-code">HTTP ${r.code}</span>` : ''}
-      <button class="btn btn-danger btn-sm" style="padding:2px 4px" data-remove-url="${url}">✕</button>
+      <button class="btn btn-danger btn-sm" style="padding:2px 4px" data-remove-url="${esc(url)}">✕</button>
     </div>`
     })
     .join('')
@@ -390,36 +449,24 @@ export async function runAll(): Promise<void> {
   state.running = true
   document.getElementById('run-btn')!.setAttribute('disabled', '')
   state.results.issues = []
-  ;['api', 'upload', 'analyze', 'logs', 'report'].forEach((id) => {
-    state.steps[id] = 'idle'
-  })
   renderFlow()
   setProgress(5)
   const t0 = Date.now()
   appendLog('info', '━━━━━━━━━━━━━━━━━', 'fe')
   appendLog('info', '▶ Análisis iniciado', 'fe')
 
-  setStep('api', 'run')
   await runAPIChecks()
-  setStep('api', state.results.apis.some((a) => a.status === 'down') ? 'err' : 'ok')
   setProgress(20)
 
-  setStep('upload', 'run')
-  setStep('analyze', 'run')
   await analyzeAllFiles()
-  setStep('upload', 'ok')
-  setStep('analyze', state.results.issues.filter((i) => i.severity === 'error').length ? 'err' : 'ok')
+  renderFlow()
   setProgress(65)
 
-  setStep('logs', 'run')
   await analyzeAllLogs()
-  setStep('logs', state.results.logErrors.length ? 'warn' : 'ok')
   setProgress(85)
 
-  setStep('report', 'run')
   await delay(100)
   renderAllResults()
-  setStep('report', 'ok')
   setProgress(100)
   setTimeout(() => setProgress(0), 700)
 
@@ -436,6 +483,7 @@ export async function runAll(): Promise<void> {
   updateBadges()
   appendLog('info', `✔ Completo en ${ms}ms — ${overallStatus().toUpperCase()}`, 'fe')
   state.running = false
+  renderFlow()
   document.getElementById('run-btn')!.removeAttribute('disabled')
   toast(`Listo — ${state.results.issues.length} problemas`, state.results.issues.length ? 'warn' : 'ok')
 }
@@ -754,6 +802,12 @@ async function generateWholeProjectDiagram(graphType: string): Promise<void> {
   const outEl = document.getElementById('mermaid-output')!
   const statusEl = document.getElementById('diag-status')!
 
+  const bannerEl = document.getElementById('diagram-project-banner')
+  if (bannerEl) {
+    bannerEl.innerHTML = renderProjectContextBanner()
+    wireProjectContextBanner(bannerEl)
+  }
+
   const onMermaid = async (code: string) => {
     state.currentMermaid = code
     document.getElementById('mermaid-raw-code')!.textContent = code
@@ -826,7 +880,6 @@ export async function runDiff(): Promise<void> {
   // nombre para cada lado. Antes ambas cabeceras mostraban a.name, aunque el
   // contenido comparado sí era el correcto (a.content vs b.content).
   const patch = createTwoFilesPatch(a.name, b.name, a.content, b.content)
-  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const html = patch
     .split('\n')
     .map((l) => {
@@ -908,6 +961,15 @@ export function initApp(): void {
   renderIssuesList()
   renderDashboard()
   initMermaid()
+  // Estado inicial de la Terminal — `setActiveProject()` ya la sincroniza en
+  // cada cambio posterior, pero un arranque en frío SIN proyecto persistido
+  // nunca llama a `setActiveProject()` (tryRestoreSession corta antes, ver
+  // app.ts), así que sin esto el botón se quedaba habilitado por default de
+  // `index.html` hasta el primer cambio real de proyecto.
+  updateTerminalAvailability(!!state.activeProjectId)
+  // Tab por defecto (dashboard, ver index.html) — aplicar su layout ya en el
+  // arranque en frío, no recién en el primer cambio de tab del usuario.
+  applyTabLayout('dashboard')
 
   const sidebar = document.getElementById('sidebar') as HTMLElement
   const sideHandle = document.getElementById('sidebar-resize') as HTMLElement

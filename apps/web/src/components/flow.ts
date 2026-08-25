@@ -1,15 +1,22 @@
 // ══════════════════════════════════════════
 //  Sythrall — Flow Diagram
+//  Estados derivados de datos reales en cada render (nunca decorativos ni
+//  "en progreso" inventado) — ver `_computeSteps()`. Reemplaza el viejo
+//  esquema de `setStep(id, estado)` escrito a mano en cada paso de
+//  `runAll()`, que solo cubría el pipeline ad-hoc de "▶ Analizar" y mezclaba
+//  "APIs" (una preocupación separada, no una etapa de análisis de código)
+//  con el resto — pedido explícito del usuario: "APIs no deberían aparecer
+//  como primera etapa del análisis de código".
 // ══════════════════════════════════════════
 // src/components/flow.ts
 import { state } from '../store/state'
 import type { RunHistoryEntry, StepState } from '../types'
 
 const STEPS = [
-  { id: 'api', name: 'APIs' },
-  { id: 'upload', name: 'Archivos' },
+  { id: 'project', name: 'Proyecto' },
+  { id: 'files', name: 'Archivos' },
   { id: 'analyze', name: 'Análisis' },
-  { id: 'logs', name: 'Logs' },
+  { id: 'findings', name: 'Findings' },
   { id: 'report', name: 'Reporte' },
 ]
 
@@ -22,11 +29,36 @@ const COLORS: Record<StepState, string> = {
   warn: 'var(--warn)',
 }
 
+/** Deriva el estado de las 5 etapas de datos reales ya existentes en vez de
+ * un flag manual por paso — cubre tanto el modo "proyecto activo" (Static/
+ * Dashboard, `state.results.projectDashboard` + `projectAnalysisRunning`)
+ * como el modo suelto ("▶ Analizar" del topbar sobre `state.files`, ya
+ * usaba `state.running`). Sin distinción granular de sub-etapa dentro de
+ * "en curso" — el pipeline ad-hoc corre varias cosas (APIs, lint, logs) en
+ * una sola pasada sin una señal separada por sub-parte, así que se muestra
+ * un único "en curso" honesto para toda la duración en vez de inventar
+ * hitos intermedios que no existen. */
+function _computeSteps(): Record<string, StepState> {
+  const hasProject = !!state.activeProjectId
+  const hasFiles = hasProject || state.files.length > 0
+  const running = state.running || state.projectAnalysisRunning
+  const analyzed = hasProject ? !!state.results.projectDashboard : state.files.some((f) => f.analyzed)
+
+  return {
+    project: hasProject ? 'ok' : 'idle',
+    files: hasFiles ? 'ok' : 'idle',
+    analyze: running ? 'run' : analyzed ? 'ok' : 'idle',
+    findings: analyzed ? 'ok' : 'idle',
+    report: analyzed ? 'ok' : 'idle',
+  }
+}
+
 export function renderFlow(): void {
   const el = document.getElementById('flow-diag')
   if (!el) return
+  const steps = _computeSteps()
   el.innerHTML = STEPS.map((s, i) => {
-    const st: StepState = (state.steps[s.id] as StepState) ?? 'idle'
+    const st: StepState = steps[s.id] ?? 'idle'
     const isLast = i === STEPS.length - 1
     return `<div class="fstep">
       <div class="fconn">
@@ -41,19 +73,14 @@ export function renderFlow(): void {
   }).join('')
 }
 
-export function setStep(id: string, st: StepState): void {
-  state.steps[id] = st
-  renderFlow()
-}
-
 function getDetail(id: string, st: StepState): string {
   if (st === 'idle') return 'Esperando...'
   if (st === 'run') return 'Procesando...'
-  if (id === 'api') return `${state.results.apis.filter((a) => a.status === 'ok').length}/${state.urls.length} activas`
-  if (id === 'upload') return `${state.files.length} archivos`
-  if (id === 'analyze') return `${state.results.issues.length} issue(s)`
-  if (id === 'logs') return `${state.results.logErrors.length} errores`
-  if (id === 'report') return 'Completo ✓'
+  if (id === 'project') return state.activeProjectName || state.activeProjectId!.slice(0, 8)
+  if (id === 'files') return state.activeProjectId ? 'Del proyecto activo' : `${state.files.length} archivo(s)`
+  if (id === 'analyze') return `${state.results.issues.length} hallazgo(s)`
+  if (id === 'findings') return `${state.results.issues.length} hallazgo(s)`
+  if (id === 'report') return 'Listo'
   return ''
 }
 

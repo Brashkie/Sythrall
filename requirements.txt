@@ -19,6 +19,7 @@ scikit-learn==1.5.1
 # ─── Utilities ───────────────────────────────────────────────────────────────
 python-dotenv==1.0.1
 pydantic==2.9.2
+PyJWT==2.10.1                  # Firma/verifica los tokens de sesión de la terminal (ver routers/auth.py)
 
 # ─── PATCH ───────────────────────────────────────────────────────────────
 tree-sitter==0.23.2

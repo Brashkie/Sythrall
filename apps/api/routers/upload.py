@@ -22,12 +22,13 @@ from services.project_service import (
     delete_project,
     list_projects,
     prune_old_projects,
+    IGNORED_DIRS,
 )
+from shared import UPLOADS_DIR
 
 router = APIRouter()
 logger = logging.getLogger("sythrall.upload")
 
-UPLOADS_DIR = Path("uploads/projects")
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB por archivo
 MAX_ZIP_SIZE = 200 * 1024 * 1024  # 200 MB por ZIP
 
@@ -41,6 +42,18 @@ def _safe_project_path(project_id: str) -> Path:
     if not str(path).startswith(str(UPLOADS_DIR.resolve())):
         raise HTTPException(status_code=400, detail="Path inválido.")
     return path
+
+
+def _write_file_sync(dest: Path, content: bytes) -> None:
+    """Escritura a disco — SIEMPRE vía run_in_threadpool en el caller, nunca
+    invocada directo desde una ruta async. Antes /files y /folder llamaban a
+    `dest.write_bytes()` (bloqueante) directo dentro del loop async: con
+    miles de archivos (ej. una carpeta con node_modules — 27614 archivos en
+    un caso real) esto bloqueaba el event loop de uvicorn el tiempo suficiente
+    como para que el proxy/browser cortara la conexión a mitad de la subida
+    (net::ERR_CONNECTION_RESET), sin ningún error claro para el usuario."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(content)
 
 
 # ─── Subir archivos individuales ─────────────────────────────────────────────
@@ -87,8 +100,7 @@ async def upload_files(
         # Preservar rutas relativas (e.g. src/components/app.ts)
         safe_name = Path(file.filename or "file").name  # strip path traversal
         dest = project_dir / safe_name
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(content)
+        await run_in_threadpool(_write_file_sync, dest, content)
 
         saved.append({"name": file.filename, "size": len(content), "path": safe_name})
 
@@ -140,6 +152,7 @@ async def upload_folder(
     saved: list[dict] = []
     errors: list[dict] = []
 
+    skipped_ignored = 0
     for file in files:
         filename = file.filename or "unknown"
         ext = Path(filename).suffix.lower()
@@ -148,17 +161,50 @@ async def upload_folder(
             errors.append({"file": filename, "reason": f"Extensión bloqueada: {ext}"})
             continue
 
+        # Construir ruta segura (evitar path traversal)
+        parts = Path(filename).parts
+        safe_parts = [p for p in parts if p not in (".", "..") and p != ""]
+        if not safe_parts:
+            continue
+
+        # El picker de carpeta del browser (webkitdirectory) antepone SIEMPRE
+        # el nombre de la carpeta elegida a cada archivo (ej. "myproject/
+        # src/main.ts", garantizado por el propio browser — nunca varía entre
+        # archivos de una misma subida). Ese primer segmento ya se usa aparte
+        # como sugerencia de nombre del proyecto (`resolve_project_name` más
+        # abajo) — descartarlo acá evita anidar todo un nivel de más dentro
+        # de una carpeta con el mismo nombre (myproject/src/... en vez de
+        # src/... directo en la raíz del proyecto). Reportado por el usuario:
+        # subir una carpeta con archivos Y subcarpetas en la raíz mostraba
+        # "solo carpetas" al abrir el árbol recién subido — en realidad los
+        # archivos estaban ahí, pero un nivel más adentro de lo esperado,
+        # detrás de esta carpeta extra que había que expandir primero (un
+        # proyecto subido por ZIP no tiene este nivel de más). `len(...) > 1`
+        # para no vaciar `safe_parts` en el caso límite de un solo archivo
+        # sin ruta relativa (sin pasar por el picker de carpeta real).
+        if len(safe_parts) > 1:
+            safe_parts = safe_parts[1:]
+
+        # Carpetas del sistema (node_modules, .git, dist, __pycache__, etc.) —
+        # mismo IGNORED_DIRS que ya usa extract_zip() para ZIPs. Sin esto acá,
+        # subir una carpeta de un proyecto JS normal (con node_modules
+        # presente) mandaba decenas de miles de archivos innecesarios al
+        # backend — un caso real reportado por el usuario: 27614 archivos,
+        # 513 MB, la subida terminaba con la conexión cortada a mitad de
+        # camino. No evita el costo de LEER esos archivos en el browser (eso
+        # se filtra del lado del cliente, ver upload.ts), pero sí evita
+        # escribirlos a disco si un caller no pasa por ese filtro.
+        if any(part in IGNORED_DIRS for part in safe_parts[:-1]):
+            skipped_ignored += 1
+            continue
+
         content = await file.read()
         if len(content) > MAX_FILE_SIZE:
             errors.append({"file": filename, "reason": "Muy grande (máx 50 MB)"})
             continue
 
-        # Construir ruta segura (evitar path traversal)
-        parts = Path(filename).parts
-        safe_parts = [p for p in parts if p not in (".", "..") and p != ""]
         dest = project_dir.joinpath(*safe_parts)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(content)
+        await run_in_threadpool(_write_file_sync, dest, content)
 
         saved.append(
             {
@@ -176,7 +222,10 @@ async def upload_folder(
     save_project_meta(project_dir, info)
     await run_in_threadpool(prune_old_projects, UPLOADS_DIR)
 
-    logger.info(f"Upload folder → project {project_id}: {len(saved)} archivos")
+    logger.info(
+        f"Upload folder → project {project_id}: {len(saved)} archivos"
+        + (f", {skipped_ignored} ignorados (node_modules/.git/etc.)" if skipped_ignored else "")
+    )
 
     return {
         "project_id": project_id,
@@ -238,6 +287,46 @@ async def upload_zip(
         "errors": result["errors"],
         "tree": tree,
         "info": info,
+        # A diferencia de /files y /folder, esta respuesta no traía "total_files"
+        # (solo dentro de "info") — el frontend lo lee del nivel superior
+        # (UploadResult.total_files, requerido) para el header del explorador y
+        # el toast de confirmación, mostrando "undefined archivos" para todo
+        # proyecto creado por ZIP hasta este fix.
+        "total_files": info["total_files"],
+    }
+
+
+# ─── Crear proyecto vacío (sin subir nada) ────────────────────────────────────
+@router.post("/empty")
+async def create_empty_project(project_name: str = Form(default="")):
+    """
+    Crea un proyecto sin ningún archivo — para trabajar escribiendo código
+    desde cero en vez de partir de algo ya existente (pedido explícito del
+    usuario: "crear proyectos sin subir carpetas o nada, para poder trabajar
+    ahí codificando o creando nuevos archivos"). Los archivos se agregan
+    después con POST /projects/{id}/file (el mismo "+ Nuevo archivo" del
+    explorador).
+    """
+    project_id = str(uuid.uuid4())
+    project_dir = UPLOADS_DIR / project_id
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    tree = await run_in_threadpool(build_tree, project_dir)
+    info = await run_in_threadpool(get_project_info, project_dir)
+    resolved_name = resolve_project_name(project_dir, info, project_name, "proyecto-vacío")
+    save_project_meta(project_dir, info)
+    await run_in_threadpool(prune_old_projects, UPLOADS_DIR)
+
+    logger.info(f"Proyecto vacío creado: {project_id} ({resolved_name})")
+
+    return {
+        "project_id": project_id,
+        "project_name": resolved_name,
+        "type": "empty",
+        "saved": [],
+        "errors": [],
+        "tree": tree,
+        "total_files": 0,
     }
 
 
@@ -296,6 +385,48 @@ async def get_file_content(project_id: str, path: str):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al leer el archivo: {str(e)}") from e
+
+
+# ─── Crear un archivo nuevo dentro de un proyecto ("+ Nuevo archivo") ────────
+@router.post("/projects/{project_id}/file")
+async def create_project_file(project_id: str, path: str = Form(...), content: str = Form(default="")):
+    """
+    Crea un archivo nuevo (vacío o con contenido inicial) dentro de un
+    proyecto ya existente — contraparte de escritura del GET de arriba.
+    Necesario para poder codificar desde cero en un proyecto (subido vacío
+    con POST /empty, o cualquier otro) en vez de depender siempre de subir
+    algo ya escrito.
+    """
+    project_dir = _safe_project_path(project_id)
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado.")
+
+    # A diferencia de /folder (que filtra ".." en silencio de una lista de
+    # archivos ya generada por el propio browser), acá el path lo escribe el
+    # usuario a mano en un campo de texto — más directo, se rechaza en vez de
+    # reinterpretarlo en silencio hacia otro lado dentro del proyecto.
+    parts = Path(path).parts
+    if any(p in (".", "..") for p in parts):
+        raise HTTPException(status_code=400, detail="Path inválido.")
+    safe_parts = [p for p in parts if p != ""]
+    if not safe_parts:
+        raise HTTPException(status_code=400, detail="Path inválido.")
+
+    dest = project_dir.joinpath(*safe_parts)
+    if not str(dest.resolve()).startswith(str(project_dir.resolve())):
+        raise HTTPException(status_code=400, detail="Path inválido.")
+    if dest.exists():
+        raise HTTPException(status_code=409, detail="Ya existe un archivo con ese nombre.")
+
+    await run_in_threadpool(_write_file_sync, dest, content.encode("utf-8"))
+
+    info = await run_in_threadpool(get_project_info, project_dir)
+    save_project_meta(project_dir, info)
+
+    resolved_path = Path(*safe_parts).as_posix()
+    logger.info(f"Archivo nuevo en proyecto {project_id}: {resolved_path}")
+
+    return {"path": resolved_path, "size": len(content.encode("utf-8"))}
 
 
 # ─── Eliminar proyecto ────────────────────────────────────────────────────────

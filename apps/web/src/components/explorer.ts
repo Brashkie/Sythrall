@@ -14,11 +14,12 @@
 //  vuelve a tocar listeners, solo innerHTML.
 // ══════════════════════════════════════════
 
-import { MAX_RENDERED_CHILDREN } from '../panels/upload'
+import { api, type ProjectTreeNode } from '../api/client'
+import { MAX_RENDERED_CHILDREN, openProjectFile } from '../panels/upload'
 import { state } from '../store/state'
 import type { CodeFile } from '../types'
 import { buildMergedTree, type FolderTreeNode } from '../utils/file-tree'
-import { appendLog, fmtBytes, getExt, toast, uniqueId } from '../utils/helpers'
+import { appendLog, debounce, fmtBytes, getExt, toast, uniqueId } from '../utils/helpers'
 import { icon, languageBadge } from '../utils/icons'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -42,6 +43,54 @@ let _searchOpen = false
 let _searchQuery = ''
 let _folderRoot: FolderTreeNode | null = null
 const _expandedDirs = new Set<string>()
+
+// Árbol del proyecto activo — mismo rol que _folderRoot (archivos "pendientes",
+// aún no leídos en state.files) pero viniendo del servidor (api.getProjectTree)
+// en vez de un FileList local. Toma prioridad sobre _folderRoot cuando hay un
+// proyecto activo: son dos "modos" de la misma idea (VS Code no tiene ambos a
+// la vez tampoco), y el proyecto es la fuente real una vez que existe uno.
+// _projectRootId viaja aparte (no en cada nodo) porque abrir un archivo de
+// este árbol necesita el project_id para el fetch — mismo criterio que
+// _folderRoot usa `.file` en cada nodo para el suyo (acá no hay un File
+// local por nodo, así que no hay dónde colgarlo por archivo).
+let _projectRoot: FolderTreeNode | null = null
+let _projectRootId: string | null = null
+
+function _projectTreeToFolderTree(node: ProjectTreeNode): FolderTreeNode {
+  return {
+    name: node.name,
+    path: node.path,
+    type: node.type === 'directory' ? 'directory' : 'file',
+    children: node.children?.map(_projectTreeToFolderTree),
+  }
+}
+
+/** Llamado desde `setActiveProject()` (store/state.ts) cada vez que cambia el
+ * proyecto activo — la Archivos sidebar pasa a mostrar el árbol completo de
+ * ese proyecto (VS Code: el explorador de archivos vive junto al Editor,
+ * siempre visible, no una pantalla aparte a la que hay que ir). Con
+ * `projectId=null` (proyecto cerrado/eliminado) vuelve al modo ad-hoc de
+ * siempre (`_folderRoot`/archivos sueltos). */
+export async function explorerSetActiveProject(projectId: string | null): Promise<void> {
+  if (!projectId) {
+    _projectRoot = null
+    _projectRootId = null
+    _renderFileTree()
+    return
+  }
+  try {
+    const data = await api.getProjectTree(projectId)
+    _projectRoot = _projectTreeToFolderTree(data.tree)
+    _projectRootId = projectId
+    for (const c of _projectRoot.children ?? []) {
+      if (c.type === 'directory') _expandedDirs.add(c.path)
+    }
+  } catch {
+    _projectRoot = null
+    _projectRootId = null
+  }
+  _renderFileTree()
+}
 
 // ─── Iconos ───────────────────────────────────────────────────────────────────
 
@@ -70,7 +119,11 @@ function _renderFileTree(): void {
   const container = document.getElementById('file-tree')
   if (!container) return
 
-  if (!state.files.length && !_folderRoot) {
+  // El árbol del proyecto activo gana sobre el árbol ad-hoc de "+ Carpeta" —
+  // ver comentario de _projectRoot más arriba.
+  const pendingRoot = _projectRoot ?? _folderRoot
+
+  if (!state.files.length && !pendingRoot) {
     container.innerHTML = `<div class="empty">
       Sin archivos cargados
       <button class="btn btn-ghost btn-sm" id="exp-empty-cta">+ Código</button>
@@ -78,7 +131,7 @@ function _renderFileTree(): void {
     return
   }
 
-  const merged = buildMergedTree(state.files, _folderRoot)
+  const merged = buildMergedTree(state.files, pendingRoot)
   container.innerHTML = `<div class="dz-tree">${(merged.children ?? []).map((c) => _renderTreeNode(c, 0)).join('')}</div>`
 }
 
@@ -181,7 +234,12 @@ function _wireTreeEvents(): void {
         return
       }
       const path = fileRow.dataset['treeFile']
-      if (path) _openLazyFile(path)
+      if (!path) return
+      // Nodo del árbol del proyecto activo (sin File local, a diferencia de
+      // uno de "+ Carpeta") — pedirlo al servidor, mismo camino que clickear
+      // un archivo desde el árbol de Proyectos.
+      if (_projectRootId) void openProjectFile(_projectRootId, path)
+      else _openLazyFile(path)
     }
   })
 }
@@ -393,11 +451,13 @@ function _injectSearchOverlay(): void {
     if (e.target === overlay) closeSearch()
   })
 
-  // Input de búsqueda
+  // Input de búsqueda — debounced: _runSearch escanea el contenido completo
+  // de cada archivo cargado, no vale la pena repetirlo en cada tecla.
   const input = document.getElementById('exp-search-input') as HTMLInputElement
+  const runSearchDebounced = debounce(() => _runSearch(), 200)
   input?.addEventListener('input', () => {
     _searchQuery = input.value
-    _runSearch()
+    runSearchDebounced()
   })
 
   // Click en resultado

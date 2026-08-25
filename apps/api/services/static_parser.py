@@ -87,16 +87,21 @@ async def parse_file(filename: str, content: str) -> dict[str, Any]:
 
 async def _parse_python(filename: str, content: str) -> dict:
     """Big-O, complejidad ciclomática (salvo la excepción de abajo), space
-    complexity, recursión, security/taint, structural smells y naming smells
-    son Rust-only (`services/complexity/src/{bigo,space,recursion,security,
-    smells,naming,classifiers}.rs`, vía `parse_python_rich`) — Python ya no
-    los reimplementa. Lo que sigue siendo genuinamente de Python: imports,
-    detección de imports no usados, call graph, dependencias circulares y
-    WASM hints (Rust todavía no construye grafos ni tiene ese heurístico,
-    ver docstring de `rich.rs`). Si el sidecar no responde, degrada a un
+    complexity, recursión, security/taint, structural smells, naming smells
+    y call graph son Rust-only cuando el sidecar responde
+    (`services/complexity/src/{bigo,space,recursion,security,smells,naming,
+    rich}.rs`, vía `parse_python_rich`) — Python ya no los reimplementa en
+    ese camino. Lo que sigue siendo genuinamente de Python: imports,
+    detección de imports no usados y WASM hints (Rust todavía no tiene ese
+    heurístico, ver docstring de `rich.rs`). Si el sidecar no responde, degrada a un
     esqueleto liviano (`_skeleton_functions_python`/`_skeleton_classes_python`)
     en vez de reimplementar el motor — big_o/space quedan en "?"/None,
-    security/smells quedan vacíos."""
+    security/smells quedan vacíos. **Excepción deliberada: call graph SÍ
+    sigue funcionando en ese camino degradado** — `_skeleton_functions_python`
+    ya incluye `calls` por diseño (ver su propio docstring), así que
+    `_build_call_graph` (Python, más abajo) no se borra: es el mecanismo de
+    fallback cuando no hay sidecar, no una segunda implementación paralela
+    mantenida "por si acaso"."""
     tree = ast.parse(content, filename=filename)
     rich = await parse_python_rich(filename, content)
 
@@ -104,6 +109,7 @@ async def _parse_python(filename: str, content: str) -> dict:
         functions = rich["functions"]
         classes = rich["classes"]
         imports = rich["imports"]
+        call_graph = rich["call_graph"]
         security_findings = list(rich["security_findings"])
         structural_smells = list(rich["structural_smells"])
         naming_smells = list(rich["naming_smells"])
@@ -111,6 +117,7 @@ async def _parse_python(filename: str, content: str) -> dict:
         functions = _skeleton_functions_python(tree)
         classes = _skeleton_classes_python(tree)
         imports = _extract_imports_python(tree)
+        call_graph = _build_call_graph(functions)
         security_findings, structural_smells, naming_smells = [], [], []
 
     # ── Imports no usados (heurística) ───────────────────────────────────────
@@ -133,12 +140,6 @@ async def _parse_python(filename: str, content: str) -> dict:
     # ── WASM / hot path hints ─────────────────────────────────────────────────
     wasm_hints = _wasm_hints_python(functions, content)
 
-    # ── Call graph (dentro del mismo archivo) ─────────────────────────────────
-    call_graph = _build_call_graph(functions)
-
-    # ── Dependencias circulares entre imports ─────────────────────────────────
-    circular = _detect_circular_imports(imports)
-
     security_findings.sort(key=lambda f: f["line"])
     structural_smells.sort(key=lambda s: s["line"])
     naming_smells.sort(key=lambda s: s["line"])
@@ -152,7 +153,6 @@ async def _parse_python(filename: str, content: str) -> dict:
         "exports": [],  # Python no tiene exports explícitos
         "dead_code": dead_imports,
         "call_graph": call_graph,
-        "circular_deps": circular,
         "wasm_hints": wasm_hints,
         "security_findings": security_findings,
         "structural_smells": structural_smells,
@@ -236,6 +236,8 @@ def _skeleton_functions_python(tree: ast.AST) -> list[dict]:
                     "grammar_note": None,
                     "graph_traversal": None,
                     "graph_traversal_note": None,
+                    "data_structure": None,
+                    "data_structure_note": None,
                     "calls": _extract_calls_python(node),
                     "returns_annotated": node.returns is not None,
                 }
@@ -246,7 +248,9 @@ def _skeleton_functions_python(tree: ast.AST) -> list[dict]:
 def _skeleton_classes_python(tree: ast.AST) -> list[dict]:
     """Ídem `_skeleton_functions_python` para clases — sin `attribute_count`
     real (necesitaría el mismo recorrido que god_object, que es de Rust),
-    queda en 0."""
+    queda en 0. `data_structure`/`data_structure_note` (Fase 14) tampoco se
+    recalculan acá — ese clasificador es Rust-only, igual que
+    `regex_class`/`grammar_class` en `_skeleton_functions_python`."""
     classes: list[dict] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef):
@@ -272,6 +276,8 @@ def _skeleton_classes_python(tree: ast.AST) -> list[dict]:
                     "decorators": [_decorator_name(d) for d in node.decorator_list],
                     "docstring": ast.get_docstring(node),
                     "attribute_count": 0,
+                    "data_structure": None,
+                    "data_structure_note": None,
                 }
             )
     return classes
@@ -814,7 +820,14 @@ def _extract_calls_python(func: ast.FunctionDef) -> list[str]:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  CIRCULAR IMPORTS (Python)
+#  CYCLE FINDING (compartido con routers/graph.py)
+#  `_detect_circular_imports` (el único caller local de `find_cycles_capped`
+#  en este archivo) se eliminó — calculaba `circular_deps`, un campo de
+#  `_parse_python()` que resultó ser código muerto: cero referencias en
+#  `apps/web/src`, ni siquiera declarado en el tipo `StaticResult` de
+#  `client.ts`. `find_cycles_capped` en sí se queda — sigue siendo la
+#  utilidad de enumeración de ciclos capada que `routers/graph.py` importa
+#  para `_build_architecture_smells` (Fase 22).
 # ══════════════════════════════════════════════════════════════════════════════
 
 
@@ -841,20 +854,6 @@ def find_cycles_capped(graph: Any, max_cycles: int = 20) -> list[list[str]]:
     except Exception:
         pass
     return cycles
-
-
-def _detect_circular_imports(imports: list[dict]) -> list[str]:
-    """Detecta posibles ciclos entre módulos importados."""
-    if not HAS_NX:
-        return []
-    G = nx.DiGraph()
-    for imp in imports:
-        mod = imp["module"]
-        parts = mod.split(".")
-        if len(parts) >= 2:
-            G.add_edge(parts[0], parts[-1])
-    cycles = find_cycles_capped(G, max_cycles=5)
-    return [" → ".join(c) for c in cycles]
 
 
 # ══════════════════════════════════════════════════════════════════════════════

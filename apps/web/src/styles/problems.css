@@ -13,7 +13,7 @@
   background: var(--s0);
   border-bottom: 1px solid var(--b0);
   font-family: var(--mono);
-  font-size: .65rem;
+  font-size: .8rem;
   color: var(--muted);
   flex-shrink: 0;
   overflow-x: auto;
@@ -38,7 +38,7 @@
   padding: 1px 6px;
   border-radius: 3px;
   background: var(--s2);
-  font-size: .58rem;
+  font-size: .73rem;
   text-transform: uppercase;
   letter-spacing: .04em;
 }
@@ -48,7 +48,7 @@
   color: var(--warn);
   padding: 1px 6px;
   border-radius: 3px;
-  font-size: .58rem;
+  font-size: .73rem;
   flex-shrink: 0;
   cursor: help;
 }
@@ -62,7 +62,7 @@
 .pb-filename {
   display: block;
   font-family: var(--mono);
-  font-size: .76rem;
+  font-size: .91rem;
   font-weight: 600;
   margin-bottom: 5px;
   overflow: hidden;
@@ -76,7 +76,7 @@
 }
 .pb-count {
   font-family: var(--mono);
-  font-size: .6rem;
+  font-size: .75rem;
   padding: 2px 7px;
   border-radius: 3px;
   font-weight: 700;
@@ -100,14 +100,14 @@
   align-items: center;
   padding: 3px 0;
   border-bottom: 1px solid var(--b0);
-  font-size: .72rem;
+  font-size: .87rem;
 }
 .pb-metric-row:last-child { border-bottom: none; }
-.pb-metric-k { color: var(--muted); font-family: var(--mono); font-size: .68rem; }
+.pb-metric-k { color: var(--muted); font-family: var(--mono); font-size: .83rem; }
 .pb-metric-v { font-family: var(--mono); font-weight: 600; }
 .pb-safe-mode {
   margin-top: 6px;
-  font-size: .62rem;
+  font-size: .77rem;
   color: var(--warn);
   padding: 4px 6px;
   background: rgba(255,182,39,.06);
@@ -120,7 +120,7 @@
   margin-bottom: 8px;
 }
 .pb-section-head {
-  font-size: .6rem;
+  font-size: .75rem;
   font-weight: 700;
   letter-spacing: .8px;
   text-transform: uppercase;
@@ -137,21 +137,24 @@
   padding: 4px 0;
   cursor: pointer;
   font-family: var(--mono);
-  font-size: .7rem;
+  font-size: .85rem;
   border-radius: 4px;
   transition: background .1s;
   overflow: hidden;
 }
 .pb-issue:hover { background: var(--s2); padding-left: 4px; }
 
-.pb-issue-loc  { color: var(--muted); min-width: 28px; flex-shrink: 0; font-size: .6rem; }
-.pb-issue-msg  { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pb-issue-code { color: var(--b2); font-size: .58rem; flex-shrink: 0; }
-.pb-more       { font-size: .62rem; color: var(--muted); padding: 3px 0; }
+.pb-issue-loc  { color: var(--muted); min-width: 28px; flex-shrink: 0; font-size: .75rem; }
+/* sans, no mono heredado de .pb-issue — el mensaje del lint es una oración
+ * en prosa ("Unused import 'os'"), no un valor de código como la ubicación/
+ * el código de error alrededor. */
+.pb-issue-msg  { font-family: var(--sans); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-issue-code { color: var(--b2); font-size: .73rem; flex-shrink: 0; }
+.pb-more       { font-size: .77rem; color: var(--muted); padding: 3px 0; }
 
 /* Tool badges */
 .pb-issue-tool {
-  font-size: .58rem;
+  font-size: .73rem;
   padding: 1px 4px;
   border-radius: 3px;
   flex-shrink: 0;
@@ -172,7 +175,7 @@
   align-items: center;
   gap: 6px;
   margin-bottom: 5px;
-  font-size: .68rem;
+  font-size: .83rem;
   font-family: var(--mono);
 }
 .pb-bigo-label   { min-width: 72px; flex-shrink: 0; font-weight: 700; }
@@ -193,7 +196,7 @@
 
 /* ── Responsive ───────────────────────────────────────────────────────────── */
 @media (max-width: 680px) {
-  .lm-bar { font-size: .58rem; padding: 3px 10px; }
+  .lm-bar { font-size: .73rem; padding: 3px 10px; }
   .lm-parse { display: none; }
 }
 @media (max-width: 480px) {

@@ -10,6 +10,7 @@
 import type { NamingSmell, SecurityFinding, StructuralSmell } from '../api/client'
 import { getApiBase } from '../store/state'
 import type { CodeFile, Issue } from '../types'
+import { esc } from '../utils/helpers'
 import { icon, languageBadge } from '../utils/icons'
 import { NAMING_SMELL_LABEL, SMELL_LABEL, securitySeverityColor } from './static'
 
@@ -195,7 +196,7 @@ export function updateProblems(file: CodeFile, liveMetrics?: LiveMetricsData): v
   // Header con counts
   let html = `
     <div class="pb-header">
-      <span class="pb-filename">${_icon(file.ext)} ${file.name}</span>
+      <span class="pb-filename">${_icon(file.ext)} ${esc(file.name)}</span>
       <div class="pb-counts">
         ${errors.length ? `<span class="pb-count pb-err">${icon('warning', 11)} ${errors.length} error${errors.length !== 1 ? 'es' : ''}</span>` : ''}
         ${warnings.length ? `<span class="pb-count pb-warn">△ ${warnings.length} warn</span>` : ''}

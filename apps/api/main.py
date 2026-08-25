@@ -8,7 +8,8 @@ import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from shared import add_log, now, LIB_FLAGS
+from starlette.concurrency import run_in_threadpool
+from shared import add_log, now, LIB_FLAGS, UPLOADS_DIR
 from services.complexity_client import check_complexity_engine_sync
 
 # ── Imports condicionales ────────────────────────────────────────────────────
@@ -129,8 +130,8 @@ HAS_CYTHON = LIB_FLAGS["HAS_CYTHON"]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    os.makedirs("uploads/projects", exist_ok=True)
-    add_log("info", "Sythrall v4.10 — FastAPI")
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+    add_log("info", "Sythrall v4.12 — FastAPI")
     add_log(
         "info",
         f"   flake8={'✓' if HAS_FLAKE8 else '✗'}  pylint={'✓' if HAS_PYLINT else '✗'}  "
@@ -153,7 +154,7 @@ async def lifespan(app: FastAPI):
     add_log("info", "Sythrall detenido.")
 
 
-app = FastAPI(title="Sythrall", version="4.10.0", lifespan=lifespan)
+app = FastAPI(title="Sythrall", version="4.12.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )
@@ -168,6 +169,7 @@ from routers.static_analysis import router as static_router
 from routers.intelligence import router as intel_router
 from routers.graph import router as graph_router
 from routers.metrics_live import router as metrics_router
+from routers.auth import router as auth_router
 
 app.include_router(upload_router, prefix="/api/upload", tags=["Upload"])
 app.include_router(analysis_router, prefix="/analyze", tags=["Analysis"])
@@ -178,6 +180,7 @@ app.include_router(static_router, prefix="/static", tags=["Static"])
 app.include_router(intel_router, prefix="/intel", tags=["Intelligence"])
 app.include_router(graph_router, prefix="/analyze", tags=["Graph"])
 app.include_router(metrics_router, prefix="/metrics", tags=["Live Metrics"])
+app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 
 
 # ── System endpoints ─────────────────────────────────────────────────────────
@@ -202,13 +205,17 @@ async def health():
     }
 
 
-@app.get("/capabilities", tags=["System"])
-async def capabilities():
+def _tool_version(cmd: list[str]) -> str:
     import subprocess
 
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=5).stdout.strip().splitlines()[0]
+
+
+@app.get("/capabilities", tags=["System"])
+async def capabilities():
     caps: dict = {
         "python": sys.version,
-        "server": "Sythrall v4.10",
+        "server": "Sythrall v4.12",
         "ts": now(),
         **{k: v for k, v in LIB_FLAGS.items()},
     }
@@ -218,7 +225,7 @@ async def capabilities():
     ]:
         if flag:
             try:
-                caps[tool] = subprocess.run(cmd, capture_output=True, text=True).stdout.strip().splitlines()[0]
+                caps[tool] = await run_in_threadpool(_tool_version, cmd)
             except Exception:
                 pass
     for lib, flag, fn in [
