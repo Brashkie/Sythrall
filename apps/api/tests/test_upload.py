@@ -418,7 +418,7 @@ class TestEmptyProjectAndNewFile:
         pid = client.post("/api/upload/empty").json()["project_id"]
 
         res = client.post(
-            "/api/upload/projects/{}/file".format(pid),
+            f"/api/upload/projects/{pid}/file",
             data={"path": "src/app.py", "content": "print('hola')"},
         )
         assert res.status_code == 200
@@ -437,7 +437,7 @@ class TestEmptyProjectAndNewFile:
     def test_create_file_empty_content_allowed(self):
         pid = client.post("/api/upload/empty").json()["project_id"]
         res = client.post(
-            "/api/upload/projects/{}/file".format(pid),
+            f"/api/upload/projects/{pid}/file",
             data={"path": "notes.txt"},
         )
         assert res.status_code == 200
@@ -445,8 +445,8 @@ class TestEmptyProjectAndNewFile:
 
     def test_create_file_duplicate_returns_409(self):
         pid = client.post("/api/upload/empty").json()["project_id"]
-        client.post("/api/upload/projects/{}/file".format(pid), data={"path": "a.py", "content": "1"})
-        res = client.post("/api/upload/projects/{}/file".format(pid), data={"path": "a.py", "content": "2"})
+        client.post(f"/api/upload/projects/{pid}/file", data={"path": "a.py", "content": "1"})
+        res = client.post(f"/api/upload/projects/{pid}/file", data={"path": "a.py", "content": "2"})
         assert res.status_code == 409
 
     def test_create_file_nonexistent_project_returns_404(self):
@@ -459,7 +459,7 @@ class TestEmptyProjectAndNewFile:
     def test_create_file_path_traversal_blocked(self):
         pid = client.post("/api/upload/empty").json()["project_id"]
         res = client.post(
-            "/api/upload/projects/{}/file".format(pid),
+            f"/api/upload/projects/{pid}/file",
             data={"path": "../../etc/passwd", "content": "x"},
         )
         assert res.status_code == 400

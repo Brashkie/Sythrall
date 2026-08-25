@@ -131,7 +131,7 @@ HAS_CYTHON = LIB_FLAGS["HAS_CYTHON"]
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     os.makedirs(UPLOADS_DIR, exist_ok=True)
-    add_log("info", "Sythrall v4.12 — FastAPI")
+    add_log("info", "Sythrall v4.11 — FastAPI")
     add_log(
         "info",
         f"   flake8={'✓' if HAS_FLAKE8 else '✗'}  pylint={'✓' if HAS_PYLINT else '✗'}  "
@@ -154,7 +154,7 @@ async def lifespan(app: FastAPI):
     add_log("info", "Sythrall detenido.")
 
 
-app = FastAPI(title="Sythrall", version="4.12.0", lifespan=lifespan)
+app = FastAPI(title="Sythrall", version="4.11.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )
@@ -215,7 +215,7 @@ def _tool_version(cmd: list[str]) -> str:
 async def capabilities():
     caps: dict = {
         "python": sys.version,
-        "server": "Sythrall v4.12",
+        "server": "Sythrall v4.11",
         "ts": now(),
         **{k: v for k, v in LIB_FLAGS.items()},
     }

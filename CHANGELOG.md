@@ -5,7 +5,7 @@ Todos los cambios notables de Sythrall se documentan acá. Formato basado en
 
 ## [Unreleased]
 
-## [4.12.0] — 2026-08-24
+## [4.11.0] — 2026-08-24
 
 ### Added
 - **Fase 14, tercera porción de Data Structure Intelligence: Segment Tree, B-Tree, Skip List, HashMap — 10 de 10, bullet de detección cerrado**: mismo patrón de extensión pura de `data_structure_info` que la porción anterior — cero wiring nuevo en `rich.rs`/`structure.rs`/Python/frontend.

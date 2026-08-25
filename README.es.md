@@ -9,7 +9,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/versión-4.12.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/versión-4.11.0-blue?style=flat-square)
 [![CI](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml/badge.svg)](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml)
 ![Frontend](https://img.shields.io/badge/Frontend-Vite%20%2B%20TypeScript-646cff?style=flat-square)
 ![Backend](https://img.shields.io/badge/Backend-FastAPI%20%2B%20Python-009688?style=flat-square)
