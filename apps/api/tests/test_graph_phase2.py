@@ -102,7 +102,7 @@ class TestProjectGraphBasic:
         assert "flowchart" in data.get("mermaid", "")
 
     def test_all_5_types_work(self):
-        """"centrality" agregado acá — el test original ("test_all_4_types_work")
+        """ "centrality" agregado acá — el test original ("test_all_4_types_work")
         es de antes de que centrality existiera como 5º tipo, así que la rama
         `graph_type == "centrality"` de `generate_project_graph` (a diferencia
         de `generate_graph`, cubierta por TestCentralityGraph en test_graph.py)

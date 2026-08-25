@@ -241,9 +241,7 @@ def _files_summary_for_sidecar(parsed_files: list[dict]) -> list[dict]:
             "filename": p["_filename"],
             "language": p.get("language", "?"),
             "functions": len(p.get("functions", [])),
-            "imports": [
-                {"module": imp.get("module", ""), "line": imp.get("line", 0)} for imp in p.get("imports", [])
-            ],
+            "imports": [{"module": imp.get("module", ""), "line": imp.get("line", 0)} for imp in p.get("imports", [])],
             "dead_code": len(p.get("dead_code", [])),
         }
         for p in parsed_files

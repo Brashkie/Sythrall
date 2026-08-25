@@ -194,7 +194,9 @@ class TestDataStructureDetection:
         assert cls["data_structure"] is None
 
     def test_bloom_filter_detected_by_name_and_shape(self):
-        src = "class BloomFilter:\n    def add(self, item):\n        pass\n    def contains(self, item):\n        pass\n"
+        src = (
+            "class BloomFilter:\n    def add(self, item):\n        pass\n    def contains(self, item):\n        pass\n"
+        )
         data = client.post("/static/parse", json={"filename": "test.py", "content": src}).json()
         cls = next(c for c in data["classes"] if c["name"] == "BloomFilter")
         assert cls["data_structure"] == "Bloom Filter"
