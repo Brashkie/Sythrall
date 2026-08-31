@@ -33,7 +33,15 @@
 # de dar el bug por resuelto.
     .text
     .globl _mergesort_bu
+    .globl mergesort_bu
+# Dos labels para el mismo código: Windows/MinGW (32 bits) antepone `_` a
+# los símbolos C (por eso `_mergesort_bu`), pero un `gcc`/`ld` de Linux
+# (ELF, sin ese prefijo) busca `mergesort_bu` a secas — sin el segundo
+# label, el link falla con "undefined reference to mergesort_bu" en
+# cualquier entorno que no sea Windows (bug real atrapado en CI, mismo
+# problema que `validate_sum_squares.s`, ver su comentario para el detalle).
 _mergesort_bu:
+mergesort_bu:
     push %ebp
     mov %esp, %ebp
     push %ebx

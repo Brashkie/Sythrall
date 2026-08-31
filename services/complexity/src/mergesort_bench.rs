@@ -72,8 +72,29 @@ pub struct EmpiricalValidationResult {
     pub note: String,
 }
 
+/// Bug real de CI, no reproducible en esta máquina de desarrollo (MinGW de
+/// 32 bits, `mingw32`): un `gcc` de Linux por default apunta a 64 bits, y
+/// este kernel está escrito para cdecl de 32 bits (argumentos en la pila) —
+/// sin `-m32` explícito, el driver C llamaría a la función en Assembly con
+/// la convención equivocada. `-m32` a su vez necesita soporte multilib
+/// instalado, que no siempre está — se prueba compilando un `.c` trivial
+/// con `-m32` ACÁ, antes de intentar el kernel real: si falla, se degrada
+/// con gracia en vez de que `compile_and_run` falle más adelante sin decir
+/// por qué. Verificado en esta máquina (MinGW 32 bits tolera `-m32` como
+/// no-op). Mismo criterio duplicado a propósito que `asm_bench.rs` — el
+/// primer kernel donde se encontró este bug (ver su propio comentario).
+fn supports_dash_m32() -> bool {
+    let Ok(dir) = TempWorkDir::new() else { return false };
+    let src = dir.0.join("probe.c");
+    let bin = dir.0.join(if cfg!(windows) { "probe.exe" } else { "probe" });
+    if fs::write(&src, "int main(void) { return 0; }\n").is_err() {
+        return false;
+    }
+    Command::new("gcc").arg("-m32").arg(&src).arg("-o").arg(&bin).output().is_ok_and(|o| o.status.success())
+}
+
 fn gcc_available() -> bool {
-    Command::new("gcc").arg("--version").output().is_ok_and(|o| o.status.success())
+    Command::new("gcc").arg("--version").output().is_ok_and(|o| o.status.success()) && supports_dash_m32()
 }
 
 /// Directorio de trabajo temporal con limpieza automática — mismo criterio
@@ -148,7 +169,9 @@ fn compile_and_run(sizes: &[u32]) -> EmpiricalValidationResult {
         };
     }
 
-    let compile = Command::new("gcc").arg(&asm_path).arg(&driver_path).arg("-O2").arg("-o").arg(&bin_path).output();
+    // `-m32` fuerza cdecl de 32 bits en un gcc cuyo default es 64 bits —
+    // ver `supports_dash_m32()` arriba para el porqué completo.
+    let compile = Command::new("gcc").arg(&asm_path).arg(&driver_path).arg("-m32").arg("-O2").arg("-o").arg(&bin_path).output();
     match compile {
         Ok(out) if out.status.success() => {}
         Ok(out) => {

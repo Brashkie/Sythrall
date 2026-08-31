@@ -54,8 +54,31 @@ pub struct EmpiricalValidationResult {
     pub note: String,
 }
 
+/// Bug real de CI, no reproducible en esta máquina de desarrollo (MinGW de
+/// 32 bits, `mingw32`): un `gcc` de Linux por default apunta a 64 bits
+/// (ej. `x86_64-linux-gnu`), y este kernel está escrito para cdecl de 32
+/// bits (argumentos en la pila, no en registros) — sin `-m32` explícito, el
+/// binario resultante llamaría a la función en Assembly con la convención
+/// equivocada. `-m32` a su vez necesita soporte multilib instalado
+/// (`gcc-multilib`/`libc6-dev-i386` en Debian/Ubuntu), que no siempre está
+/// presente — por eso se prueba compilando un `.c` trivial con `-m32` ACÁ,
+/// antes de intentar el kernel real: si falla, se degrada con gracia (mismo
+/// criterio que el resto de este archivo), en vez de que `compile_and_run`
+/// falle más adelante con un error de compilación real sin decir por qué.
+/// Verificado en esta máquina (MinGW 32 bits tolera `-m32` como no-op, no
+/// rompe el camino ya funcionando).
+fn supports_dash_m32() -> bool {
+    let Ok(dir) = TempWorkDir::new() else { return false };
+    let src = dir.0.join("probe.c");
+    let bin = dir.0.join(if cfg!(windows) { "probe.exe" } else { "probe" });
+    if fs::write(&src, "int main(void) { return 0; }\n").is_err() {
+        return false;
+    }
+    Command::new("gcc").arg("-m32").arg(&src).arg("-o").arg(&bin).output().is_ok_and(|o| o.status.success())
+}
+
 fn gcc_available() -> bool {
-    Command::new("gcc").arg("--version").output().is_ok_and(|o| o.status.success())
+    Command::new("gcc").arg("--version").output().is_ok_and(|o| o.status.success()) && supports_dash_m32()
 }
 
 /// Directorio de trabajo temporal con limpieza automática — mismo criterio
@@ -128,7 +151,13 @@ fn compile_and_run(sizes: &[u32]) -> EmpiricalValidationResult {
         };
     }
 
-    let compile = Command::new("gcc").arg(&asm_path).arg(&driver_path).arg("-O2").arg("-o").arg(&bin_path).output();
+    // `-m32` fuerza cdecl de 32 bits en un gcc cuyo default es 64 bits (la
+    // mayoría de los Linux modernos) — sin esto, el driver C compilaría
+    // pasando el argumento en un registro (convención x86-64), no en la
+    // pila, que es lo que el kernel de Assembly espera. Ya se confirmó via
+    // `supports_dash_m32()` (dentro de `gcc_available()`) que el flag
+    // funciona en este toolchain antes de llegar acá.
+    let compile = Command::new("gcc").arg(&asm_path).arg(&driver_path).arg("-m32").arg("-O2").arg("-o").arg(&bin_path).output();
     match compile {
         Ok(out) if out.status.success() => {}
         Ok(out) => {

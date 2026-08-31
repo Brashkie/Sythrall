@@ -12,7 +12,16 @@
 # aparte con N chico, ver `asm_bench.rs::tests`).
     .text
     .globl _sum_squares
+    .globl sum_squares
+# Dos labels para el mismo código: el toolchain de Windows/MinGW (32 bits)
+# antepone `_` a los símbolos C por convención (por eso `_sum_squares`
+# arriba), pero un `gcc`/`ld` de Linux (ELF, sin ese prefijo histórico)
+# busca `sum_squares` a secas — sin el segundo label, el link falla con
+# "undefined reference to sum_squares" en cualquier entorno que no sea
+# Windows (bug real atrapado en CI, no en esta máquina de desarrollo, que
+# solo tiene el toolchain MinGW y nunca hubiera mostrado el problema).
 _sum_squares:
+sum_squares:
     push %ebp
     mov %esp, %ebp
     push %ebx            # ebx es callee-saved en cdecl, hay que preservarlo
