@@ -26,8 +26,8 @@ import { state } from '../store/state'
 import type { TabId } from '../types'
 import { renderHealthCards } from '../utils/health'
 import { esc, toast } from '../utils/helpers'
-import { icon } from '../utils/icons'
 import type { IconName } from '../utils/icons'
+import { icon } from '../utils/icons'
 import {
   NAMING_SMELL_LABEL,
   renderBigODistribution,
@@ -409,8 +409,18 @@ interface ExploreCard {
 }
 
 const EXPLORE_AVAILABLE: ExploreCard[] = [
-  { icon: 'diagram', title: 'Deep Analysis', desc: 'Arquitectura, complejidad, calidad y dependencias.', tab: 'diagram' },
-  { icon: 'shield', title: 'Project Security', desc: 'Vulnerabilidades, secretos y dependencias riesgosas.', tab: 'static' },
+  {
+    icon: 'diagram',
+    title: 'Deep Analysis',
+    desc: 'Arquitectura, complejidad, calidad y dependencias.',
+    tab: 'diagram',
+  },
+  {
+    icon: 'shield',
+    title: 'Project Security',
+    desc: 'Vulnerabilidades, secretos y dependencias riesgosas.',
+    tab: 'static',
+  },
 ]
 
 const EXPLORE_SOON: ExploreCard[] = [
@@ -433,7 +443,10 @@ function _exploreCard(c: ExploreCard, available: boolean): string {
 }
 
 function _renderExploreGrid(): string {
-  const cards = [...EXPLORE_AVAILABLE.map((c) => _exploreCard(c, true)), ...EXPLORE_SOON.map((c) => _exploreCard(c, false))].join('')
+  const cards = [
+    ...EXPLORE_AVAILABLE.map((c) => _exploreCard(c, true)),
+    ...EXPLORE_SOON.map((c) => _exploreCard(c, false)),
+  ].join('')
   return `
   <div class="dash-explore">
     <div class="dash-explore-heading">Explora Sythrall</div>

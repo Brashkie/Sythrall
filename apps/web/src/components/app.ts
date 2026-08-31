@@ -866,7 +866,9 @@ export function switchDiagView(view: DiagView): void {
     else forceEl.innerHTML = '<div class="empty">Generá el grafo primero</div>'
   } else if (view === 'tree') {
     if (_lastDirTree) renderDirTree(treeEl, _lastDirTree, (path) => void onGraphNodeClick(path))
-    else treeEl.innerHTML = '<div class="empty">Solo disponible con un proyecto activo (necesita dir_tree del server)</div>'
+    else
+      treeEl.innerHTML =
+        '<div class="empty">Solo disponible con un proyecto activo (necesita dir_tree del server)</div>'
   }
 }
 
@@ -907,11 +909,13 @@ async function generateWholeProjectDiagram(graphType: string): Promise<void> {
   }
   const onForce = (result: GraphResult) => {
     _lastGraphResult = result
-    if (_diagView === 'force') renderForceGraph(document.getElementById('force-graph-output')!, result, (id) => void onGraphNodeClick(id))
+    if (_diagView === 'force')
+      renderForceGraph(document.getElementById('force-graph-output')!, result, (id) => void onGraphNodeClick(id))
   }
   const onDirTree = (tree: DirTreeNode) => {
     _lastDirTree = tree
-    if (_diagView === 'tree') renderDirTree(document.getElementById('dir-tree-output')!, tree, (path) => void onGraphNodeClick(path))
+    if (_diagView === 'tree')
+      renderDirTree(document.getElementById('dir-tree-output')!, tree, (path) => void onGraphNodeClick(path))
   }
   const onStatus = (msg: string, ok: boolean) => {
     statusEl.textContent = msg

@@ -70,6 +70,13 @@ htmlcov/
 # Except tracked source files — override below if needed
 !apps/api/services/*.c
 !apps/api/services/*.cpp
+# Fase 26 (Algorithm Validation Engine) — drivers C reales para los kernels
+# de Assembly (asm_bench.rs/mergesort_bench.rs los traen con include_str!),
+# no artefactos compilados de Cython. Sin este override, `*.c` de arriba los
+# excluye en silencio de cualquier `git add -A` — exactamente el bug real
+# que rompió el build de CI (validate_sum_squares_driver.c/
+# validate_mergesort_driver.c nunca llegaron al repo).
+!services/complexity/src/kernels/*.c
 
 # mypy / pyright
 .mypy_cache/

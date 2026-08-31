@@ -11,6 +11,7 @@ import type { TabId } from '../types'
 import { appendLog, debounce } from '../utils/helpers'
 import { icon } from '../utils/icons'
 import { toggleTheme } from '../utils/theme'
+import type { DiagView } from './app'
 import {
   addURL,
   analyzeCurrentFile,
@@ -27,7 +28,6 @@ import {
   switchTab,
   toggleAuto,
 } from './app'
-import type { DiagView } from './app'
 import { getEditorValue } from './editor'
 import { toggleSearch } from './explorer'
 import { fitDiagram, initDiagramZoom, resetZoom, zoomIn, zoomOut } from './mermaid'

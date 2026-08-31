@@ -645,4 +645,3 @@ export function renderDirTree(container: HTMLElement, tree: DirTreeNode, onFileC
 
   container.appendChild(root)
 }
-
