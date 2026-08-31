@@ -260,6 +260,11 @@
             <button class="zoom-btn zoom-btn-fit" id="btn-zoom-fit" title="Ajustar al panel">⊡</button>
             <button class="zoom-btn" id="btn-zoom-reset" title="Tamaño real (1:1)">1:1</button>
           </div>
+          <div class="diag-view-toggle" id="diag-view-toggle" style="display:none;gap:2px">
+            <button class="btn btn-ghost btn-sm active" data-diag-view="mermaid" title="Árbol Mermaid">Árbol</button>
+            <button class="btn btn-ghost btn-sm" data-diag-view="force" title="Grafo interactivo — arrastrar nodos, click para abrir el archivo">Interactivo</button>
+            <button class="btn btn-ghost btn-sm" data-diag-view="tree" title="Árbol de directorios con complejidad por archivo">Directorio</button>
+          </div>
           <div style="flex:1"></div>
           <span id="diag-status" style="font-family:var(--mono);font-size:.65rem;color:var(--muted)"></span>
         </div>
@@ -268,8 +273,10 @@
           <div class="diag-viewport" id="diag-viewport">
             <div class="diag-canvas" id="diag-canvas">
               <div id="mermaid-output"><div class="empty">Selecciona archivo y genera el diagrama</div></div>
+              <div id="force-graph-output" style="display:none;width:100%;height:100%;min-height:400px"></div>
             </div>
           </div>
+          <div id="dir-tree-output" style="display:none;overflow:auto;flex:1;padding:10px 16px"></div>
           <div id="mermaid-code-container" style="display:none;padding:0 16px 16px">
             <div style="font-size:.6rem;color:var(--muted);font-family:var(--mono);margin:12px 0 5px">CÓDIGO MERMAID:</div>
             <div class="mermaid-code" id="mermaid-raw-code"></div>

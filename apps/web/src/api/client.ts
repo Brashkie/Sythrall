@@ -191,6 +191,31 @@ export interface WasmHint {
   estimated_speedup: string
 }
 
+// Fase 23 — "Memory visualizer": clasificación estática (AST) de cada
+// variable en stack/heap/data/bss, no una inspección de proceso corriendo
+// (ver `services/complexity/src/memlayout.rs`). `heap` no es una región de
+// variable — es un allocation site aparte, en `allocations`.
+export interface MemoryVariable {
+  name: string
+  region: 'stack' | 'data' | 'bss'
+  scope: string
+  line: number
+  type_hint: string
+}
+
+export interface AllocationSite {
+  kind: 'malloc' | 'calloc' | 'realloc' | 'free' | 'new' | 'delete'
+  line: number
+  variable: string | null
+}
+
+export interface MemoryLayoutResult {
+  variables: MemoryVariable[]
+  allocations: AllocationSite[]
+  summary: { stack: number; heap_allocations: number; data: number; bss: number }
+  note: string
+}
+
 export interface SecurityFinding {
   cwe: string
   category: string
@@ -207,7 +232,14 @@ export interface SecurityFinding {
 }
 
 export interface StructuralSmell {
-  kind: 'long_function' | 'excessive_parameters' | 'deep_nesting' | 'large_class' | 'god_object'
+  kind:
+    | 'long_function'
+    | 'excessive_parameters'
+    | 'deep_nesting'
+    | 'large_class'
+    | 'god_object'
+    | 'quadratic_list_membership'
+    | 'de_morgan_simplifiable'
   name: string
   line: number
   message: string
@@ -260,6 +292,7 @@ export interface StaticParseResult {
   dead_code: Array<{ type: string; name?: string; module: string; line: number }>
   call_graph: Array<{ from: string; to: string }>
   wasm_hints: WasmHint[]
+  memory_layout?: MemoryLayoutResult
   security_findings: SecurityFinding[]
   structural_smells: StructuralSmell[]
   naming_smells: NamingSmell[]
@@ -297,10 +330,40 @@ export interface StaticProjectResult {
 }
 
 /** Capacidad real del motor de análisis por lenguaje — `available` refleja
- * si la dependencia real (ej. tree-sitter) está instalada, no una promesa. */
+ * si el sidecar Rust (`complexity-engine`) está arriba, no una promesa. Los
+ * 5 lenguajes (Python/C/C++/JS/TS/Fortran) dependen de él ahora. */
 export interface StaticLanguagesResult {
   languages: Record<string, { extensions: string[]; parser: string; features: string[]; available: boolean }>
-  capabilities: { tree_sitter: boolean; networkx: boolean }
+  capabilities: { complexity_engine: boolean }
+}
+
+/** Fase 23 (Execution Intelligence) — validación empírica del O(n³) que
+ * `numerical_algorithm_note` predice por forma (Fase 20). Compila y corre un
+ * kernel Fortran que Sythrall mismo escribe (nunca el código del usuario) a
+ * varios tamaños, mide el tiempo real. `available: false` cuando `gfortran`
+ * o el sidecar no están disponibles — degrada con gracia, no es un error. */
+export interface EmpiricalValidationResult {
+  available: boolean
+  predicted_big_o: string
+  measurements: Array<{ n: number; seconds: number }>
+  estimated_exponent: number | null
+  note: string
+}
+
+/** Fase 26 — primera pieza de "migrar de numpy/pandas/scikit-learn" (pedido
+ * explícito del usuario): compara el kernel Fortran de matmul YA validado
+ * contra numpy real, mismos tamaños/datos, side by side — antes de proponer
+ * cualquier reemplazo nativo hay que medir contra la librería real, no
+ * asumir. `numpy.available` es `false` cuando numpy no está instalado en el
+ * entorno del backend, degrada con gracia igual que el resto. */
+export interface MatmulVsNumpyResult {
+  fortran: EmpiricalValidationResult
+  numpy: {
+    available: boolean
+    measurements: Array<{ n: number; seconds: number }>
+    note: string
+  }
+  comparison_note: string
 }
 
 // ─── Tipos Code Graph ─────────────────────────────────────────────────────────
@@ -556,4 +619,42 @@ export const api = {
   /** Capacidad real del motor por lenguaje (no una lista estática hardcodeada
    * en el frontend) — para el widget "Languages" del Dashboard. */
   staticLanguages: () => get<StaticLanguagesResult>('/static/languages'),
+
+  // ── Execution Intelligence (Fase 23) ──────────────────────────────────────
+
+  /** Compila y corre un kernel Fortran real para validar empíricamente el
+   * O(n³) detectado por forma en Fase 20 — puede tardar varios segundos
+   * (compila + corre 4 tamaños), a diferencia de todo lo demás en este
+   * cliente que es análisis estático instantáneo. */
+  validateMatmulBigO: () => post<EmpiricalValidationResult>('/execution/validate-matmul', {}),
+
+  /** Fase 26 — mismo patrón que `validateMatmulBigO`, generalizado a un
+   * segundo kernel Sythrall-autor: bubble sort real en Zig, valida O(n²). */
+  validateBubbleSortBigO: () => post<EmpiricalValidationResult>('/execution/validate-bubble-sort', {}),
+
+  /** Fase 26 — tercer kernel: suma de cuadrados escrita a mano en Assembly
+   * x86 (AT&T, cdecl), valida O(n). */
+  validateSumSquaresBigO: () => post<EmpiricalValidationResult>('/execution/validate-sum-squares', {}),
+
+  /** Fase 26 — cuarto kernel: BFS sobre un grafo disperso de grado fijo,
+   * segunda vez en Zig pero forma algorítmica distinta (recorrido de
+   * grafos, no ordenamiento), valida O(V+E). */
+  validateGraphBfsBigO: () => post<EmpiricalValidationResult>('/execution/validate-graph-bfs', {}),
+
+  /** Fase 26 — quinto kernel, el primero en validar una forma NO
+   * polinomial: Fibonacci recursivo ingenuo en Fortran, valida crecimiento
+   * exponencial (Θ(φⁿ)). `estimated_exponent` acá es la BASE medida del
+   * crecimiento, no un exponente `n^k` como en los otros 4 — ver
+   * `fib_bench.rs` para la razón estadística. */
+  validateFibonacciExponential: () => post<EmpiricalValidationResult>('/execution/validate-fibonacci', {}),
+
+  /** Fase 26 — sexto kernel, el primero en validar O(n log n): mergesort
+   * bottom-up iterativo escrito a mano en Assembly x86 (segunda vez en
+   * Assembly, forma algorítmica distinta a la suma de cuadrados). */
+  validateMergesortBigO: () => post<EmpiricalValidationResult>('/execution/validate-mergesort', {}),
+
+  /** Fase 26 — primera pieza de "migrar de numpy/pandas/scikit-learn":
+   * corre el kernel Fortran de matmul Y numpy real, mismos tamaños/datos,
+   * y devuelve ambos lado a lado con una nota de comparación honesta. */
+  compareMatmulVsNumpy: () => post<MatmulVsNumpyResult>('/execution/validate-matmul-vs-numpy', {}),
 }

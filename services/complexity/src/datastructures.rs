@@ -303,7 +303,7 @@ pub fn data_structure_note(info: &DataStructureInfo) -> Option<String> {
 /// `self.X = ...` para algún `X` en `names`, en cualquier método —
 /// independiente del valor asignado (a diferencia de
 /// `has_dict_self_attribute`, que además exige que el valor sea un dict).
-/// Mismo estilo de recorrido que `smells::count_self_attributes`.
+/// Mismo estilo de recorrido que `smells::self_attribute_names`.
 fn has_self_attribute_named(class_body: &[Stmt], names: &[&str]) -> bool {
     let mut found = false;
     for item in class_body {
@@ -333,7 +333,7 @@ fn has_self_attribute_named(class_body: &[Stmt], names: &[&str]) -> bool {
 
 /// `self.X = {}` (o `dict()`) en cualquier método — proxy de un mapa
 /// hijo-por-carácter (`children`), mismo estilo de recorrido que
-/// `smells::count_self_attributes`.
+/// `smells::self_attribute_names`.
 fn has_dict_self_attribute(class_body: &[Stmt]) -> bool {
     let mut found = false;
     for item in class_body {

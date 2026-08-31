@@ -3,11 +3,16 @@ shared.py — Estado global y helpers compartidos entre main y todos los routers
 Evita el circular import: routers importan de shared, no de main.
 """
 
+import asyncio
 import os
 import sys
 import tempfile
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from typing import TypeVar
+
+T = TypeVar("T")
 
 # ── Directorio de proyectos subidos ───────────────────────────────────────────
 # Absoluto y anclado a la raíz del repo (no relativo al cwd del proceso, que en
@@ -53,10 +58,6 @@ LIB_FLAGS: dict[str, bool] = {
     "HAS_CYTHON": False,
 }
 
-# Versiones (llenadas en main.py al arrancar)
-LIB_VERSIONS: dict[str, str | None] = {}
-
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -70,6 +71,16 @@ def add_log(level: str, msg: str) -> None:
     if len(LOG_HISTORY) > 200:
         LOG_HISTORY.pop(0)
     print(f"[{level.upper()}] {msg}")
+    # Persistencia en el sidecar (CBOR, ver services/log_client.py) — best
+    # effort, en una tarea de fondo: nunca debe agregarle latencia a este
+    # caller ni romper nada si el sidecar está caído. Los 29 call sites de
+    # add_log() en el proyecto no cambian, todos siguen siendo síncronos.
+    from services.log_client import persist_log
+
+    try:
+        asyncio.get_running_loop().create_task(persist_log(entry))
+    except RuntimeError:
+        pass  # no hay event loop corriendo todavía (no debería pasar en la práctica)
 
 
 def save_temp(content: str, suffix: str) -> str:
@@ -84,6 +95,23 @@ def safe_remove(path: str) -> None:
         os.unlink(path)
     except Exception:
         pass
+
+
+def dedup_by_key(items: list[T], key_fn: Callable[[T], object]) -> list[T]:
+    """Deduplica preservando el orden de la primera aparición — el mismo
+    `seen = set(); unique = []; for x in items: ... if key not in seen: ...`
+    aparecía copiado 6 veces (`routers/analysis.py` ×2, `routers/intelligence.py`
+    ×4), cada uno solo con una `key_fn` distinta. `key_fn` decide qué hace
+    "iguales" a dos items — line+message truncado, line+column, label+kind,
+    lo que el caller necesite."""
+    seen: set = set()
+    unique: list[T] = []
+    for item in items:
+        key = key_fn(item)
+        if key not in seen:
+            seen.add(key)
+            unique.append(item)
+    return unique
 
 
 def _get_lib_version(lib_name: str) -> str | None:

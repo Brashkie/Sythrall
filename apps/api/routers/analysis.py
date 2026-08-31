@@ -15,7 +15,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from shared import add_log, now, save_temp, safe_remove, API_HISTORY, UPLOADS_DIR
+from shared import add_log, dedup_by_key, now, save_temp, safe_remove, API_HISTORY, UPLOADS_DIR
 from services.project_service import read_project_files
 from services.complexity_client import analyze_complexity
 
@@ -111,12 +111,7 @@ async def analyze_code(req: AnalyzeCodeRequest):
                 )
 
         # Deduplicar
-        seen, unique = set(), []
-        for iss in result["issues"]:
-            k = (iss.get("line"), (iss.get("message") or "")[:40])
-            if k not in seen:
-                seen.add(k)
-                unique.append(iss)
+        unique = dedup_by_key(result["issues"], lambda iss: (iss.get("line"), (iss.get("message") or "")[:40]))
         result["issues"] = sorted(unique, key=lambda x: x.get("line") or 0)
 
     except Exception as e:
@@ -211,13 +206,7 @@ async def analyze_project(req: AnalyzeProjectRequest) -> dict[str, Any]:
             safe_remove(tmp)
 
     for r in results.values():
-        seen: set[tuple] = set()
-        unique: list[dict] = []
-        for iss in r["issues"]:
-            k = (iss.get("line"), (iss.get("message") or "")[:40])
-            if k not in seen:
-                seen.add(k)
-                unique.append(iss)
+        unique = dedup_by_key(r["issues"], lambda iss: (iss.get("line"), (iss.get("message") or "")[:40]))
         r["issues"] = sorted(unique, key=lambda x: x.get("line") or 0)
 
     return {"files": results}
@@ -322,6 +311,23 @@ def _run_ast(content: str, filename: str) -> list[dict]:
     return issues
 
 
+# Compartido por `_run_pylint`/`_run_pylint_batch` — antes copiado idéntico
+# en las dos. El resto de esas 2 funciones NO se fusiona más allá de esto:
+# `_run_pylint` extrae un score de `result.stderr`/`stdout` (pylint solo
+# calcula un score cuando corre sobre UN archivo, no por archivo en modo
+# batch) y usa un timeout distinto (30s/45s single vs 60s batch, más
+# archivos por corrida) — son diferencias de comportamiento reales, no
+# boilerplate clonado, así que forzarlas a compartir más código cambiaría
+# comportamiento en vez de solo remover duplicación.
+_PYLINT_SEVERITY_MAP = {
+    "error": "error",
+    "warning": "warning",
+    "convention": "info",
+    "refactor": "info",
+    "fatal": "error",
+}
+
+
 def _run_flake8(filepath: str) -> list[dict]:
     issues: list[dict] = []
     try:
@@ -372,15 +378,8 @@ def _run_pylint(filepath: str) -> tuple[list[dict], float | None]:
         raw = result.stdout.strip()
         if raw:
             try:
-                sev_map = {
-                    "error": "error",
-                    "warning": "warning",
-                    "convention": "info",
-                    "refactor": "info",
-                    "fatal": "error",
-                }
                 for item in json.loads(raw):
-                    sev = sev_map.get(item.get("type", "warning"), "warning")
+                    sev = _PYLINT_SEVERITY_MAP.get(item.get("type", "warning"), "warning")
                     issues.append(
                         {
                             "tool": "pylint",
@@ -466,15 +465,8 @@ def _run_pylint_batch(filepaths: list[str]) -> dict[str, list[dict]]:
         raw = result.stdout.strip()
         if raw:
             try:
-                sev_map = {
-                    "error": "error",
-                    "warning": "warning",
-                    "convention": "info",
-                    "refactor": "info",
-                    "fatal": "error",
-                }
                 for item in json.loads(raw):
-                    sev = sev_map.get(item.get("type", "warning"), "warning")
+                    sev = _PYLINT_SEVERITY_MAP.get(item.get("type", "warning"), "warning")
                     by_path.setdefault(item.get("path", ""), []).append(
                         {
                             "tool": "pylint",

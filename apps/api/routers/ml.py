@@ -2,8 +2,29 @@
 Router: ML
 Migración exacta de /analyze/ml del app.py Flask v3.0.
 Preserva: ML_LIB_MAP, PIPELINE_PATTERNS, MODEL_PATTERNS, METRIC_PATTERNS,
-_detect_ml_libraries, _detect_pipeline, _detect_models, _detect_metrics,
-_detect_ml_issues (con todas las 20+ reglas), _ml_diagram, _ml_score.
+_detect_ml_libraries_fallback, _detect_pipeline_fallback,
+_detect_models_fallback, _detect_metrics_fallback,
+_detect_ml_issues_fallback (con las 21 reglas), _ml_diagram, _ml_score.
+
+Reducción de Python (mandato "Rust es lo principal"): a diferencia de
+`metrics_live.py` (deliberadamente regex-only, un tier rápido separado del
+parser real) o `graph.py::_build_architecture_smells` (Python-only porque el
+import graph que necesita solo existe ahí), este router no tenía ninguna
+razón documentada para seguir siendo el motor real — era el bloque de
+cómputo no-relay más grande que quedaba en `apps/api`.
+
+Detección estructurada COMPLETA — libraries/pipeline/modelos/métricas Y las
+21 reglas heurísticas de issues — vive ahora en `services/complexity/src/ml.rs`
+(`POST /ml/detect`, un solo viaje de red: `detect_ml_issues` corre server-side
+sobre el mismo `Vec<MlLibrary>` que la detección de librerías ya calculó, no
+hace falta un segundo endpoint). Las 5 funciones `_detect_*` originales se
+quedan como `_fallback` (cuerpo sin cambios) para cuando el sidecar no
+responde — `ml.py` nunca tuvo dependencia del sidecar antes de este puerto,
+así que borrarlas sería una regresión, no una limpieza. Lo único que sigue
+siendo Python puro: `_ml_diagram`/`_ml_score` — presentación/scoring sobre
+datos ya estructurados, mismo criterio que `_py_flowchart_from_rich` en la
+migración de `diagram.py` (no vale la pena portar el armado de un string
+Mermaid ni la aritmética de un score).
 """
 
 import ast
@@ -12,7 +33,9 @@ from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
+from services.complexity_client import detect_ml_rust
 from shared import add_log, now, _get_lib_version
 
 router = APIRouter()
@@ -176,12 +199,14 @@ METRIC_PATTERNS: dict[str, str] = {
 # ── Endpoint ──────────────────────────────────────────────────────────────────
 
 
-@router.post("/ml")
-async def analyze_ml(req: AnalyzeMLRequest):
-    """Equivalente a POST /analyze/ml del Flask original."""
-    filename = req.filename
-    content = req.content
-
+def _analyze_ml_sync(filename: str, content: str, detection: dict | None) -> dict[str, Any]:
+    """El análisis real — bloqueante, por eso `analyze_ml` lo corre en
+    threadpool en vez de inline dentro del handler async (mismo criterio que
+    `analysis.py::_run_flake8`/`_run_pylint`). `detection` ya viene resuelto
+    desde `analyze_ml` (el `await` al sidecar es responsabilidad de ese
+    handler, no de acá) — `None` cuando el sidecar no respondió dispara los
+    5 detectores `_fallback` (idénticos al Python que existía antes de este
+    puerto)."""
     result: dict[str, Any] = {
         "filename": filename,
         "ts": now(),
@@ -195,12 +220,25 @@ async def analyze_ml(req: AnalyzeMLRequest):
         "suggestions": [],
     }
     try:
-        tree = ast.parse(content)
-        result["libraries"] = _detect_ml_libraries(tree)
-        result["pipeline"] = _detect_pipeline(content)
-        result["models"] = _detect_models(content)
-        result["metrics"] = _detect_metrics(content)
-        result["issues"] = _detect_ml_issues(content, result["libraries"])
+        if detection is not None:
+            libraries = detection["libraries"]
+            # `version` nunca puede calcularse en Rust — necesita introspeccionar
+            # el propio entorno Python del backend (`_get_lib_version`, shared.py).
+            for lib in libraries:
+                lib["version"] = _get_lib_version(lib["module"])
+            result["libraries"] = libraries
+            result["pipeline"] = detection["pipeline"]
+            result["models"] = detection["models"]
+            result["metrics"] = detection["metrics"]
+            result["issues"] = detection["issues"]
+        else:
+            tree = ast.parse(content)
+            result["libraries"] = _detect_ml_libraries_fallback(tree)
+            result["pipeline"] = _detect_pipeline_fallback(content)
+            result["models"] = _detect_models_fallback(content)
+            result["metrics"] = _detect_metrics_fallback(content)
+            result["issues"] = _detect_ml_issues_fallback(content, result["libraries"])
+
         result["diagram"] = _ml_diagram(result["pipeline"], result["models"], filename)
         result["score"], result["suggestions"] = _ml_score(content, result)
         add_log(
@@ -214,10 +252,29 @@ async def analyze_ml(req: AnalyzeMLRequest):
     return result
 
 
+@router.post("/ml")
+async def analyze_ml(req: AnalyzeMLRequest):
+    """Equivalente a POST /analyze/ml del Flask original.
+
+    Gate local de sintaxis antes de gastar una llamada de red al sidecar
+    (mismo criterio que `diagram.py`): si `req.content` no es Python válido,
+    `detection` se queda en `None` y `_analyze_ml_sync` termina
+    re-validando y reportando el mismo `SyntaxError` de siempre por su
+    cuenta — un solo lugar arma ese shape, no dos copias del mismo dict.
+    """
+    detection = None
+    try:
+        ast.parse(req.content)
+        detection = await detect_ml_rust(req.content)
+    except SyntaxError:
+        pass
+    return await run_in_threadpool(_analyze_ml_sync, req.filename, req.content, detection)
+
+
 # ── Funciones internas (idénticas al Flask original) ─────────────────────────
 
 
-def _detect_ml_libraries(tree: ast.AST) -> list[dict]:
+def _detect_ml_libraries_fallback(tree: ast.AST) -> list[dict]:
     # `found` se indexa por el NOMBRE CANÓNICO (info["name"], ej. "NumPy"), no
     # por el string de alias que matcheó — ML_LIB_MAP mapea a propósito tanto
     # "numpy" como "np" (mismo patrón para pandas/pd, tensorflow/tf, etc.) al
@@ -257,7 +314,7 @@ def _detect_ml_libraries(tree: ast.AST) -> list[dict]:
     return list(found.values())
 
 
-def _detect_pipeline(content: str) -> list[dict]:
+def _detect_pipeline_fallback(content: str) -> list[dict]:
     steps, seen = [], set()
     for pattern, stage_id, description in PIPELINE_PATTERNS:
         matches = list(re.finditer(pattern, content))
@@ -275,7 +332,7 @@ def _detect_pipeline(content: str) -> list[dict]:
     return sorted(steps, key=lambda x: x["line"])
 
 
-def _detect_models(content: str) -> list[dict]:
+def _detect_models_fallback(content: str) -> list[dict]:
     found, seen = [], set()
     for name, info in MODEL_PATTERNS.items():
         if re.search(r"\b" + re.escape(name) + r"\b", content) and name not in seen:
@@ -291,7 +348,7 @@ def _detect_models(content: str) -> list[dict]:
     return found
 
 
-def _detect_metrics(content: str) -> dict:
+def _detect_metrics_fallback(content: str) -> dict:
     metrics: dict = {}
     for metric, pattern in METRIC_PATTERNS.items():
         matches = re.findall(pattern, content, re.IGNORECASE)
@@ -313,7 +370,7 @@ def _detect_metrics(content: str) -> dict:
     return metrics
 
 
-def _detect_ml_issues(content: str, libraries: list[dict]) -> list[dict]:
+def _detect_ml_issues_fallback(content: str, libraries: list[dict]) -> list[dict]:
     issues: list[dict] = []
     lib_names = {lib.get("name", "").lower() for lib in libraries}
     lib_imports = " ".join(lib.get("import", "") for lib in libraries).lower()

@@ -26,6 +26,8 @@ import { state } from '../store/state'
 import type { TabId } from '../types'
 import { renderHealthCards } from '../utils/health'
 import { esc, toast } from '../utils/helpers'
+import { icon } from '../utils/icons'
+import type { IconName } from '../utils/icons'
 import {
   NAMING_SMELL_LABEL,
   renderBigODistribution,
@@ -234,6 +236,7 @@ const LANG_DISPLAY_NAME: Record<string, string> = {
   typescript: 'TypeScript',
   c: 'C',
   cpp: 'C++',
+  fortran: 'Fortran',
 }
 
 /** Distribución real de LOC por lenguaje del proyecto activo (arriba) +
@@ -390,12 +393,72 @@ function _serviceStatusLine(): string {
   </div>`
 }
 
+// ── Descubrimiento de capacidades ("Explora Sythrall") ────────────────────────
+// Solo aparece en el hero vacío (primer contacto) — comunica desde el
+// segundo 1 que Sythrall es una plataforma, no solo "subí tu código", sin
+// mentir sobre qué existe todavía: cada tarjeta lleva un estado explícito
+// (Disponible/Próximamente) en vez de mostrar las 6 como si ya funcionaran.
+// Las "Disponible" navegan al tab real que ya cubre esa capacidad; las
+// "Próximamente" no tienen destino — un click solo confirma que todavía no
+// existe, no rompe ni finge llevar a algún lado.
+interface ExploreCard {
+  icon: IconName
+  title: string
+  desc: string
+  tab?: TabId // presente solo si status es 'available'
+}
+
+const EXPLORE_AVAILABLE: ExploreCard[] = [
+  { icon: 'diagram', title: 'Deep Analysis', desc: 'Arquitectura, complejidad, calidad y dependencias.', tab: 'diagram' },
+  { icon: 'shield', title: 'Project Security', desc: 'Vulnerabilidades, secretos y dependencias riesgosas.', tab: 'static' },
+]
+
+const EXPLORE_SOON: ExploreCard[] = [
+  { icon: 'puzzle', title: 'Plugins & Extensions', desc: 'Analizadores, reglas e integraciones a medida.' },
+  { icon: 'ml', title: 'AI Models', desc: 'Conectá modelos de IA para potenciar el análisis.' },
+  { icon: 'settings', title: 'Personaliza Sythrall', desc: 'Adaptá reglas, modelos y apariencia a tu flujo.' },
+  { icon: 'users', title: 'Sythrall Family', desc: 'Compartí tu espacio de trabajo con tu equipo.' },
+]
+
+function _exploreCard(c: ExploreCard, available: boolean): string {
+  return `
+  <div class="dash-explore-card${available ? '' : ' dash-explore-soon'}"${available ? ` data-explore-tab="${c.tab}"` : ''}>
+    <div class="dash-explore-head">
+      ${icon(c.icon, 20)}
+      <span class="dash-explore-badge ${available ? 'dash-explore-badge-ok' : 'dash-explore-badge-soon'}">${available ? 'Disponible' : 'Próximamente'}</span>
+    </div>
+    <div class="dash-explore-title">${esc(c.title)}</div>
+    <div class="dash-explore-desc">${esc(c.desc)}</div>
+  </div>`
+}
+
+function _renderExploreGrid(): string {
+  const cards = [...EXPLORE_AVAILABLE.map((c) => _exploreCard(c, true)), ...EXPLORE_SOON.map((c) => _exploreCard(c, false))].join('')
+  return `
+  <div class="dash-explore">
+    <div class="dash-explore-heading">Explora Sythrall</div>
+    <div class="dash-explore-grid">${cards}</div>
+  </div>`
+}
+
+function _wireExploreGrid(root: ParentNode): void {
+  root.querySelectorAll<HTMLElement>('[data-explore-tab]').forEach((el) => {
+    el.addEventListener('click', () => _goto(el.dataset['exploreTab'] as TabId))
+  })
+  root.querySelectorAll<HTMLElement>('.dash-explore-soon').forEach((el) => {
+    el.addEventListener('click', () => toast('Todavía no está disponible — pronto', 'info'))
+  })
+}
+
 /** Estado vacío real (sin proyecto activo NI archivos sueltos) — el punto de
  * entrada de un usuario que recién abre Sythrall por primera vez. Antes era
  * un `<div class="empty">` con un mensaje de una línea; eso se sentía roto/
  * incompleto en vez de "todavía no hay nada que mostrar acá". El foco de
  * esta vista son las dos acciones (abrir/crear proyecto) — el estado del
- * servicio es una línea chica debajo, no el contenido principal. */
+ * servicio es una línea chica debajo, no el contenido principal. Debajo, el
+ * grid de descubrimiento (ver arriba) — deliberadamente después de las
+ * acciones, no antes: abrir/crear proyecto sigue siendo la acción principal
+ * del hero, el grid es contexto adicional, no compite por atención. */
 function _renderEmptyHero(): string {
   return `
   <div class="dash-hero">
@@ -407,7 +470,8 @@ function _renderEmptyHero(): string {
       <button class="btn btn-ghost" id="dash-hero-create">Crear proyecto</button>
     </div>
     ${_serviceStatusLine()}
-  </div>`
+  </div>
+  ${_renderExploreGrid()}`
 }
 
 function _wireEmptyHero(): void {
@@ -415,6 +479,7 @@ function _wireEmptyHero(): void {
   document.getElementById('dash-hero-create')?.addEventListener('click', () => {
     document.getElementById('btn-add-folder')?.click()
   })
+  _wireExploreGrid(document)
 }
 
 export function renderDashboard(): void {

@@ -36,7 +36,7 @@ interface GraphNode {
 
 // GraphResult se importa de client.ts
 // Tipos adicionales para Fase 2
-interface DirTreeNode {
+export interface DirTreeNode {
   name: string
   type: 'file' | 'directory'
   path: string
@@ -54,7 +54,10 @@ interface DirTreeNode {
 // ─── Estado del módulo ────────────────────────────────────────────────────────
 
 let _currentType = 'import'
-const _forceSimulation: unknown = null // d3 simulation
+// Limpia los listeners de `window` del render anterior de `renderForceGraph`
+// — ver el comentario junto a `window.addEventListener` más abajo para el
+// bug real que esto arregla.
+let _forceGraphCleanup: (() => void) | null = null
 
 // ══════════════════════════════════════════
 //  API pública — llamada desde diagram panel
@@ -136,6 +139,11 @@ export function renderForceGraph(
   result: GraphResult,
   onNodeClick?: (nodeId: string) => void,
 ): void {
+  // Cada render agregaba un par de listeners de `window` POR NODO (ver más
+  // abajo) que nunca se sacaban — re-renderizar (cambiar de tipo de grafo,
+  // volver a generar) los acumulaba para siempre. Sacar los del render
+  // anterior antes de armar los nuevos cierra esa fuga.
+  _forceGraphCleanup?.()
   container.innerHTML = ''
 
   const nodes =
@@ -231,6 +239,14 @@ export function renderForceGraph(
   const nodeMap: Record<string, any> = {}
   const nodeEls: Array<{ g: SVGGElement; circle: SVGCircleElement; text: SVGTextElement; data: any }> = []
 
+  // Drag: un solo estado compartido entre todos los nodos (cuál se está
+  // arrastrando ahora, si alguno) en vez de un par de listeners de `window`
+  // por nodo — antes N nodos significaba N mousemove/mouseup permanentes en
+  // `window`, nunca sacados ni siquiera dentro del mismo render.
+  let draggedNode: any = null
+  let dragDx = 0
+  let dragDy = 0
+
   for (const n of nodes) {
     const nd = n as any
     nodeMap[nd.id] = nd
@@ -278,30 +294,36 @@ export function renderForceGraph(
       onNodeClick?.(nd.id)
     })
 
-    // Drag
-    let dragging = false,
-      dx = 0,
-      dy = 0
+    // Drag — solo marca este nodo como el que se está arrastrando; el
+    // movimiento real lo hacen los 2 listeners de `window` de una sola vez,
+    // después del loop.
     ng.addEventListener('mousedown', (ev: MouseEvent) => {
       ev.stopPropagation()
-      dragging = true
-      dx = ev.clientX - nd.x
-      dy = ev.clientY - nd.y
+      draggedNode = nd
+      dragDx = ev.clientX - nd.x
+      dragDy = ev.clientY - nd.y
       svg.style.cursor = 'grabbing'
     })
-    window.addEventListener('mousemove', (ev: MouseEvent) => {
-      if (!dragging) return
-      nd.x = ev.clientX - dx
-      nd.y = ev.clientY - dy
-      nd.vx = nd.vy = 0
-      _updatePositions()
-    })
-    window.addEventListener('mouseup', () => {
-      if (dragging) {
-        dragging = false
-        svg.style.cursor = 'grab'
-      }
-    })
+  }
+
+  const onWindowMouseMove = (ev: MouseEvent) => {
+    if (!draggedNode) return
+    draggedNode.x = ev.clientX - dragDx
+    draggedNode.y = ev.clientY - dragDy
+    draggedNode.vx = draggedNode.vy = 0
+    _updatePositions()
+  }
+  const onWindowMouseUp = () => {
+    if (draggedNode) {
+      draggedNode = null
+      svg.style.cursor = 'grab'
+    }
+  }
+  window.addEventListener('mousemove', onWindowMouseMove)
+  window.addEventListener('mouseup', onWindowMouseUp)
+  _forceGraphCleanup = () => {
+    window.removeEventListener('mousemove', onWindowMouseMove)
+    window.removeEventListener('mouseup', onWindowMouseUp)
   }
 
   // Función de actualización de posiciones
@@ -624,41 +646,3 @@ export function renderDirTree(container: HTMLElement, tree: DirTreeNode, onFileC
   container.appendChild(root)
 }
 
-// ── Click nodo → abrir archivo en Monaco ──────────────────────────────────────
-
-/**
- * Conecta el click en un nodo del Force Graph al editor Monaco.
- * Dado un projectId y el path del nodo, carga el archivo en el editor.
- */
-export async function openNodeInEditor(
-  projectId: string,
-  nodePath: string,
-  onContent: (filename: string, content: string, language: string) => void,
-): Promise<void> {
-  try {
-    const fc = await api.getFileContent(projectId, nodePath)
-    if (fc?.content) {
-      const ext = nodePath.split('.').pop() ?? ''
-      const lang = _extToLanguage(ext)
-      onContent(nodePath, fc.content, lang)
-      appendLog('ok', `Abierto: ${nodePath}`, 'fe')
-    }
-  } catch (e) {
-    toast(`No se pudo abrir ${nodePath}: ${(e as Error).message}`, 'err')
-  }
-}
-
-function _extToLanguage(ext: string): string {
-  const map: Record<string, string> = {
-    py: 'python',
-    ts: 'typescript',
-    tsx: 'typescript',
-    js: 'javascript',
-    jsx: 'javascript',
-    c: 'c',
-    cpp: 'cpp',
-    h: 'c',
-    hpp: 'cpp',
-  }
-  return map[ext] ?? 'plaintext'
-}

@@ -75,6 +75,23 @@
 .bigo-grammar { background: rgba(184,125,255,.15); color: var(--purple); }
 .bigo-graph   { background: rgba(0,245,160,.12);   color: var(--ok); }
 .bigo-datastruct { background: rgba(255,182,39,.14); color: var(--warn); }
+.bigo-purity  { background: rgba(61,158,255,.10);  color: var(--info); }
+/* Fase 16: deliberadamente el tono más apagado de todo este grupo — "Type-1?"
+   es un patrón reconocido con teoría real detrás, no una clasificación
+   formal probada como Regex/CFG de arriba (ver el tooltip para el hedge). */
+.bigo-semantic { background: rgba(80,96,128,.14); color: var(--muted); }
+/* Fase 20 (Scientific Intelligence) — mismo tono cauteloso que .bigo-semantic:
+   "candidato"/"forma detectada", no un hecho verificado (ver el tooltip). */
+.bigo-vectorization { background: rgba(184,125,255,.14); color: var(--purple); }
+.bigo-numerical     { background: rgba(255,182,39,.14);  color: var(--warn); }
+.bigo-blas          { background: rgba(0,245,160,.12);   color: var(--ok); }
+/* Fase 23 (Execution Intelligence) — resultado de correr Fortran real, no
+   solo forma estática: verde si el exponente medido cae cerca de la
+   predicción (±0.3), ámbar si se aleja (sigue siendo información honesta,
+   no un error — hay ruido real de medición en cualquier entorno compartido). */
+.bigo-empirical    { display: inline-flex; align-items: center; gap: 4px; }
+.bigo-empirical-ok  { background: rgba(0,245,160,.12);  color: var(--ok); }
+.bigo-empirical-off { background: rgba(255,182,39,.14); color: var(--warn); }
 
 .bigo-badge {
   display: inline-block; padding: 2px 8px; border-radius: 4px;
@@ -106,6 +123,19 @@
   white-space: nowrap; width: 1%;
 }
 .bigo-notation-table td:nth-child(2) { color: var(--txt); }
+
+/* ─── Referencia genérica colapsable (Fase 16: Jerarquía de Chomsky —
+   primera en usar esto, pero deliberadamente sin nombre "bigo-*": pensada
+   para que cualquier otro bloque de referencia futuro la reuse) ────── */
+.ref-details { margin-bottom: 8px; font-size: .87rem; overflow-x: auto; }
+.ref-details summary { cursor: pointer; color: var(--muted); font-weight: 600; padding: 3px 0; user-select: none; }
+.ref-details summary:hover { color: var(--txt); }
+.ref-table { width: 100%; min-width: 420px; border-collapse: collapse; margin-top: 6px; font-size: .83rem; }
+.ref-table th { text-align: left; padding: 4px 8px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--b1); }
+.ref-table td { padding: 5px 8px; border-bottom: 1px solid var(--b0); color: var(--muted); vertical-align: top; }
+.ref-table tr:last-child td { border-bottom: none; }
+.ref-table td:first-child { font-family: var(--mono); font-weight: 700; color: var(--info); white-space: nowrap; }
+.ref-table td:nth-child(3) { color: var(--txt); }
 
 /* ─── Security & Taint findings (Fase 21) ─────────────── */
 .sec-disclaimer {
@@ -221,6 +251,29 @@
   padding: 5px 8px; border-radius: 0 4px 4px 0; margin-top: 5px;
   white-space: pre-line; font-family: var(--mono);
 }
+
+/* ─── Memory layout (Fase 23) ─────────────── */
+.st-mem-note {
+  font-size: .8rem; color: var(--muted); margin-bottom: 8px;
+  cursor: help; border-bottom: 1px dashed var(--b1); display: inline-block;
+}
+.st-mem-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.st-mem-region-title {
+  font-family: var(--mono); font-size: .8rem; font-weight: 700;
+  margin-bottom: 6px; text-transform: uppercase; letter-spacing: .04em;
+}
+.st-mem-var {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  background: var(--s2); border-left: 3px solid var(--info);
+  border-radius: 0 5px 5px 0; padding: 4px 8px; margin-bottom: 4px;
+  font-family: var(--mono); font-size: .83rem;
+}
+.st-mem-var-name  { color: var(--txt); font-weight: 700; }
+.st-mem-var-type  { color: var(--muted); }
+.st-mem-var-scope { color: var(--info); font-size: .77rem; }
 
 /* ─── Responsive ──────────────────────────── */
 @media (max-width: 680px) {

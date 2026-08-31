@@ -2,7 +2,7 @@
 
 Flujo de desarrollo local **sin Docker**: mismos comandos, en dos versiones —
 `.ps1` (PowerShell, Windows) y `.sh` (bash — Git Bash, WSL, macOS, Linux).
-Docker sigue siendo una alternativa válida (ver `docker-compose.yml` en la raíz);
+Docker sigue siendo una alternativa válida (ver `docker/docker-compose.yml`);
 estos scripts son un camino más directo para desarrollo día a día.
 
 Todos los manifiestos (`package.json`, `requirements.txt`, `pyproject.toml`, `biome.json`, `pytest.ini`, `Cargo.toml`) viven en la **raíz del repo**; `apps/` (web, api, terminal) y `services/` (terminal, complexity — sidecars Rust) solo contienen código fuente. Estos scripts son el único punto de entrada — no necesitas saber en qué carpeta vive cada cosa.
@@ -15,6 +15,7 @@ Todos los manifiestos (`package.json`, `requirements.txt`, `pyproject.toml`, `bi
 | `test` | `pytest` (backend) + `tsc --noEmit` (frontend). |
 | `lint` | `biome check` (frontend) + `ruff check` (backend) — solo reporta, no modifica archivos. |
 | `format` | `biome format --write` (frontend) + `ruff format` (backend) — escribe los cambios. |
+| `cross-compile [target]` | Fase 29 (Sythrall Platform) — cross-compila `complexity-engine`/`terminal-server` a otra plataforma usando [Zig](https://ziglang.org) como linker C (`cargo-zigbuild`, se instala solo si falta). Target por default `x86_64-unknown-linux-gnu`; probado de punta a punta Windows→Linux en esta máquina de desarrollo (produce un ELF real, no solo compila). Necesita `zig` en el PATH — el script no lo instala. |
 
 ## Uso
 

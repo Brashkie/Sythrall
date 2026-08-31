@@ -10,7 +10,7 @@ echo.
 
 cd /d "%~dp0"
 
-docker compose down
+docker compose -f docker\docker-compose.yml down
 
 echo.
 echo  [OK] Contenedores detenidos.

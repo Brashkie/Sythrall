@@ -23,9 +23,11 @@ import {
   runAll,
   runDiff,
   runMLAnalysis,
+  switchDiagView,
   switchTab,
   toggleAuto,
 } from './app'
+import type { DiagView } from './app'
 import { getEditorValue } from './editor'
 import { toggleSearch } from './explorer'
 import { fitDiagram, initDiagramZoom, resetZoom, zoomIn, zoomOut } from './mermaid'
@@ -262,6 +264,13 @@ export function wireAllEvents(): void {
   document.getElementById('btn-zoom-out')?.addEventListener('click', () => zoomOut())
   document.getElementById('btn-zoom-reset')?.addEventListener('click', () => resetZoom(true))
   document.getElementById('btn-zoom-fit')?.addEventListener('click', () => fitDiagram(true))
+
+  // ── Diagram: toggle Árbol / Interactivo / Directorio (mismo resultado,
+  // 3 vistas — ver switchDiagView en app.ts)
+  document.getElementById('diag-view-toggle')?.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-diag-view]')
+    if (btn) switchDiagView(btn.dataset.diagView as DiagView)
+  })
 
   // Inicializar zoom engine (attach wheel + drag listeners al viewport)
   initDiagramZoom()

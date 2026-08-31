@@ -3,11 +3,13 @@
 // ══════════════════════════════════════════
 // src/components/app.ts
 
+import type { GraphResult } from '../api/client'
 import { api } from '../api/client'
 import { renderFileAnalysis, renderMetrics } from '../panels/analysis'
 import { currentIssueSource, renderAPICards, renderIssuesList } from '../panels/apis'
 import { renderDashboard } from '../panels/dashboard'
-import { generateCodeGraph, generateProjectGraph } from '../panels/graph'
+import type { DirTreeNode } from '../panels/graph'
+import { generateCodeGraph, generateProjectGraph, renderDirTree, renderForceGraph } from '../panels/graph'
 import { clientMLAnalysis, renderMLResults } from '../panels/ml'
 import { clearSession, restoreSession, saveSession } from '../panels/problems'
 import { loadPersistedActiveProject, setActiveProject, state, updateTerminalAvailability } from '../store/state'
@@ -224,14 +226,14 @@ export async function checkBackend(): Promise<void> {
       <div class="metric-section">
         <div class="ms-title">Servidor</div>
         ${mr('Python', d.python?.toString().split(' ')[0])}
-        ${mr('flake8', d.flake8 ? '✓' : '✗')}
-        ${mr('pylint', d.pylint ? '✓' : '✗')}
-        ${mr('complexity', d.complexity ? '✓' : '✗')}
-        ${mr('PyTorch', d.torch ? '✓' : '✗')}
-        ${mr('TensorFlow', d.tensorflow ? '✓' : '✗')}
-        ${mr('Polars', d.polars ? '✓' : '✗')}
-        ${mr('LightGBM', d.lightgbm ? '✓' : '✗')}
-        ${mr('spaCy', d.spacy ? '✓' : '✗')}
+        ${cap('flake8', d.flake8)}
+        ${cap('pylint', d.pylint)}
+        ${cap('complexity', d.complexity)}
+        ${cap('PyTorch', d.torch)}
+        ${cap('TensorFlow', d.tensorflow)}
+        ${cap('Polars', d.polars)}
+        ${cap('LightGBM', d.lightgbm)}
+        ${cap('spaCy', d.spacy)}
       </div>`
     appendLog('ok', 'Backend OK — ' + d.server, 'be')
   } catch (e) {
@@ -252,6 +254,14 @@ export async function checkBackend(): Promise<void> {
 
 function mr(k: string, v: unknown, color?: string): string {
   return `<div class="metric-row"><span class="mr-k">${k}</span><span class="mr-v"${color ? ` style="color:${color}"` : ''}>${v ?? '—'}</span></div>`
+}
+
+// Mismo criterio de color que dashboard.ts's "Language Support" checklist
+// (disponible = var(--ok), no disponible = var(--muted)) — antes esta lista
+// de capacidades del servidor mostraba ✓/✗ sin color, la única checklist de
+// "¿está disponible esto?" del app que no coloreaba su propio estado.
+function cap(label: string, available: unknown): string {
+  return mr(label, available ? '✓' : '✗', available ? 'var(--ok)' : 'var(--muted)')
 }
 
 // ── Session restore: reabre el proyecto activo y el último archivo, si había,
@@ -422,12 +432,13 @@ function renderURLList(): void {
       const c =
         ({ ok: 'var(--ok)', warning: 'var(--warn)', down: 'var(--err)' } as Record<string, string>)[r?.status ?? ''] ??
         'var(--muted)'
+      const statusLabel = r?.status ? r.status.toUpperCase() : 'Sin chequear'
       return `<div class="url-item">
-      <div class="ui-dot" style="background:${c}"></div>
+      <div class="ui-dot" style="background:${c}" title="${esc(statusLabel)}"></div>
       <span class="ui-url" title="${esc(url)}">${esc(url)}</span>
       ${r?.ms ? `<span class="ui-ms">${r.ms}ms</span>` : ''}
       ${r?.code ? `<span class="ui-code">HTTP ${r.code}</span>` : ''}
-      <button class="btn btn-danger btn-sm" style="padding:2px 4px" data-remove-url="${esc(url)}">✕</button>
+      <button class="btn btn-danger btn-sm" style="padding:2px 4px" data-remove-url="${esc(url)}" title="Quitar URL">✕</button>
     </div>`
     })
     .join('')
@@ -749,6 +760,12 @@ export async function generateDiagram(): Promise<void> {
     return
   }
 
+  // Diagrama de archivo único: sin vistas alternativas (Force Graph/árbol
+  // son conceptos de proyecto completo) — ocultar el toggle y volver a
+  // Mermaid si venía de un grafo de proyecto.
+  document.getElementById('diag-view-toggle')!.style.display = 'none'
+  switchDiagView('mermaid')
+
   const selId = (document.getElementById('diag-file-sel') as HTMLSelectElement).value
   const f = state.files.find((x) => x.id === selId)
   if (!f) {
@@ -788,15 +805,78 @@ export async function generateDiagram(): Promise<void> {
   }
 }
 
+// ── Diagrama de proyecto: 3 vistas sobre el mismo resultado ───────────────────
+// Mermaid (árbol, siempre disponible), Force Graph interactivo y árbol de
+// directorios (los últimos 2 solo cuando el resultado los trae — dir_tree
+// solo viene de generateProjectGraph, con un project_id activo). Guardados
+// acá para poder cambiar de vista sin volver a pedirle nada al backend.
+let _lastGraphResult: GraphResult | null = null
+let _lastDirTree: DirTreeNode | null = null
+export type DiagView = 'mermaid' | 'force' | 'tree'
+let _diagView: DiagView = 'mermaid'
+
+/** Click en un nodo del Force Graph o un archivo del árbol de directorios —
+ * abre ese archivo en el editor. Con proyecto activo, `openProjectFile` lo
+ * trae del disco (y lo cachea en `state.files` si es la primera vez); sin
+ * proyecto (`generateCodeGraph`, arma el grafo sobre `state.files` ya
+ * cargados) alcanza con encontrarlo ahí y seleccionarlo, no hay nada que
+ * pedirle al backend. */
+async function onGraphNodeClick(path: string): Promise<void> {
+  if (state.activeProjectId) {
+    const { openProjectFile } = await import('../panels/upload')
+    await openProjectFile(state.activeProjectId, path)
+    return
+  }
+  const short = path.split('/').pop()
+  const f = state.files.find((x) => x.id === path || x.path === path || x.name === path || x.name === short)
+  if (f) {
+    selectFile(f.id)
+  } else {
+    toast(`No se encontró "${path}" entre los archivos cargados`, 'warn')
+  }
+}
+
+export function switchDiagView(view: DiagView): void {
+  _diagView = view
+  const toggle = document.getElementById('diag-view-toggle')
+  toggle?.querySelectorAll<HTMLButtonElement>('[data-diag-view]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.diagView === view)
+  })
+
+  const viewportEl = document.getElementById('diag-viewport')!
+  const mermaidEl = document.getElementById('mermaid-output')!
+  const forceEl = document.getElementById('force-graph-output')!
+  const treeEl = document.getElementById('dir-tree-output')!
+  const codeContainer = document.getElementById('mermaid-code-container')!
+
+  // #dir-tree-output vive AFUERA de #diag-viewport (no tiene sentido con el
+  // zoom/pan de Mermaid) — hay que ocultar el viewport entero para esa
+  // vista, no solo sus hijos, si no queda un hueco vacío arriba del árbol.
+  viewportEl.style.display = view === 'tree' ? 'none' : ''
+  mermaidEl.style.display = view === 'mermaid' ? '' : 'none'
+  forceEl.style.display = view === 'force' ? '' : 'none'
+  treeEl.style.display = view === 'tree' ? 'flex' : 'none'
+  // El código Mermaid/zoom solo tienen sentido para la vista Mermaid.
+  document.getElementById('zoom-controls')!.style.display = view === 'mermaid' ? '' : 'none'
+  if (view !== 'mermaid') codeContainer.style.display = 'none'
+  else if (state.currentMermaid) codeContainer.style.display = ''
+
+  if (view === 'force') {
+    if (_lastGraphResult) renderForceGraph(forceEl, _lastGraphResult, (id) => void onGraphNodeClick(id))
+    else forceEl.innerHTML = '<div class="empty">Generá el grafo primero</div>'
+  } else if (view === 'tree') {
+    if (_lastDirTree) renderDirTree(treeEl, _lastDirTree, (path) => void onGraphNodeClick(path))
+    else treeEl.innerHTML = '<div class="empty">Solo disponible con un proyecto activo (necesita dir_tree del server)</div>'
+  }
+}
+
 /**
  * Import Graph / Call Graph / Circular Deps / Heatmap — sobre el proyecto
  * activo si hay uno (panels/graph.ts:generateProjectGraph, lee del disco en
  * el server), o sobre state.files si no (generateCodeGraph, Fase 1). Reusa
- * el mismo pipeline de render Mermaid que el flowchart de archivo único.
- *
- * No incluye todavía el Force Graph interactivo ni el árbol de directorios
- * con complejidad por archivo (renderForceGraph/renderDirTree en graph.ts) —
- * quedan para una siguiente pasada, esto conecta el Tree View / Mermaid.
+ * el mismo pipeline de render Mermaid que el flowchart de archivo único, y
+ * ofrece Force Graph/árbol de directorios como vistas alternativas sobre el
+ * mismo resultado vía el toggle `#diag-view-toggle` (ver `switchDiagView`).
  */
 async function generateWholeProjectDiagram(graphType: string): Promise<void> {
   const outEl = document.getElementById('mermaid-output')!
@@ -808,10 +888,15 @@ async function generateWholeProjectDiagram(graphType: string): Promise<void> {
     wireProjectContextBanner(bannerEl)
   }
 
+  _lastGraphResult = null
+  _lastDirTree = null
+  document.getElementById('diag-view-toggle')!.style.display = 'flex'
+  switchDiagView('mermaid')
+
   const onMermaid = async (code: string) => {
     state.currentMermaid = code
     document.getElementById('mermaid-raw-code')!.textContent = code
-    document.getElementById('mermaid-code-container')!.style.display = ''
+    if (_diagView === 'mermaid') document.getElementById('mermaid-code-container')!.style.display = ''
     const svg = await renderDiagram(code)
     outEl.innerHTML = svg
     const svgEl = outEl.querySelector('svg')
@@ -819,6 +904,14 @@ async function generateWholeProjectDiagram(graphType: string): Promise<void> {
       svgEl.style.maxWidth = '100%'
       svgEl.style.height = 'auto'
     }
+  }
+  const onForce = (result: GraphResult) => {
+    _lastGraphResult = result
+    if (_diagView === 'force') renderForceGraph(document.getElementById('force-graph-output')!, result, (id) => void onGraphNodeClick(id))
+  }
+  const onDirTree = (tree: DirTreeNode) => {
+    _lastDirTree = tree
+    if (_diagView === 'tree') renderDirTree(document.getElementById('dir-tree-output')!, tree, (path) => void onGraphNodeClick(path))
   }
   const onStatus = (msg: string, ok: boolean) => {
     statusEl.textContent = msg
@@ -832,17 +925,12 @@ async function generateWholeProjectDiagram(graphType: string): Promise<void> {
       state.activeProjectId,
       graphType,
       (code) => void onMermaid(code),
-      () => {}, // Force Graph — pendiente de UI, ver docstring
-      () => {}, // Dir Tree — pendiente de UI, ver docstring
+      onForce,
+      onDirTree,
       onStatus,
     )
   } else {
-    await generateCodeGraph(
-      graphType,
-      (code) => void onMermaid(code),
-      () => {}, // Force Graph — pendiente de UI
-      onStatus,
-    )
+    await generateCodeGraph(graphType, (code) => void onMermaid(code), onForce, onStatus)
   }
 }
 
@@ -867,33 +955,38 @@ function generateMermaidFallback(name: string, content: string, _type: string): 
 //  DIFF
 // ══════════════════════════════════════════
 export async function runDiff(): Promise<void> {
-  const { createTwoFilesPatch } = await import('diff')
   const a = state.files.find((f) => f.id === (document.getElementById('diff-a') as HTMLSelectElement).value)
   const b = state.files.find((f) => f.id === (document.getElementById('diff-b') as HTMLSelectElement).value)
   if (!a || !b) {
     toast('Selecciona dos archivos', 'warn')
     return
   }
-  // createPatch() solo acepta UN nombre de archivo, usado para las dos
-  // cabeceras (---/+++) — para comparar dos archivos DISTINTOS (no dos
-  // versiones del mismo) hace falta createTwoFilesPatch, que sí acepta un
-  // nombre para cada lado. Antes ambas cabeceras mostraban a.name, aunque el
-  // contenido comparado sí era el correcto (a.content vs b.content).
-  const patch = createTwoFilesPatch(a.name, b.name, a.content, b.content)
-  const html = patch
-    .split('\n')
-    .map((l) => {
-      if (l.startsWith('+++')) return `<span style="color:var(--ok);font-weight:bold">${esc(l)}</span>`
-      if (l.startsWith('---')) return `<span style="color:var(--err);font-weight:bold">${esc(l)}</span>`
-      if (l.startsWith('+'))
-        return `<span style="background:rgba(0,245,160,.08);border-left:2px solid var(--ok);padding-left:6px">${esc(l)}</span>`
-      if (l.startsWith('-'))
-        return `<span style="background:rgba(255,51,102,.08);border-left:2px solid var(--err);padding-left:6px">${esc(l)}</span>`
-      if (l.startsWith('@@')) return `<span style="color:var(--purple)">${esc(l)}</span>`
-      return `<span style="color:var(--muted)">${esc(l)}</span>`
-    })
-    .join('\n')
-  document.getElementById('diff-out')!.innerHTML = html || '<span style="color:var(--ok)">Archivos idénticos</span>'
+  try {
+    const { createTwoFilesPatch } = await import('diff')
+    // createPatch() solo acepta UN nombre de archivo, usado para las dos
+    // cabeceras (---/+++) — para comparar dos archivos DISTINTOS (no dos
+    // versiones del mismo) hace falta createTwoFilesPatch, que sí acepta un
+    // nombre para cada lado. Antes ambas cabeceras mostraban a.name, aunque el
+    // contenido comparado sí era el correcto (a.content vs b.content).
+    const patch = createTwoFilesPatch(a.name, b.name, a.content, b.content)
+    const html = patch
+      .split('\n')
+      .map((l) => {
+        if (l.startsWith('+++')) return `<span style="color:var(--ok);font-weight:bold">${esc(l)}</span>`
+        if (l.startsWith('---')) return `<span style="color:var(--err);font-weight:bold">${esc(l)}</span>`
+        if (l.startsWith('+'))
+          return `<span style="background:rgba(0,245,160,.08);border-left:2px solid var(--ok);padding-left:6px">${esc(l)}</span>`
+        if (l.startsWith('-'))
+          return `<span style="background:rgba(255,51,102,.08);border-left:2px solid var(--err);padding-left:6px">${esc(l)}</span>`
+        if (l.startsWith('@@')) return `<span style="color:var(--purple)">${esc(l)}</span>`
+        return `<span style="color:var(--muted)">${esc(l)}</span>`
+      })
+      .join('\n')
+    document.getElementById('diff-out')!.innerHTML = html || '<span style="color:var(--ok)">Archivos idénticos</span>'
+  } catch (err) {
+    toast('Error generando el diff: ' + (err instanceof Error ? err.message : ''), 'err')
+    appendLog('warn', `runDiff: ${err instanceof Error ? err.message : err}`, 'fe')
+  }
 }
 
 // ══════════════════════════════════════════

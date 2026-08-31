@@ -8,6 +8,7 @@ el día que lo haya: ese día cambia quién se firma en `sub`, no cómo se
 verifica el token en el sidecar Rust.
 """
 
+import ipaddress
 import os
 import time
 
@@ -29,6 +30,13 @@ _SCOPE = "terminal"
 _TTL_SECONDS = 3600
 
 
+def _is_loopback_ip(ip_str: str) -> bool:
+    try:
+        return ipaddress.ip_address(ip_str).is_loopback
+    except ValueError:
+        return False
+
+
 def _is_loopback_request(request: Request) -> bool:
     """Mismo criterio que `is_loopback_request` en services/terminal/src/main.rs:
     el ÚLTIMO valor de X-Forwarded-For (el que estampa Vite con la IP real,
@@ -36,22 +44,11 @@ def _is_loopback_request(request: Request) -> bool:
     """
     xff = request.headers.get("x-forwarded-for")
     if xff:
-        last = xff.rsplit(",", 1)[-1].strip()
-        try:
-            import ipaddress
-
-            return ipaddress.ip_address(last).is_loopback
-        except ValueError:
-            return False
+        return _is_loopback_ip(xff.rsplit(",", 1)[-1].strip())
     client = request.client
     if client is None:
         return False
-    try:
-        import ipaddress
-
-        return ipaddress.ip_address(client.host).is_loopback
-    except ValueError:
-        return False
+    return _is_loopback_ip(client.host)
 
 
 @router.get("/terminal-token", tags=["Auth"])

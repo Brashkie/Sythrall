@@ -25,7 +25,7 @@ cd /d "%~dp0"
 
 echo.
 echo  [1/3] Construyendo imagenes...
-docker compose build --no-cache
+docker compose -f docker\docker-compose.yml build --no-cache
 IF %ERRORLEVEL% NEQ 0 (
     echo  [ERROR] Fallo al construir las imagenes.
     pause
@@ -34,7 +34,7 @@ IF %ERRORLEVEL% NEQ 0 (
 
 echo.
 echo  [2/3] Iniciando servicios...
-docker compose up -d
+docker compose -f docker\docker-compose.yml up -d
 IF %ERRORLEVEL% NEQ 0 (
     echo  [ERROR] Fallo al iniciar los contenedores.
     pause
@@ -62,4 +62,4 @@ start http://localhost:8080
 
 echo  Mostrando logs en tiempo real (Ctrl+C para salir):
 echo.
-docker compose logs -f
+docker compose -f docker\docker-compose.yml logs -f

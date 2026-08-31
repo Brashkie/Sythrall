@@ -37,11 +37,46 @@ ALLOWED_ROOTS = {"uploads"}  # Evitar path traversal
 
 
 def _safe_project_path(project_id: str) -> Path:
-    """Valida que el path del proyecto esté dentro de UPLOADS_DIR."""
+    """Valida que el path del proyecto esté dentro de UPLOADS_DIR.
+
+    `is_relative_to` en vez de comparar strings con `startswith`: un
+    directorio hermano cuyo nombre resuelto empieza con el mismo texto (ej.
+    `uploads/projects-backup` vs `uploads/projects`) pasaba el chequeo viejo
+    aunque estuviera completamente afuera — bug real de traversal, no solo
+    teórico, encontrado en auditoría."""
+    base = UPLOADS_DIR.resolve()
     path = (UPLOADS_DIR / project_id).resolve()
-    if not str(path).startswith(str(UPLOADS_DIR.resolve())):
+    if not path.is_relative_to(base):
         raise HTTPException(status_code=400, detail="Path inválido.")
     return path
+
+
+def _resolve_or_create_project_dir(project_id: str | None) -> tuple[str, Path]:
+    """Con `project_id`: reusa ese proyecto ya existente (404 si no está).
+    Sin él: genera uno nuevo y crea el directorio. `upload_files`/
+    `upload_folder` repetían este bloque byte a byte."""
+    if project_id:
+        project_dir = _safe_project_path(project_id)
+        if not project_dir.exists():
+            raise HTTPException(status_code=404, detail=f"Proyecto {project_id} no encontrado.")
+    else:
+        project_id = str(uuid.uuid4())
+        project_dir = UPLOADS_DIR / project_id
+        project_dir.mkdir(parents=True, exist_ok=True)
+    return project_id, project_dir
+
+
+async def _finalize_project(project_dir: Path, project_name: str, fallback: str) -> tuple[dict, str, dict]:
+    """tree → info → nombre resuelto → guardar metadata → podar proyectos
+    viejos — la cola común de los 4 endpoints que crean/modifican un
+    proyecto, antes copiada 4 veces con solo el `fallback` cambiando.
+    Devuelve `(tree, resolved_name, info)`."""
+    tree = await run_in_threadpool(build_tree, project_dir)
+    info = await run_in_threadpool(get_project_info, project_dir)
+    resolved_name = resolve_project_name(project_dir, info, project_name, fallback)
+    save_project_meta(project_dir, info)
+    await run_in_threadpool(prune_old_projects, UPLOADS_DIR)
+    return tree, resolved_name, info
 
 
 def _write_file_sync(dest: Path, content: bytes) -> None:
@@ -74,14 +109,7 @@ async def upload_files(
     if not files:
         raise HTTPException(status_code=400, detail="No se enviaron archivos.")
 
-    if project_id:
-        project_dir = _safe_project_path(project_id)
-        if not project_dir.exists():
-            raise HTTPException(status_code=404, detail=f"Proyecto {project_id} no encontrado.")
-    else:
-        project_id = str(uuid.uuid4())
-        project_dir = UPLOADS_DIR / project_id
-        project_dir.mkdir(parents=True, exist_ok=True)
+    project_id, project_dir = _resolve_or_create_project_dir(project_id)
 
     saved: list[dict] = []
     errors: list[dict] = []
@@ -104,11 +132,7 @@ async def upload_files(
 
         saved.append({"name": file.filename, "size": len(content), "path": safe_name})
 
-    tree = await run_in_threadpool(build_tree, project_dir)
-    info = await run_in_threadpool(get_project_info, project_dir)
-    resolved_name = resolve_project_name(project_dir, info, project_name, f"project-{project_id[:8]}")
-    save_project_meta(project_dir, info)
-    await run_in_threadpool(prune_old_projects, UPLOADS_DIR)
+    tree, resolved_name, _info = await _finalize_project(project_dir, project_name, f"project-{project_id[:8]}")
 
     logger.info(f"Upload files → project {project_id}: {len(saved)} OK, {len(errors)} errores")
 
@@ -140,14 +164,7 @@ async def upload_folder(
     if not files:
         raise HTTPException(status_code=400, detail="No se enviaron archivos.")
 
-    if project_id:
-        project_dir = _safe_project_path(project_id)
-        if not project_dir.exists():
-            raise HTTPException(status_code=404, detail=f"Proyecto {project_id} no encontrado.")
-    else:
-        project_id = str(uuid.uuid4())
-        project_dir = UPLOADS_DIR / project_id
-        project_dir.mkdir(parents=True, exist_ok=True)
+    project_id, project_dir = _resolve_or_create_project_dir(project_id)
 
     saved: list[dict] = []
     errors: list[dict] = []
@@ -214,13 +231,8 @@ async def upload_folder(
             }
         )
 
-    tree = await run_in_threadpool(build_tree, project_dir)
-    info = await run_in_threadpool(get_project_info, project_dir)
-    resolved_name = resolve_project_name(
-        project_dir, info, project_name, Path(files[0].filename or "").parts[0] if files else "folder"
-    )
-    save_project_meta(project_dir, info)
-    await run_in_threadpool(prune_old_projects, UPLOADS_DIR)
+    fallback = Path(files[0].filename or "").parts[0] if files else "folder"
+    tree, resolved_name, _info = await _finalize_project(project_dir, project_name, fallback)
 
     logger.info(
         f"Upload folder → project {project_id}: {len(saved)} archivos"
@@ -258,9 +270,7 @@ async def upload_zip(
     if not zipfile.is_zipfile(io.BytesIO(content)):
         raise HTTPException(status_code=400, detail="El archivo no es un ZIP válido.")
 
-    project_id = str(uuid.uuid4())
-    project_dir = UPLOADS_DIR / project_id
-    project_dir.mkdir(parents=True, exist_ok=True)
+    project_id, project_dir = _resolve_or_create_project_dir(None)
 
     # ZIPs grandes (cientos de archivos, hasta 200 MB) tardan — correrlos en
     # threadpool evita bloquear el event loop para el resto de las requests.
@@ -269,11 +279,7 @@ async def upload_zip(
     if result["errors"]:
         logger.warning(f"ZIP {project_id}: {len(result['errors'])} errores al extraer")
 
-    tree = await run_in_threadpool(build_tree, project_dir)
-    info = await run_in_threadpool(get_project_info, project_dir)
-    resolved_name = resolve_project_name(project_dir, info, project_name, Path(file.filename).stem)
-    save_project_meta(project_dir, info)
-    await run_in_threadpool(prune_old_projects, UPLOADS_DIR)
+    tree, resolved_name, info = await _finalize_project(project_dir, project_name, Path(file.filename).stem)
 
     logger.info(f"Upload ZIP → project {project_id}: {result['extracted']} archivos extraídos")
 
@@ -307,15 +313,8 @@ async def create_empty_project(project_name: str = Form(default="")):
     después con POST /projects/{id}/file (el mismo "+ Nuevo archivo" del
     explorador).
     """
-    project_id = str(uuid.uuid4())
-    project_dir = UPLOADS_DIR / project_id
-    project_dir.mkdir(parents=True, exist_ok=True)
-
-    tree = await run_in_threadpool(build_tree, project_dir)
-    info = await run_in_threadpool(get_project_info, project_dir)
-    resolved_name = resolve_project_name(project_dir, info, project_name, "proyecto-vacío")
-    save_project_meta(project_dir, info)
-    await run_in_threadpool(prune_old_projects, UPLOADS_DIR)
+    project_id, project_dir = _resolve_or_create_project_dir(None)
+    tree, resolved_name, _info = await _finalize_project(project_dir, project_name, "proyecto-vacío")
 
     logger.info(f"Proyecto vacío creado: {project_id} ({resolved_name})")
 
@@ -363,24 +362,30 @@ async def get_file_content(project_id: str, path: str):
     """Devuelve el contenido de un archivo dentro del proyecto."""
     project_dir = _safe_project_path(project_id)
 
-    # Validar path del archivo (anti path traversal)
+    # Validar path del archivo (anti path traversal) — is_relative_to, no
+    # comparación de strings (ver el comentario de _safe_project_path).
     file_path = (project_dir / path).resolve()
-    if not str(file_path).startswith(str(project_dir.resolve())):
+    if not file_path.is_relative_to(project_dir):
         raise HTTPException(status_code=400, detail="Path inválido.")
 
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="Archivo no encontrado.")
 
-    # Solo archivos de texto (máx 5 MB para lectura)
-    if file_path.stat().st_size > 5 * 1024 * 1024:
+    # stat()/read_text() son I/O bloqueante — sin run_in_threadpool acá,
+    # cada lectura de archivo (hasta 5 MB) congela el event loop para TODOS
+    # los pedidos concurrentes, no solo este. Mismo criterio que ya se aplica
+    # a _write_file_sync más abajo en este archivo (ver su comentario: un
+    # incidente real de miles de archivos bloqueando el loop, no algo teórico).
+    size = await run_in_threadpool(lambda: file_path.stat().st_size)
+    if size > 5 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Archivo muy grande para leer (máx 5 MB).")
 
     try:
-        content = file_path.read_text(encoding="utf-8", errors="replace")
+        content = await run_in_threadpool(file_path.read_text, encoding="utf-8", errors="replace")
         return {
             "path": path,
             "content": content,
-            "size": file_path.stat().st_size,
+            "size": size,
             "extension": file_path.suffix,
         }
     except Exception as e:
@@ -413,7 +418,7 @@ async def create_project_file(project_id: str, path: str = Form(...), content: s
         raise HTTPException(status_code=400, detail="Path inválido.")
 
     dest = project_dir.joinpath(*safe_parts)
-    if not str(dest.resolve()).startswith(str(project_dir.resolve())):
+    if not dest.resolve().is_relative_to(project_dir):
         raise HTTPException(status_code=400, detail="Path inválido.")
     if dest.exists():
         raise HTTPException(status_code=409, detail="Ya existe un archivo con ese nombre.")

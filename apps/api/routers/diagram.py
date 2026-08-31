@@ -1,16 +1,35 @@
 """
 Router: Diagram
 Migración exacta de /analyze/diagram del app.py Flask v3.0.
-Preserva: _py_flowchart, _py_callgraph, _py_classes, _py_sequence, _generic_flowchart.
+Preserva: _py_flowchart_fallback, _py_callgraph_fallback, _py_classes_fallback,
+_py_sequence_fallback, _generic_flowchart.
+
+Reducción de Python (siguiendo el mandato "Rust es lo principal"): los 4
+builders `.py` ya no re-parsean con su propio `ast.walk` cuando el sidecar
+Rust responde — `parse_python_rich` (el mismo que ya usa
+`static_parser.py::_parse_python`) trae funciones/clases/call_graph ya
+calculados, y este router solo arma el string Mermaid a partir de eso
+(`_py_*_from_rich`). Los 4 originales (`_py_*_fallback`, sin ningún cambio de
+cuerpo) se preservan como el camino sin sidecar — antes de esta migración
+estos builders eran 100% independientes del sidecar, así que borrarlos sería
+una regresión real, no una limpieza, mismo criterio que
+`static_parser.py::_parse_python` ya estableció para su propio esqueleto.
+
+`ml.py` sigue siendo el candidato grande de esta misma auditoría (~500
+líneas de heurística AST/regex sin ningún equivalente Rust todavía) — no se
+toca en esta pasada, es un puerto propio, no una tarde.
 """
 
 import ast
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
+from services.complexity_client import parse_python_rich
 from shared import add_log, now
 
 router = APIRouter()
@@ -27,31 +46,61 @@ class DiagramRequest(BaseModel):
 
 # ── Endpoint ──────────────────────────────────────────────────────────────────
 
+_SYNTAX_ERROR_MERMAID: dict[str, Callable[[SyntaxError], str]] = {
+    "flowchart": lambda e: f"flowchart TD\n    ERR[SyntaxError línea {e.lineno}]",
+    "callgraph": lambda e: "graph LR\n    ERR[Error de sintaxis]",
+    "classes": lambda e: "classDiagram\n    class Error",
+    "sequence": lambda e: "sequenceDiagram\n    participant Error",
+}
 
-@router.post("/diagram")
-async def analyze_diagram(req: DiagramRequest):
-    """Equivalente a POST /analyze/diagram del Flask original."""
-    filename = req.filename
-    content = req.content
-    diag_type = req.diagram_type
+
+def _analyze_diagram_sync(filename: str, content: str, diag_type: str, rich: dict | None) -> dict:
+    """Arma el string Mermaid — bloqueante (aunque liviano), corrido en
+    threadpool desde el handler async de abajo, mismo criterio que
+    `analysis.py::_run_flake8`/`_run_pylint`. `rich` ya viene resuelto (o
+    `None`) desde `analyze_diagram` — la llamada de red al sidecar es
+    responsabilidad de esa función async, no de acá adentro.
+
+    El `ast.parse()` local de gate (antes de decidir rich-vs-fallback) no es
+    redundancia desperdiciada: es el mismo gate rápido que
+    `static_parser.py::_parse_python` ya acepta, y es lo que le permite a
+    cada `diagram_type` seguir mostrando su propio texto de error de
+    sintaxis exacto (`_SYNTAX_ERROR_MERMAID`), en vez de heredar lo que sea
+    que el sidecar Rust hubiera devuelto para contenido inválido."""
     ext = Path(filename).suffix.lower()
-
     result = {"filename": filename, "diagram_type": diag_type, "mermaid": "", "ts": now()}
 
     try:
         if ext == ".py":
-            fns = {
-                "flowchart": _py_flowchart,
-                "callgraph": _py_callgraph,
-                "classes": _py_classes,
-                "sequence": _py_sequence,
-            }
-            fn = fns.get(diag_type, _py_flowchart)
-            # flowchart recibe filename; los demás solo content
-            if diag_type == "flowchart":
-                result["mermaid"] = fn(content, filename)
+            try:
+                ast.parse(content)
+            except SyntaxError as e:
+                result["mermaid"] = _SYNTAX_ERROR_MERMAID.get(diag_type, _SYNTAX_ERROR_MERMAID["flowchart"])(e)
+                add_log("info", f"Diagrama '{diag_type}' para {filename}")
+                return result
+
+            if rich is not None:
+                if diag_type == "callgraph":
+                    result["mermaid"] = _py_callgraph_from_rich(rich["functions"], rich["call_graph"])
+                elif diag_type == "classes":
+                    result["mermaid"] = _py_classes_from_rich(rich["classes"])
+                elif diag_type == "sequence":
+                    result["mermaid"] = _py_sequence_from_rich(rich["functions"])
+                else:
+                    result["mermaid"] = _py_flowchart_from_rich(rich["functions"], filename)
             else:
-                result["mermaid"] = fn(content)
+                fns = {
+                    "flowchart": _py_flowchart_fallback,
+                    "callgraph": _py_callgraph_fallback,
+                    "classes": _py_classes_fallback,
+                    "sequence": _py_sequence_fallback,
+                }
+                fn = fns.get(diag_type, _py_flowchart_fallback)
+                # flowchart recibe filename; los demás solo content
+                if diag_type == "flowchart":
+                    result["mermaid"] = fn(content, filename)
+                else:
+                    result["mermaid"] = fn(content)
         else:
             result["mermaid"] = _generic_flowchart(content, filename, ext)
 
@@ -63,10 +112,124 @@ async def analyze_diagram(req: DiagramRequest):
     return result
 
 
-# ── Funciones de diagramas (idénticas al Flask original) ─────────────────────
+@router.post("/diagram")
+async def analyze_diagram(req: DiagramRequest):
+    """Equivalente a POST /analyze/diagram del Flask original. Hace el
+    `await` al sidecar acá (I/O de red, no pertenece en el threadpool) antes
+    de pasarle el resultado ya resuelto a `_analyze_diagram_sync`."""
+    ext = Path(req.filename).suffix.lower()
+    rich = await parse_python_rich(req.filename, req.content) if ext == ".py" else None
+    return await run_in_threadpool(_analyze_diagram_sync, req.filename, req.content, req.diagram_type, rich)
 
 
-def _py_flowchart(content: str, filename: str = "script.py") -> str:
+# ── Builders .py — vía Rust (sidecar arriba) ──────────────────────────────────
+
+
+def _py_flowchart_from_rich(functions: list[dict], filename: str) -> str:
+    funcs = sorted(
+        [
+            {
+                "name": fn["name"],
+                "line": fn["line"],
+                "args": [a for a in fn.get("args", []) if a != "self"],
+                "returns": fn.get("returns_value", False),
+                "is_async": fn.get("is_async", False),
+                "docstring": (fn.get("docstring") or "")[:40].replace('"', "'"),
+            }
+            for fn in functions
+        ],
+        key=lambda x: x["line"],
+    )
+
+    if not funcs:
+        return f"flowchart TD\n" f"    A[{filename}]\n" f"    B[Sin funciones]\n" f"    A --> B"
+
+    lines = ["flowchart TD", f"    START([{filename}])"]
+    for i, fn in enumerate(funcs[:12]):
+        prefix = "async " if fn["is_async"] else ""
+        label = f'{prefix}{fn["name"]}({", ".join(fn["args"][:2])})'
+        if fn["docstring"]:
+            label += f'\\n{fn["docstring"]}'
+        lines.append(f'    F{i}["{label}"]')
+
+    lines += ["    END([Fin])", "    START --> F0"]
+    for i in range(min(len(funcs), 12) - 1):
+        lines.append(f"    F{i} --> F{i+1}")
+    lines.append(f"    F{min(len(funcs)-1, 11)} --> END")
+
+    for i, fn in enumerate(funcs[:12]):
+        c = "#300a3a" if fn["is_async"] else ("#0f3020" if fn["returns"] else "#1a2040")
+        s = "#b87dff" if fn["is_async"] else ("#00f5a0" if fn["returns"] else "#3d9eff")
+        lines.append(f"    style F{i} fill:{c},stroke:{s},color:#c8d4f0")
+
+    lines += [
+        "    style START fill:#0a2040,stroke:#3d9eff,color:#c8d4f0",
+        "    style END fill:#0a2040,stroke:#3d9eff,color:#c8d4f0",
+    ]
+    return "\n".join(lines)
+
+
+def _py_callgraph_from_rich(functions: list[dict], call_graph: list[dict]) -> str:
+    func_names = {fn["name"] for fn in functions}
+    if not func_names:
+        return "graph LR\n    A[Sin funciones]"
+
+    lines = ["graph LR"] + [f'    {name}["{name}"]' for name in list(func_names)[:12]]
+    seen: set[str] = set()
+    for edge in call_graph:
+        caller, callee = edge.get("from"), edge.get("to")
+        if not caller or not callee or caller not in func_names or callee not in func_names:
+            continue
+        k = f"{caller}_{callee}"
+        if k not in seen:
+            seen.add(k)
+            lines.append(f"    {caller} -->|llama| {callee}")
+
+    return "\n".join(lines)
+
+
+def _py_classes_from_rich(classes: list[dict]) -> str:
+    if not classes:
+        return "classDiagram\n    class SinClases"
+
+    class_names = {c["name"] for c in classes}
+    lines = ["classDiagram"]
+    for cls in classes[:8]:
+        lines.append(f'    class {cls["name"]} {{')
+        for a in cls.get("attributes", [])[:6]:
+            lines.append(f"        +{a}")
+        for m in cls.get("methods", [])[:8]:
+            args = [a for a in m.get("args", []) if a != "self"]
+            lines.append(f'        +{m["name"]}({", ".join(args[:3])})')
+        lines.append("    }")
+        for base in cls.get("bases", []):
+            if base in class_names:
+                lines.append(f"    {base} <|-- {cls['name']} : hereda")
+
+    return "\n".join(lines)
+
+
+def _py_sequence_from_rich(functions: list[dict]) -> str:
+    funcs = sorted(functions, key=lambda x: x["line"])
+
+    if len(funcs) < 2:
+        return "sequenceDiagram\n" "    participant main\n" "    main->>main: ejecutar\n" "    main-->>main: fin"
+
+    lines = ["sequenceDiagram", "    participant Usuario"] + [f'    participant {fn["name"]}' for fn in funcs[:6]]
+    lines.append(f'    Usuario->>+{funcs[0]["name"]}: invocar')
+    for i in range(min(len(funcs), 5) - 1):
+        lines.append(f'    {funcs[i]["name"]}->>+{funcs[i+1]["name"]}: llamar')
+    for i in range(min(len(funcs), 5) - 1, 0, -1):
+        lines.append(f'    {funcs[i]["name"]}-->>-{funcs[i-1]["name"]}: retornar')
+    lines.append(f'    {funcs[0]["name"]}-->>-Usuario: resultado')
+
+    return "\n".join(lines)
+
+
+# ── Builders .py — fallback sin sidecar (idénticos al Flask original) ────────
+
+
+def _py_flowchart_fallback(content: str, filename: str = "script.py") -> str:
     try:
         tree = ast.parse(content)
     except SyntaxError as e:
@@ -116,7 +279,7 @@ def _py_flowchart(content: str, filename: str = "script.py") -> str:
     return "\n".join(lines)
 
 
-def _py_callgraph(content: str) -> str:
+def _py_callgraph_fallback(content: str) -> str:
     try:
         tree = ast.parse(content)
     except Exception:
@@ -159,7 +322,7 @@ def _py_callgraph(content: str) -> str:
     return "\n".join(lines)
 
 
-def _py_classes(content: str) -> str:
+def _py_classes_fallback(content: str) -> str:
     try:
         tree = ast.parse(content)
     except Exception:
@@ -222,7 +385,7 @@ def _py_classes(content: str) -> str:
     return "\n".join(lines)
 
 
-def _py_sequence(content: str) -> str:
+def _py_sequence_fallback(content: str) -> str:
     try:
         tree = ast.parse(content)
     except Exception:

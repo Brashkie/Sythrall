@@ -1,5 +1,8 @@
-# Keeps the build context small now that both apps/api/ and apps/web/
-# Dockerfiles share the repo root as their context.
+# Keeps the build context small — all 4 Dockerfiles (docker/*.Dockerfile)
+# share the repo root as their build context (`context: ..` in
+# docker/docker-compose.yml). This file MUST stay at the repo root, not in
+# docker/: Docker only reads .dockerignore from the build context directory,
+# never from the Dockerfile's own directory.
 
 node_modules
 dist

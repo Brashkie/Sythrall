@@ -35,7 +35,7 @@ export function renderAPICards(): void {
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <span style="width:8px;height:8px;border-radius:50%;background:${c};flex-shrink:0"></span>
         <span class="ac-url" style="color:${c}" title="${a.url}">${a.url}</span>
-        <button class="btn btn-ghost btn-sm" data-recheck="${a.url}">↺</button>
+        <button class="btn btn-ghost btn-sm" data-recheck="${a.url}" title="Volver a chequear">↺</button>
       </div>
       <div class="ac-metrics">
         <div class="acm"><div class="acm-k">Estado</div><div class="acm-v" style="color:${c}">${a.status.toUpperCase()}</div></div>

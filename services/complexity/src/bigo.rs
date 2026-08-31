@@ -15,6 +15,35 @@ pub struct BigO {
     pub theta: String,
     pub omega: String,
     pub recurrence: Option<String>,
+    /// Fase 15 (Mathematical Intelligence): Combinatoria — ver
+    /// `combinatorics_note` más abajo.
+    pub combinatorics_note: Option<String>,
+}
+
+/// Fase 15 (Mathematical Intelligence), tercer ítem: la cardinalidad de
+/// loops anidados ya se calcula para Big-O (`depth`, de `loop_analysis` acá
+/// mismo) — esto reencuadra ese mismo número explícitamente como lo que en
+/// realidad es: la regla del producto (multiplication principle) de
+/// combinatoria, no solo una "complejidad" abstracta. `depth` loops
+/// anidados, cada uno recorriendo n elementos, consideran exactamente n^depth
+/// combinaciones — el mismo conteo que se usa para contar tuplas ordenadas
+/// de longitud `depth` con repetición a partir de n elementos. Deliberadamente
+/// acotado a loops anidados puros (`!is_recursive && !binary`): O(log n)
+/// (búsqueda binaria), O(n log n) (loop + recursión) y O(2^n) (recursión sin
+/// reducir el problema) no tienen esta misma lectura de "regla del
+/// producto sobre loops", así que no se les agrega la nota.
+fn combinatorics_note(depth: u32, is_recursive: bool, binary: bool) -> Option<String> {
+    if is_recursive || binary || depth == 0 {
+        return None;
+    }
+    if depth == 1 {
+        return Some(
+            "Single pass over n elements — one independent choice, no combinatorial interaction with anything else in the loop".to_string(),
+        );
+    }
+    Some(format!(
+        "{depth} nested loops, each ranging independently over n — by the rule of product (multiplication principle), that's n^{depth} total combinations considered, the same count as ordered {depth}-tuples with repetition drawn from n elements"
+    ))
 }
 
 /// Señal de recursión divide-and-conquer: `a` subproblemas (de
@@ -148,13 +177,14 @@ pub fn full(body: &[Stmt], name: &str, is_recursive: bool) -> (BigO, Option<Divi
     let binary = has_binary_split(body);
     let (big_o, reason) = infer(is_recursive, depth, binary);
     let (theta, omega) = theta_omega(has_early_exit, &big_o);
+    let combinatorics_note = combinatorics_note(depth, is_recursive, binary);
     let signal = if is_recursive && binary {
         let a = divide_conquer_factor(body, name);
         (a > 0).then_some(DivideConquerSignal { a, c_own: depth })
     } else {
         None
     };
-    (BigO { big_o, reason, theta, omega, recurrence: None }, signal)
+    (BigO { big_o, reason, theta, omega, recurrence: None, combinatorics_note }, signal)
 }
 
 fn calls_self(expr: &Expr, name: &str) -> bool {
@@ -303,4 +333,74 @@ pub fn resolve_master_theorem(sig: &DivideConquerSignal, callee_degrees: &[u32])
     let theta = format!("\u{398}({theta_inner})");
     let big_o = format!("O({theta_inner})");
     (recurrence, big_o, theta.clone(), theta, reason)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::parse_module;
+
+    fn first_function_body(src: &str) -> Vec<Stmt> {
+        let suite = parse_module(src).unwrap();
+        for stmt in &suite {
+            if let Stmt::FunctionDef(f) = stmt {
+                return f.body.clone();
+            }
+        }
+        panic!("no se encontró ninguna función en el src de prueba");
+    }
+
+    #[test]
+    fn sin_loops_ni_recursion_no_tiene_nota_combinatoria() {
+        assert!(combinatorics_note(0, false, false).is_none());
+    }
+
+    #[test]
+    fn un_loop_da_nota_de_paso_unico() {
+        let note = combinatorics_note(1, false, false).unwrap();
+        assert!(note.contains("Single pass"));
+    }
+
+    #[test]
+    fn dos_loops_anidados_da_regla_del_producto_n_cuadrado() {
+        let note = combinatorics_note(2, false, false).unwrap();
+        assert!(note.contains("n^2"));
+        assert!(note.contains("rule of product"));
+    }
+
+    #[test]
+    fn tres_loops_anidados_da_regla_del_producto_n_cubo() {
+        let note = combinatorics_note(3, false, false).unwrap();
+        assert!(note.contains("n^3"));
+    }
+
+    #[test]
+    fn recursion_no_tiene_nota_combinatoria_aunque_haya_loops() {
+        // O(n log n) (loop + recursión) no es una lectura de "regla del
+        // producto sobre loops anidados" — se deja sin nota a propósito.
+        assert!(combinatorics_note(1, true, false).is_none());
+    }
+
+    #[test]
+    fn busqueda_binaria_no_tiene_nota_combinatoria() {
+        assert!(combinatorics_note(1, false, true).is_none());
+    }
+
+    #[test]
+    fn funcion_o_n2_end_to_end_tiene_nota_combinatoria() {
+        let src = "def f(items):\n    for a in items:\n        for b in items:\n            print(a, b)\n";
+        let body = first_function_body(src);
+        let (bigo, _) = full(&body, "f", false);
+        assert_eq!(bigo.big_o, "O(n\u{b2})");
+        assert!(bigo.combinatorics_note.unwrap().contains("n^2"));
+    }
+
+    #[test]
+    fn funcion_o_log_n_end_to_end_no_tiene_nota_combinatoria() {
+        let src = "def f(n):\n    while n > 1:\n        n = n // 2\n";
+        let body = first_function_body(src);
+        let (bigo, _) = full(&body, "f", false);
+        assert_eq!(bigo.big_o, "O(log n)");
+        assert!(bigo.combinatorics_note.is_none());
+    }
 }

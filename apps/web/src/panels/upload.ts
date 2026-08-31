@@ -876,8 +876,13 @@ export async function loadRecentProjects(): Promise<void> {
     const { projects } = await api.listProjects()
     st.projects = projects
     renderUploadPanel()
-  } catch {
-    // Silencioso — no crítico si el backend no responde
+  } catch (err) {
+    // Antes silencioso del todo — un fallo de red se veía indistinguible de
+    // "todavía no creaste ningún proyecto" (mismo empty-state). Un toast no
+    // es más ruidoso que el resto de los paneles: esto se llama una vez al
+    // montar el panel + después de subir/eliminar, no en un polling loop.
+    toast('No se pudieron cargar los proyectos recientes', 'err')
+    appendLog('warn', `loadRecentProjects: ${err instanceof Error ? err.message : err}`, 'fe')
   }
 }
 

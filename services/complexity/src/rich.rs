@@ -1,17 +1,19 @@
 //! Punto de entrada de la Fase 1 de migración: arma el mismo shape que
 //! `_parse_python()` en `static_parser.py` (functions/classes/imports/
-//! call_graph/summary) para un archivo Python, combinando complexity.rs +
-//! bigo.rs + recursion.rs + classifiers.rs + structure.rs. `call_graph` se
-//! agregó después (agregación pura sobre `calls`, ya calculado acá — ver
-//! `build_call_graph` más abajo). Deliberadamente NO incluye `wasm_hints` ni
-//! `dead_code` — esos necesitan razonamiento que Rust todavía no tiene
-//! (heurístico WASM) o son heurísticas triviales que no vale la pena mover
-//! (imports no usados). `static_parser.py` sigue siendo la fuente de verdad
-//! para esas dos piezas. (`circular_deps`, que vivía acá en versiones
-//! anteriores de este comentario, se eliminó del todo — resultó ser código
-//! muerto, cero consumidores en el frontend.)
+//! call_graph/wasm_hints/summary) para un archivo Python, combinando
+//! complexity.rs + bigo.rs + recursion.rs + classifiers.rs + structure.rs +
+//! wasm.rs. `call_graph`/`wasm_hints` se agregaron después (agregación pura
+//! sobre datos ya calculados acá — ver `build_call_graph`/`wasm::wasm_hints`
+//! más abajo). `dead_code` (imports no usados) se sumó después
+//! (`structure::unused_imports`) — Fase 18, Project Scanner: necesitaba que
+//! Rust devolviera el shape *completo* por archivo en una sola llamada, sin
+//! que Python tuviera que recibir el contenido de vuelta solo para recalcular
+//! esta pieza. `static_parser.py::_parse_python` la sigue calculando en el
+//! camino sin sidecar (`rich is None`) — ver su docstring. (`circular_deps`,
+//! que vivía acá en versiones anteriores de este comentario, se eliminó del
+//! todo — resultó ser código muerto, cero consumidores en el frontend.)
 
-use rustpython_parser::ast::Stmt;
+use rustpython_parser::ast::{Expr, Stmt};
 use serde::Serialize;
 
 use crate::bigo;
@@ -25,6 +27,8 @@ use crate::security::{self, SecurityFinding};
 use crate::smells::{self, StructuralSmell};
 use crate::space;
 use crate::structure::{self, RichClass, RichImport};
+use crate::walk::walk_stmts;
+use crate::wasm::{self, WasmHint};
 
 #[derive(Serialize, Clone)]
 pub struct RichFunction {
@@ -41,11 +45,16 @@ pub struct RichFunction {
     pub big_o_reason: String,
     pub big_o_theta: String,
     pub big_o_omega: String,
+    /// Fase 15 (Mathematical Intelligence): Combinatoria — ver `bigo::combinatorics_note`.
+    pub combinatorics_note: Option<String>,
     pub space_complexity: String,
     pub space_reason: String,
     pub is_recursive: bool,
     pub is_tail_recursive: bool,
     pub recursion_note: Option<String>,
+    /// Fase 15 (Mathematical Intelligence): Proof-by-induction framing —
+    /// ver `recursion::induction_note`.
+    pub induction_note: Option<String>,
     pub recurrence: Option<String>,
     /// Señal de recursión divide-and-conquer (a, c_own) — interna, se
     /// resuelve en el segundo pase de `analyze_rich` (`apply_master_theorem`)
@@ -59,10 +68,43 @@ pub struct RichFunction {
     pub grammar_note: Option<String>,
     pub graph_traversal: Option<String>,
     pub graph_traversal_note: Option<String>,
+    /// Fase 16 (Formal Language Intelligence): patrón de análisis semántico
+    /// — informalmente Type-1 (Context-Sensitive), ver
+    /// `classifiers::semantic_analysis_note` para el hedge completo.
+    pub semantic_analysis_class: Option<String>,
+    pub semantic_analysis_note: Option<String>,
     pub data_structure: Option<String>,
     pub data_structure_note: Option<String>,
     pub calls: Vec<String>,
     pub returns_annotated: bool,
+    /// `true` si el cuerpo contiene al menos un `return <valor>` en cualquier
+    /// punto (incluyendo funciones anidadas — mismo alcance que `ast.walk`,
+    /// no el scope-aware que usa taint tracking). Distinto de
+    /// `returns_annotated` (que solo mira la anotación `-> T`, no si el
+    /// cuerpo realmente retorna algo) — usado por `apps/api/routers/
+    /// diagram.py` para colorear el nodo del flowchart.
+    pub returns_value: bool,
+    /// Fase 15 (Mathematical Intelligence): pure vs. side-effecting — ver
+    /// `purity.rs` para el alcance exacto (intra-procedural, conservador).
+    pub is_pure: bool,
+    pub purity_note: String,
+}
+
+/// Puerto de `any(isinstance(x, ast.Return) and x.value for x in ast.walk(n))`
+/// (`diagram.py::_py_flowchart`) — `walk_stmts` (no `walk_stmts_own_scope`)
+/// porque `ast.walk` original desciende a funciones anidadas también.
+fn has_return_with_value(body: &[Stmt]) -> bool {
+    let mut found = false;
+    let mut on_stmt = |stmt: &Stmt| {
+        if let Stmt::Return(r) = stmt {
+            if r.value.is_some() {
+                found = true;
+            }
+        }
+    };
+    let mut on_expr = |_: &Expr| {};
+    walk_stmts(body, &mut on_stmt, &mut on_expr);
+    found
 }
 
 #[derive(Serialize, Clone)]
@@ -85,7 +127,9 @@ pub struct RichAnalysisResult {
     pub functions: Vec<RichFunction>,
     pub classes: Vec<RichClass>,
     pub imports: Vec<RichImport>,
+    pub dead_code: Vec<structure::DeadImport>,
     pub call_graph: Vec<RichCallEdge>,
+    pub wasm_hints: Vec<WasmHint>,
     pub security_findings: Vec<SecurityFinding>,
     pub structural_smells: Vec<StructuralSmell>,
     pub naming_smells: Vec<NamingSmell>,
@@ -122,7 +166,9 @@ pub fn analyze_rich(content: &str) -> RichAnalysisResult {
                 functions: Vec::new(),
                 classes: Vec::new(),
                 imports: Vec::new(),
+                dead_code: Vec::new(),
                 call_graph: Vec::new(),
+                wasm_hints: Vec::new(),
                 security_findings: Vec::new(),
                 structural_smells: Vec::new(),
                 naming_smells: Vec::new(),
@@ -148,6 +194,7 @@ pub fn analyze_rich(content: &str) -> RichAnalysisResult {
 
     let classes = structure::extract_classes(content, &suite);
     let imports = structure::extract_imports(content, &suite);
+    let dead_code = structure::unused_imports(&suite, &imports);
 
     for c in &classes {
         structural_smells.extend(smells::check_large_class(&c.name, c.line, c.methods.len(), c.loc));
@@ -175,9 +222,11 @@ pub fn analyze_rich(content: &str) -> RichAnalysisResult {
             max_loc_function,
         },
         call_graph: build_call_graph(&functions),
+        wasm_hints: wasm::wasm_hints(&functions, content),
         functions,
         classes,
         imports,
+        dead_code,
         security_findings,
         structural_smells,
         naming_smells,
@@ -197,13 +246,13 @@ fn collect_functions(
             Stmt::FunctionDef(f) => {
                 security_out.extend(security::security_findings(&f.name, &f.body, source));
                 let rf = build_function(source, &f.name, f.range, &f.body, &f.args, &f.decorator_list, f.returns.is_some(), false);
-                smells_out.extend(function_smells(&rf, &f.body));
+                smells_out.extend(function_smells(&rf, source, &f.body));
                 out.push(rf);
             }
             Stmt::AsyncFunctionDef(f) => {
                 security_out.extend(security::security_findings(&f.name, &f.body, source));
                 let rf = build_function(source, &f.name, f.range, &f.body, &f.args, &f.decorator_list, f.returns.is_some(), true);
-                smells_out.extend(function_smells(&rf, &f.body));
+                smells_out.extend(function_smells(&rf, source, &f.body));
                 out.push(rf);
             }
             Stmt::ClassDef(c) => collect_functions(source, &c.body, out, security_out, smells_out),
@@ -220,12 +269,20 @@ fn collect_functions(
 
 /// Smells a nivel de función (Fase 22): función larga, exceso de parámetros,
 /// anidamiento profundo — los otros dos (large_class/god_object) se calculan
-/// aparte, a nivel de clase, en `analyze_rich`.
-fn function_smells(rf: &RichFunction, body: &[Stmt]) -> Vec<StructuralSmell> {
+/// aparte, a nivel de clase, en `analyze_rich`. `quadratic_list_membership`
+/// (Fase 14, "nested-structure interaction detection") se agregó después,
+/// mismo criterio: heurística de forma de AST sobre el cuerpo de la función.
+/// `de_morgan_simplifiable` (Fase 15, Mathematical Intelligence) reusa el
+/// mismo mecanismo (`StructuralSmell`) para una nota de legibilidad en vez
+/// de inventar una categoría/endpoint nuevos — cero superficie de UI nueva,
+/// solo un `kind` más que el frontend ya sabe renderizar genéricamente.
+fn function_smells(rf: &RichFunction, source: &str, body: &[Stmt]) -> Vec<StructuralSmell> {
     let mut out = Vec::new();
     out.extend(smells::check_long_function(&rf.name, rf.line, rf.loc));
     out.extend(smells::check_excessive_parameters(&rf.name, rf.line, rf.args.len()));
     out.extend(smells::check_deep_nesting(&rf.name, rf.line, body));
+    out.extend(smells::check_quadratic_list_membership(&rf.name, source, body));
+    out.extend(smells::check_de_morgan_simplifiable(&rf.name, source, body));
     out
 }
 
@@ -291,14 +348,17 @@ fn build_function(
     let regex = classifiers::regex_info(body);
     let grammar = classifiers::grammar_info(name, body, recursion.is_recursive);
     let graph = classifiers::graph_info(body, recursion.is_recursive);
+    let semantic = classifiers::semantic_analysis_info(body);
     let heap = datastructures::heap_info(body);
+    let arg_names = structure::arg_names(args);
+    let purity = crate::purity::analyze(&arg_names, body);
 
     RichFunction {
         name: name.to_string(),
         line,
         end_line,
         loc,
-        args: structure::arg_names(args),
+        args: arg_names,
         is_async,
         decorators: decorator_list.iter().map(structure::decorator_name).collect(),
         docstring: structure::docstring_of(body),
@@ -307,11 +367,13 @@ fn build_function(
         big_o_reason: bigo.reason,
         big_o_theta: bigo.theta,
         big_o_omega: bigo.omega,
+        combinatorics_note: bigo.combinatorics_note,
         space_complexity: space_info.space,
         space_reason: space_info.reason,
         is_recursive: recursion.is_recursive,
         is_tail_recursive: recursion.is_tail_recursive,
         recursion_note: recursion::note(&recursion),
+        induction_note: recursion::induction_note(&recursion),
         recurrence: None,
         dc_signal: dc_signal.map(|s| (s.a, s.c_own)),
         regex_class: regex.uses_regex.then(|| "Type-3 (Regular)".to_string()),
@@ -320,10 +382,15 @@ fn build_function(
         grammar_note: classifiers::grammar_note(&grammar),
         graph_traversal: graph.traversal_kind.clone(),
         graph_traversal_note: classifiers::graph_note(&graph),
+        semantic_analysis_class: semantic.is_semantic_analysis_shaped.then(|| "Type-1 (informal)".to_string()),
+        semantic_analysis_note: classifiers::semantic_analysis_note(&semantic),
         data_structure: heap.uses_heap.then(|| "Heap".to_string()),
         data_structure_note: datastructures::heap_note(&heap),
         calls: structure::extract_calls(body),
         returns_annotated,
+        returns_value: has_return_with_value(body),
+        is_pure: purity.is_pure,
+        purity_note: purity.note,
     }
 }
 
@@ -351,6 +418,36 @@ mod tests {
         let src = "def binary_search(arr, target):\n    lo, hi = 0, len(arr)\n    while lo < hi:\n        mid = (lo + hi) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            lo = mid + 1\n        else:\n            hi = mid\n    return -1\n";
         let r = analyze_rich(src);
         assert_eq!(func(&r, "binary_search").big_o, "O(log n)");
+    }
+
+    #[test]
+    fn returns_value_true_con_return_con_valor() {
+        let src = "def f(x):\n    return x * 2\n";
+        let r = analyze_rich(src);
+        assert!(func(&r, "f").returns_value);
+    }
+
+    #[test]
+    fn returns_value_false_sin_ningun_return() {
+        let src = "def f(x):\n    print(x)\n";
+        let r = analyze_rich(src);
+        assert!(!func(&r, "f").returns_value);
+    }
+
+    #[test]
+    fn returns_value_false_con_return_vacio() {
+        let src = "def f(x):\n    if x:\n        return\n    print(x)\n";
+        let r = analyze_rich(src);
+        assert!(!func(&r, "f").returns_value);
+    }
+
+    #[test]
+    fn returns_value_true_en_funcion_anidada_tambien() {
+        // ast.walk (el que reemplaza) desciende a funciones anidadas —
+        // mismo alcance acá, no el scope-aware de taint tracking.
+        let src = "def outer(x):\n    def inner():\n        return 1\n    inner()\n";
+        let r = analyze_rich(src);
+        assert!(func(&r, "outer").returns_value);
     }
 
     #[test]
@@ -434,10 +531,42 @@ mod tests {
     }
 
     #[test]
+    fn funcion_pura_end_to_end() {
+        let src = "def add(a, b):\n    return a + b\n";
+        let r = analyze_rich(src);
+        assert!(func(&r, "add").is_pure);
+    }
+
+    #[test]
+    fn funcion_que_muta_parametro_end_to_end_no_es_pura() {
+        let src = "def add_item(lst, x):\n    lst.append(x)\n";
+        let r = analyze_rich(src);
+        let f = func(&r, "add_item");
+        assert!(!f.is_pure);
+        assert!(f.purity_note.contains("lst"));
+    }
+
+    #[test]
     fn grammar_shaped_detectado() {
         let src = "def parse_expr(tokens, pos):\n    stack = []\n    stack.append(tokens[pos])\n    if pos < len(tokens):\n        return parse_expr(tokens, pos + 1)\n    return stack.pop()\n";
         let r = analyze_rich(src);
         assert_eq!(func(&r, "parse_expr").grammar_class.as_deref(), Some("Type-2 (Context-Free)"));
+    }
+
+    #[test]
+    fn semantic_analysis_shaped_detectado_end_to_end() {
+        let src = "def declare(names):\n    table = {}\n    for name in names:\n        if name in table:\n            raise ValueError('ya declarado')\n        table[name] = True\n";
+        let r = analyze_rich(src);
+        let f = func(&r, "declare");
+        assert_eq!(f.semantic_analysis_class.as_deref(), Some("Type-1 (informal)"));
+        assert!(f.semantic_analysis_note.as_ref().unwrap().contains("Resembles"));
+    }
+
+    #[test]
+    fn memoizacion_end_to_end_no_dispara_semantic_analysis() {
+        let src = "def fib(n, cache={}):\n    if n in cache:\n        return cache[n]\n    result = n if n < 2 else fib(n - 1) + fib(n - 2)\n    cache[n] = result\n    return result\n";
+        let r = analyze_rich(src);
+        assert!(func(&r, "fib").semantic_analysis_class.is_none());
     }
 
     #[test]
@@ -474,6 +603,15 @@ mod tests {
         // Los métodos también aparecen en la lista plana de funciones,
         // igual que `ast.walk` los encontraría en static_parser.py.
         assert!(func(&r, "speak").is_async);
+    }
+
+    #[test]
+    fn clase_expone_nombres_de_atributos_no_solo_el_conteo() {
+        let src = "class Animal:\n    def __init__(self, name):\n        self.name = name\n        self.age = 0\n    def birthday(self):\n        self.age += 1\n";
+        let r = analyze_rich(src);
+        let c = &r.classes[0];
+        assert_eq!(c.attribute_count, 2);
+        assert_eq!(c.attributes, vec!["name".to_string(), "age".to_string()]);
     }
 
     #[test]

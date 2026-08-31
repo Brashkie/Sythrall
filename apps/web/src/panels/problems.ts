@@ -5,6 +5,13 @@
 //  updateProblems). Renderiza en su propio sub-tab del panel derecho
 //  (#problems-content, rp-tab "problems") — no comparte contenedor con el
 //  sub-tab "Análisis" (#analysis-content, panels/analysis.ts).
+//
+//  Fase 24 (Extensibility Platform): este panel es el ejemplo que el
+//  ROADMAP nombra como "extension" — agrega UI, no capacidad de análisis;
+//  consume la salida de los plugins (naming/structural/security smells) por
+//  el mismo shape JSON de siempre, sin implementar la interfaz de
+//  `services/complexity/src/plugin.rs`. Ver el doc del módulo Rust para la
+//  distinción completa plugin/extension.
 // ══════════════════════════════════════════
 
 import type { NamingSmell, SecurityFinding, StructuralSmell } from '../api/client'
@@ -18,7 +25,6 @@ import { NAMING_SMELL_LABEL, SMELL_LABEL, securitySeverityColor } from './static
 
 let _metricsTimer: ReturnType<typeof setTimeout> | null = null
 let _currentFile = ''
-const _initialized = false
 
 const METRICS_DEBOUNCE_MS = 600
 

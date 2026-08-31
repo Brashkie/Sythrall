@@ -794,6 +794,291 @@ pub fn module_to_candidates(module: &str, source_file: &str) -> Vec<String> {
     candidates
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+//  ARCHITECTURE SMELLS (Fase 18 — "Dependency Engine", último ítem sin portar
+//  del Graph Engine) — puerto de `_build_architecture_smells` en `graph.py`.
+//  Ya no hay ningún primitivo nuevo que escribir acá: `build_project_edges`
+//  (Import Graph), el conteo de in/out-degree (mismo patrón que
+//  `build_centrality_graph`) y `find_cycles_capped` (Circular Deps) ya
+//  existen todos en este mismo módulo — esto es pura orquestación sobre lo
+//  que las 3 porciones anteriores del Graph Engine ya construyeron, el mismo
+//  tipo de "agregación, no análisis nuevo" que `build_call_graph` fue en su
+//  momento. Cierra el motivo por el que Architecture Smells era Python-only
+//  ("el import graph cross-file solo existe en Python") — ya no es cierto.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const HIGH_EFFERENT_COUPLING: usize = 15;
+const UNSTABLE_MIN_CA: usize = 3;
+const UNSTABLE_INSTABILITY: f64 = 0.5;
+
+#[derive(Serialize, Clone)]
+pub struct ArchitectureSmell {
+    pub kind: &'static str,
+    pub name: String,
+    pub line: u32,
+    pub message: String,
+}
+
+/// Mismos 3 smells que `_build_architecture_smells`, mismos umbrales, mismo
+/// orden (coupling/inestabilidad por archivo en el orden en que llegan los
+/// archivos, después los ciclos) — ver el docstring de la versión Python
+/// para el razonamiento de cada umbral.
+pub fn build_architecture_smells(files: Vec<FileSummary>) -> Vec<ArchitectureSmell> {
+    let edges = build_project_edges(&files);
+
+    let mut in_degree: HashMap<&str, usize> = HashMap::new();
+    let mut out_degree: HashMap<&str, usize> = HashMap::new();
+    for f in &files {
+        in_degree.entry(f.filename.as_str()).or_insert(0);
+        out_degree.entry(f.filename.as_str()).or_insert(0);
+    }
+    for e in &edges {
+        *out_degree.entry(e.from.as_str()).or_insert(0) += 1;
+        *in_degree.entry(e.to.as_str()).or_insert(0) += 1;
+    }
+
+    let mut smells: Vec<ArchitectureSmell> = Vec::new();
+    for f in &files {
+        let fname = f.filename.as_str();
+        let ca = *in_degree.get(fname).unwrap_or(&0);
+        let ce = *out_degree.get(fname).unwrap_or(&0);
+
+        if ce > HIGH_EFFERENT_COUPLING {
+            smells.push(ArchitectureSmell {
+                kind: "high_efferent_coupling",
+                name: f.filename.clone(),
+                line: 0,
+                message: format!(
+                    "{ce} imports internos del proyecto (> {HIGH_EFFERENT_COUPLING}) — si no es un punto de composición intencional (entrypoint, registro de routers), considerar dividir responsabilidades."
+                ),
+            });
+        }
+
+        let instability = if ca + ce > 0 { ce as f64 / (ca + ce) as f64 } else { 0.0 };
+        if ca >= UNSTABLE_MIN_CA && instability > UNSTABLE_INSTABILITY {
+            smells.push(ArchitectureSmell {
+                kind: "unstable_dependency",
+                name: f.filename.clone(),
+                line: 0,
+                message: format!(
+                    "{ca} archivo(s) dependen de este módulo, pero él mismo depende de {ce} — inestabilidad {instability:.2} (umbral {UNSTABLE_INSTABILITY}): un cambio acá se propaga tanto hacia arriba como hacia abajo."
+                ),
+            });
+        }
+    }
+
+    let cycles = find_cycles_capped(&files, &edges, MAX_CYCLES);
+    for cycle in &cycles {
+        smells.push(ArchitectureSmell {
+            kind: "circular_dependency",
+            name: format!("{} \u{2192} {}", cycle.join(" \u{2192} "), cycle[0]),
+            line: 0,
+            message: format!(
+                "Ciclo de imports entre {} archivo(s) — ninguno puede entenderse/testearse en aislamiento del otro.",
+                cycle.len()
+            ),
+        });
+    }
+
+    smells
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  COMPLEXITY HEATMAP — última pieza del Graph Engine que quedaba Python-only
+//  (Fase 18 la había marcado explícitamente "fuera de este slice" en Import/
+//  Call/Circular/Architecture Smells de arriba). Puerto de `_build_heatmap`/
+//  `_heatmap_to_mermaid` en `graph.py`. Reusa `bigo_color`/`bigo_level`/
+//  `safe_id`/`short_name` ya portados (Call Graph los trajo primero) — solo
+//  `cc_color`/`cc_level` son nuevos acá, porque ningún slice anterior
+//  necesitaba clasificar por complejidad ciclomática, solo por Big-O.
+// ══════════════════════════════════════════════════════════════════════════
+
+#[derive(Deserialize)]
+pub struct HeatmapFunctionInput {
+    pub name: String,
+    #[serde(default = "default_big_o")]
+    pub big_o: String,
+    #[serde(default = "default_complexity")]
+    pub complexity: u32,
+    #[serde(default)]
+    pub line: usize,
+    #[serde(default)]
+    pub loc: usize,
+}
+
+#[derive(Deserialize)]
+pub struct HeatmapFileInput {
+    pub filename: String,
+    #[serde(default)]
+    pub functions: Vec<HeatmapFunctionInput>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct HeatmapFunction {
+    pub file: String,
+    pub file_short: String,
+    pub name: String,
+    pub line: usize,
+    pub cc: u32,
+    pub cc_color: &'static str,
+    pub cc_level: &'static str,
+    pub big_o: String,
+    pub bigo_color: &'static str,
+    pub bigo_level: &'static str,
+    pub loc: usize,
+}
+
+#[derive(Serialize)]
+pub struct HeatmapByLevel {
+    pub low: usize,
+    pub medium: usize,
+    pub high: usize,
+    pub critical: usize,
+}
+
+#[derive(Serialize)]
+pub struct HeatmapSummary {
+    pub total_functions: usize,
+    pub avg_cc: f64,
+    pub critical_count: usize,
+    pub hot_paths: usize,
+    pub by_level: HeatmapByLevel,
+}
+
+#[derive(Serialize)]
+pub struct HeatmapResult {
+    pub graph_type: &'static str,
+    pub functions: Vec<HeatmapFunction>,
+    pub mermaid: String,
+    pub summary: HeatmapSummary,
+}
+
+/// Puerto de `_cc_color` (graph.py).
+fn cc_color(cc: u32) -> &'static str {
+    if cc <= 5 {
+        "#00f5a0"
+    } else if cc <= 10 {
+        "#ffb627"
+    } else if cc <= 20 {
+        "#ff8a00"
+    } else {
+        "#ff3366"
+    }
+}
+
+/// Puerto de `_cc_level` (graph.py).
+fn cc_level(cc: u32) -> &'static str {
+    if cc <= 5 {
+        "low"
+    } else if cc <= 10 {
+        "medium"
+    } else if cc <= 20 {
+        "high"
+    } else {
+        "critical"
+    }
+}
+
+/// Mismo `level_order` que `_build_heatmap` usa para ordenar "peor primero" —
+/// critical/expensive empatan en 0, high/medium en 1, moderate en 2,
+/// low/efficient en 3 (el resto, que no debería pasar nunca, cae en 5 como
+/// el `.get(x, 5)` de Python).
+fn level_order(level: &str) -> u32 {
+    match level {
+        "critical" | "expensive" => 0,
+        "high" | "medium" => 1,
+        "moderate" => 2,
+        "low" | "efficient" => 3,
+        _ => 5,
+    }
+}
+
+fn heatmap_to_mermaid(functions: &[HeatmapFunction]) -> String {
+    if functions.is_empty() {
+        return "flowchart TD\n    A[Sin funciones]".to_string();
+    }
+
+    let mut lines = vec!["flowchart LR".to_string()];
+
+    // Agrupar por archivo, preservando el orden de primera aparición — mismo
+    // comportamiento que el dict de Python (`by_file.setdefault(...)`).
+    let mut order: Vec<&str> = Vec::new();
+    let mut by_file: HashMap<&str, Vec<&HeatmapFunction>> = HashMap::new();
+    for f in functions {
+        if !by_file.contains_key(f.file_short.as_str()) {
+            order.push(f.file_short.as_str());
+        }
+        by_file.entry(f.file_short.as_str()).or_default().push(f);
+    }
+
+    for file_short in &order {
+        let fid = safe_id(file_short);
+        lines.push(format!("    subgraph {fid}[\"{file_short}\"]"));
+        for f in &by_file[file_short] {
+            let fnid = safe_id(&format!("{file_short}_{}", f.name));
+            lines.push(format!("    {fnid}[\"{}\\nCC={} \u{b7} {}\"]", f.name, f.cc, f.big_o));
+        }
+        lines.push("    end".to_string());
+    }
+
+    for f in functions {
+        let fnid = safe_id(&format!("{}_{}", f.file_short, f.name));
+        lines.push(format!("    style {fnid} fill:{}20,stroke:{}", f.cc_color, f.cc_color));
+    }
+
+    lines.join("\n") + "\n"
+}
+
+pub fn build_heatmap(files: Vec<HeatmapFileInput>) -> HeatmapResult {
+    let mut functions: Vec<HeatmapFunction> = Vec::new();
+    for f in &files {
+        for fn_ in &f.functions {
+            let cc = fn_.complexity;
+            functions.push(HeatmapFunction {
+                file: f.filename.clone(),
+                file_short: short_name(&f.filename).to_string(),
+                name: fn_.name.clone(),
+                line: fn_.line,
+                cc,
+                cc_color: cc_color(cc),
+                cc_level: cc_level(cc),
+                bigo_color: bigo_color(&fn_.big_o),
+                bigo_level: bigo_level(&fn_.big_o),
+                big_o: fn_.big_o.clone(),
+                loc: fn_.loc,
+            });
+        }
+    }
+
+    // Más problemáticas primero — mismo criterio que Python: suma de
+    // level_order(cc)+level_order(big_o) ascendente, después CC descendente.
+    functions.sort_by_key(|f| (level_order(f.cc_level) + level_order(f.bigo_level), -(f.cc as i64)));
+
+    let mermaid = heatmap_to_mermaid(&functions);
+
+    let critical_count = functions.iter().filter(|f| matches!(f.cc_level, "critical" | "high")).count();
+    let hot_paths = functions.iter().filter(|f| f.bigo_level == "expensive").count();
+    let avg_cc = if functions.is_empty() {
+        0.0
+    } else {
+        let sum: u32 = functions.iter().map(|f| f.cc).sum();
+        (sum as f64 / functions.len() as f64 * 100.0).round() / 100.0
+    };
+    let by_level = HeatmapByLevel {
+        low: functions.iter().filter(|f| f.cc_level == "low").count(),
+        medium: functions.iter().filter(|f| f.cc_level == "medium").count(),
+        high: functions.iter().filter(|f| f.cc_level == "high").count(),
+        critical: functions.iter().filter(|f| f.cc_level == "critical").count(),
+    };
+
+    HeatmapResult {
+        graph_type: "heatmap",
+        summary: HeatmapSummary { total_functions: functions.len(), avg_cc, critical_count, hot_paths, by_level },
+        functions,
+        mermaid,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1121,5 +1406,126 @@ mod tests {
         // El primer elemento del ciclo aparece 2 veces: al inicio y al cierre.
         let first = &result.cycles[0][0];
         assert!(desc.matches(first.as_str()).count() >= 2);
+    }
+
+    #[test]
+    fn architecture_smells_limpio_no_dispara_nada() {
+        let files = vec![file("main.py", vec![("parser", 1)]), file("parser.py", vec![])];
+        let smells = build_architecture_smells(files);
+        assert!(smells.is_empty());
+    }
+
+    #[test]
+    fn architecture_smells_alto_acoplamiento_eferente() {
+        let module_names: Vec<String> = (0..16).map(|i| format!("mod{i}")).collect();
+        let mut files: Vec<FileSummary> = module_names.iter().map(|m| file(&format!("{m}.py"), vec![])).collect();
+        let imports: Vec<(&str, u32)> = module_names.iter().enumerate().map(|(i, m)| (m.as_str(), i as u32)).collect();
+        files.push(file("main.py", imports));
+        let smells = build_architecture_smells(files);
+        assert!(smells.iter().any(|s| s.kind == "high_efferent_coupling" && s.name == "main.py"));
+    }
+
+    #[test]
+    fn architecture_smells_dependencia_inestable() {
+        // "hub.py" es importado por 3 archivos (ca=3) y a la vez depende de
+        // otros 4 (ce=4) — inestabilidad 4/7 ≈ 0.57 > 0.5.
+        let files = vec![
+            file("a.py", vec![("hub", 1)]),
+            file("b.py", vec![("hub", 1)]),
+            file("c.py", vec![("hub", 1)]),
+            file("hub.py", vec![("x1", 1), ("x2", 1), ("x3", 1), ("x4", 1)]),
+            file("x1.py", vec![]),
+            file("x2.py", vec![]),
+            file("x3.py", vec![]),
+            file("x4.py", vec![]),
+        ];
+        let smells = build_architecture_smells(files);
+        assert!(smells.iter().any(|s| s.kind == "unstable_dependency" && s.name == "hub.py"));
+    }
+
+    #[test]
+    fn architecture_smells_dependencia_circular() {
+        let files = vec![
+            file("a.py", vec![("b", 1)]),
+            file("b.py", vec![("c", 1)]),
+            file("c.py", vec![("a", 1)]),
+        ];
+        let smells = build_architecture_smells(files);
+        assert!(smells.iter().any(|s| s.kind == "circular_dependency"));
+    }
+
+    fn heatmap_fn(name: &str, big_o: &str, complexity: u32) -> HeatmapFunctionInput {
+        HeatmapFunctionInput { name: name.to_string(), big_o: big_o.to_string(), complexity, line: 1, loc: 5 }
+    }
+
+    #[test]
+    fn heatmap_calcula_cc_y_bigo_por_funcion() {
+        let files = vec![HeatmapFileInput {
+            filename: "hot.py".to_string(),
+            functions: vec![heatmap_fn("critical", "O(n\u{b3})", 3), heatmap_fn("simple", "O(1)", 1)],
+        }];
+        let result = build_heatmap(files);
+        assert_eq!(result.functions.len(), 2);
+        let critical = result.functions.iter().find(|f| f.name == "critical").unwrap();
+        assert_eq!(critical.bigo_level, "expensive");
+        assert!(critical.bigo_color.starts_with('#'));
+    }
+
+    #[test]
+    fn heatmap_ordena_peor_primero() {
+        let files = vec![HeatmapFileInput {
+            filename: "f.py".to_string(),
+            functions: vec![heatmap_fn("simple", "O(1)", 1), heatmap_fn("cubic", "O(n\u{b3})", 25)],
+        }];
+        let result = build_heatmap(files);
+        assert_eq!(result.functions[0].name, "cubic", "la función más problemática debe ir primero");
+    }
+
+    #[test]
+    fn heatmap_cc_levels_respetan_los_umbrales() {
+        assert_eq!(cc_level(5), "low");
+        assert_eq!(cc_level(6), "medium");
+        assert_eq!(cc_level(10), "medium");
+        assert_eq!(cc_level(11), "high");
+        assert_eq!(cc_level(20), "high");
+        assert_eq!(cc_level(21), "critical");
+    }
+
+    #[test]
+    fn heatmap_file_short_es_solo_el_nombre_pero_file_es_el_path_completo() {
+        let files = vec![HeatmapFileInput {
+            filename: "src/utils/hot.py".to_string(),
+            functions: vec![heatmap_fn("f", "O(1)", 1)],
+        }];
+        let result = build_heatmap(files);
+        assert_eq!(result.functions[0].file, "src/utils/hot.py");
+        assert_eq!(result.functions[0].file_short, "hot.py");
+    }
+
+    #[test]
+    fn heatmap_summary_by_level_suma_el_total() {
+        let files = vec![HeatmapFileInput {
+            filename: "f.py".to_string(),
+            functions: vec![heatmap_fn("a", "O(1)", 1), heatmap_fn("b", "O(1)", 8), heatmap_fn("c", "O(1)", 25)],
+        }];
+        let result = build_heatmap(files);
+        let s = &result.summary;
+        assert_eq!(s.by_level.low + s.by_level.medium + s.by_level.high + s.by_level.critical, s.total_functions);
+    }
+
+    #[test]
+    fn heatmap_mermaid_agrupa_por_archivo_en_subgraph() {
+        let files = vec![HeatmapFileInput { filename: "f.py".to_string(), functions: vec![heatmap_fn("a", "O(1)", 1)] }];
+        let result = build_heatmap(files);
+        assert!(result.mermaid.contains("subgraph"));
+        assert!(result.mermaid.contains("flowchart LR"));
+    }
+
+    #[test]
+    fn heatmap_sin_funciones_da_mermaid_vacio_y_avg_cc_cero() {
+        let result = build_heatmap(vec![HeatmapFileInput { filename: "f.py".to_string(), functions: vec![] }]);
+        assert!(result.functions.is_empty());
+        assert_eq!(result.summary.avg_cc, 0.0);
+        assert!(result.mermaid.contains("Sin funciones"));
     }
 }

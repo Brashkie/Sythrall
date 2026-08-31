@@ -16,9 +16,9 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from services.static_parser import parse_file, HAS_TREESITTER, HAS_NX
-from shared import UPLOADS_DIR
-from services.project_service import read_project_files
+from services.plugin_registry import manifests as plugin_manifests
+from services.static_parser import parse_file, parse_project_files
+from shared import LIB_FLAGS, UPLOADS_DIR
 from routers.graph import _build_circular_graph, _build_architecture_smells
 
 router = APIRouter()
@@ -52,72 +52,30 @@ class WasmRequest(BaseModel):
 
 @router.get("/languages")
 async def supported_languages():
-    """Lenguajes soportados y herramientas disponibles."""
+    """Lenguajes soportados y herramientas disponibles.
+
+    Fase 24 (Extensibility Platform): este shape ya no es un dict hardcodeado
+    a mano acá — se arma desde `plugin_registry.manifests()`, que a su vez
+    viene del manifest que expone `services/complexity/src/plugin.rs`
+    (`GET /plugins/manifests`), o del respaldo local si el sidecar no
+    respondió al arranque. `available` sigue siendo información específica
+    de este backend (si el sidecar está arriba), no algo que el manifest en
+    sí describa — por eso se calcula acá: `True` siempre para "python" (tiene
+    su propio esqueleto de fallback sin sidecar), `HAS_COMPLEXITY_ENGINE`
+    para el resto (sin fallback propio)."""
+    languages = {
+        m["id"]: {
+            "extensions": m["extensions"],
+            "parser": m["parser"],
+            "features": m["features"],
+            "available": True if m["id"] == "python" else LIB_FLAGS["HAS_COMPLEXITY_ENGINE"],
+        }
+        for m in plugin_manifests()
+    }
     return {
-        "languages": {
-            "python": {
-                "extensions": [".py"],
-                "parser": "Python ast (stdlib)",
-                "features": [
-                    "functions",
-                    "classes",
-                    "imports",
-                    "big_o",
-                    "cyclomatic_complexity",
-                    "dead_code",
-                    "call_graph",
-                    "wasm_hints",
-                ],
-                "available": True,
-            },
-            "c": {
-                "extensions": [".c"],
-                "parser": "tree-sitter-c",
-                "features": ["functions", "structs", "includes", "macros", "big_o", "call_graph", "wasm_hints"],
-                "available": HAS_TREESITTER,
-            },
-            "cpp": {
-                "extensions": [".cpp", ".cc", ".cxx", ".hpp", ".h"],
-                "parser": "tree-sitter-cpp",
-                "features": ["functions", "classes", "includes", "macros", "big_o", "call_graph", "wasm_hints"],
-                "available": HAS_TREESITTER,
-            },
-            "javascript": {
-                "extensions": [".js", ".jsx"],
-                "parser": "regex + AST-like",
-                "features": [
-                    "functions",
-                    "classes",
-                    "imports",
-                    "exports",
-                    "big_o",
-                    "dead_code",
-                    "call_graph",
-                    "wasm_hints",
-                ],
-                "available": True,
-            },
-            "typescript": {
-                "extensions": [".ts", ".tsx"],
-                "parser": "regex + AST-like",
-                "features": [
-                    "functions",
-                    "classes",
-                    "imports",
-                    "exports",
-                    "interfaces",
-                    "types",
-                    "big_o",
-                    "dead_code",
-                    "call_graph",
-                    "wasm_hints",
-                ],
-                "available": True,
-            },
-        },
+        "languages": languages,
         "capabilities": {
-            "tree_sitter": HAS_TREESITTER,
-            "networkx": HAS_NX,
+            "complexity_engine": LIB_FLAGS["HAS_COMPLEXITY_ENGINE"],
         },
     }
 
@@ -137,18 +95,24 @@ async def parse_project(req: ParseProjectRequest) -> dict[str, Any]:
     Analiza múltiples archivos y arma el resumen global del proyecto.
     """
     if req.project_id:
+        # Fase 18, "Project Scanner" — Rust lee del disco y parsea el
+        # proyecto entero en 1 sola llamada (`parse_project_files`,
+        # `scanner.rs`), en vez del patrón anterior de N llamadas HTTP (una
+        # por archivo). Cada resultado ya trae `loc` (Rust lo calcula al
+        # leer el archivo — ver más abajo, `language_distribution`).
         project_dir = UPLOADS_DIR / req.project_id
-        files = read_project_files(project_dir) if project_dir.exists() else []
+        results: list[dict] = await parse_project_files(project_dir) if project_dir.exists() else []
     else:
-        files = req.files
+        # `asyncio.gather` en vez de awaits secuenciales — `parse_file` ahora
+        # consulta el sidecar Rust para `.py`, y con proyectos grandes (el
+        # benchmark de 4003 archivos de la Fase 10) N round-trips HTTP en
+        # serie sí se notarían.
+        results = list(
+            await asyncio.gather(*(parse_file(f.get("filename", "unknown"), f.get("content", "")) for f in req.files))
+        )
+        for r, f in zip(results, req.files, strict=False):
+            r["loc"] = f.get("content", "").count("\n")  # mismo criterio que `wc -l`
 
-    # `asyncio.gather` en vez de awaits secuenciales — `parse_file` ahora
-    # consulta el sidecar Rust para `.py`, y con proyectos grandes (el
-    # benchmark de 4003 archivos de la Fase 10) N round-trips HTTP en serie
-    # sí se notarían.
-    results: list[dict] = list(
-        await asyncio.gather(*(parse_file(f.get("filename", "unknown"), f.get("content", "")) for f in files))
-    )
     for r in results:
         r["_filename"] = r["filename"]
 
@@ -184,16 +148,16 @@ async def parse_project(req: ParseProjectRequest) -> dict[str, Any]:
     top_complex_functions = sorted(all_functions, key=lambda f: f["complexity"], reverse=True)[:10]
 
     # Distribución real de líneas/archivos/funciones por lenguaje — no una
-    # estimación, se cuenta directo sobre el contenido que ya se leyó del
-    # disco para parsear (`files`/`results` están en el mismo orden). Para el
+    # estimación: `loc` viaja en cada resultado (Rust lo calcula al leer el
+    # archivo, o se calcula acá mismo para el camino sin project_id — ver
+    # arriba), así que no hace falta el contenido crudo de nuevo. Para el
     # widget "Languages" del Dashboard.
     language_distribution: dict[str, dict[str, int]] = {}
-    for f, r in zip(files, results, strict=False):
+    for r in results:
         lang = r.get("language", "?")
-        loc = f.get("content", "").count("\n")  # mismo criterio que `wc -l`
         entry = language_distribution.setdefault(lang, {"files": 0, "loc": 0, "functions": 0})
         entry["files"] += 1
-        entry["loc"] += loc
+        entry["loc"] += r.get("loc", 0)
         entry["functions"] += len(r.get("functions", []))
 
     # ── Project Health (Fase 2 del rediseño UX) ───────────────────────────────
@@ -211,9 +175,11 @@ async def parse_project(req: ParseProjectRequest) -> dict[str, Any]:
 
     # Fase 22 — Architecture smells: acoplamiento eferente alto, dependencia
     # inestable, y las mismas dependencias circulares de arriba reencuadradas
-    # como un smell más (se pasa `circular["cycles"]` para no correr
-    # find_cycles_capped una segunda vez sobre el mismo grafo).
-    architecture_smells = _build_architecture_smells(results, cycles=circular["cycles"])
+    # como un smell más. Fase 18 ("Dependency Engine") cortó esto a Rust —
+    # recalcula los ciclos de nuevo del lado del sidecar (capado a 20, no es
+    # costoso) en vez de reusar `circular["cycles"]` como antes: dos llamadas
+    # HTTP baratas en vez de threadear un parámetro opcional por el puerto.
+    architecture_smells = await _build_architecture_smells(results)
     # Excluye las entradas de ciclo — ya penalizadas por `total_cycles * 15`
     # abajo; contarlas de nuevo acá sería un doble castigo por el mismo hallazgo.
     coupling_smells_count = sum(1 for s in architecture_smells if s["kind"] != "circular_dependency")

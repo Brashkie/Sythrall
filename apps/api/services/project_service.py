@@ -81,6 +81,14 @@ CODE_EXTENSIONS = {
     ".sh",
     ".bash",
     ".zsh",
+    ".f",
+    ".f90",
+    ".f95",
+    ".f03",
+    ".f08",
+    ".for",
+    ".s",
+    ".asm",
 }
 
 
@@ -197,7 +205,25 @@ def _fmt_size(size: int) -> str:
 # Mismo set que usaba generate_project_graph antes de factorizarse acá — no
 # tiene sentido correr análisis/lint sobre .json/.md/etc. que parse_file
 # igual descarta como _unsupported.
-PARSEABLE_EXTENSIONS = {".py", ".ts", ".tsx", ".js", ".jsx", ".c", ".cpp", ".h", ".hpp"}
+PARSEABLE_EXTENSIONS = {
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".c",
+    ".cpp",
+    ".h",
+    ".hpp",
+    ".f",
+    ".f90",
+    ".f95",
+    ".f03",
+    ".f08",
+    ".for",
+    ".s",
+    ".asm",
+}
 
 
 def read_project_files(project_dir: Path, code_exts: set[str] | None = None) -> list[dict]:

@@ -118,6 +118,8 @@ html, body {
 .lang-rust   { background: #dea584; }
 .lang-java   { background: #f06529; }
 .lang-cpp    { background: #659ad2; }
+.lang-fortran{ background: #734f96; }
+.lang-asm    { background: #6e4c13; }
 .lang-shell  { background: #4a5880; color: var(--txt); }
 .lang-ruby   { background: #cc342d; }
 .lang-php    { background: #787cb5; }
@@ -636,22 +638,6 @@ html, body {
 .dz-text  { font-size: .87rem; color: var(--muted); }
 .dz-ext   { font-size: .75rem; color: var(--b2); font-family: var(--mono); margin-top: 2px; }
 
-.file-node {
-  display: flex; align-items: center; gap: 6px;
-  padding: 6px 12px; cursor: pointer;
-  transition: background .15s; border-left: 2px solid transparent;
-  flex-shrink: 0;
-}
-.file-node:hover   { background: var(--s1); }
-.file-node.active  { background: rgba(61,158,255,.08); border-left-color: var(--info); }
-.file-node.has-err { border-left-color: var(--err); background: rgba(255,51,102,.04); }
-.file-node.analyzed{ border-left-color: var(--ok); }
-.fn-name  { font-size: .97rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fn-badge { font-family: var(--mono); font-size: .72rem; padding: 1px 5px; border-radius: 3px; flex-shrink: 0; }
-.fn-err     { background: rgba(255,51,102,.15); color: var(--err);   }
-.fn-ok      { background: rgba(0,245,160,.1);   color: var(--ok);    }
-.fn-pending { background: rgba(80,96,128,.15);  color: var(--muted); }
-
 .url-item {
   display: flex; align-items: center; gap: 6px;
   padding: 7px 12px; border-bottom: 1px solid var(--b0);
@@ -670,7 +656,6 @@ html, body {
 
 /* ── Dashboard ── */
 .dash-scroll { overflow-y: auto; flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 14px; align-items: stretch; min-width: 0; min-height: 0; }
-.stats-row   { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; flex-shrink: 0; min-width: 0; }
 .stat-card   { background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius); padding: 14px; transition: border-color .2s; min-height: 0; min-width: 0; overflow: hidden; }
 .stat-card:hover { border-color: var(--b2); }
 .sc-lbl { font-size: .82rem; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
@@ -680,7 +665,6 @@ html, body {
 .chart-card  { background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius); padding: 14px; min-height: 0; min-width: 0; overflow: hidden; }
 .chart-card.wide { grid-column: span 2; min-width: 0; }
 .cc-head { font-size: .72rem; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-.chart-wrap  { position: relative; height: 130px; max-height: 130px; overflow: hidden; }
 
 /* ── Dashboard: widgets project-centric (rediseño Fase 2) ── */
 .dash-project-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -761,9 +745,9 @@ html, body {
 .issues-scroll  { overflow-y: auto; flex: 1; padding: 12px; }
 .issue-item { padding: 9px 11px; border-radius: 8px; margin-bottom: 7px; cursor: pointer; transition: transform .15s; border: 1px solid transparent; }
 .issue-item:hover { transform: translateX(2px); }
-.ii-err  { background: rgba(255,51,102,.07); border-color: rgba(255,51,102,.2); }
-.ii-warn { background: rgba(255,182,39,.06); border-color: rgba(255,182,39,.2); }
-.ii-info { background: rgba(61,158,255,.05); border-color: rgba(61,158,255,.15); }
+.ii-error   { background: rgba(255,51,102,.07); border-color: rgba(255,51,102,.2); }
+.ii-warning { background: rgba(255,182,39,.06); border-color: rgba(255,182,39,.2); }
+.ii-info    { background: rgba(61,158,255,.05); border-color: rgba(61,158,255,.15); }
 .ii-head { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; flex-wrap: wrap; }
 .ii-tool { font-size: .85rem; padding: 2px 6px; border-radius: 3px; font-weight: 700; font-family: var(--mono); }
 .t-flake8 { background: rgba(184,125,255,.15); color: var(--purple); }
@@ -942,6 +926,40 @@ html, body {
 }
 .dash-hero-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 
+/* ── Dashboard: grid de descubrimiento ("Explora Sythrall") ──
+ * Solo en el hero vacío, debajo de las acciones principales — comunica que
+ * Sythrall es una plataforma con más capacidades de las que se ven hoy, sin
+ * mentir sobre cuáles ya existen (ver dash-explore-badge-soon vs -ok). Más
+ * ancho que .dash-hero (460px) a propósito: 2 columnas de tarjetas
+ * necesitan más aire que el bloque de texto centrado de arriba. */
+.dash-explore { max-width: 640px; margin: 8px auto 0; padding: 0 24px 48px; }
+.dash-explore-heading {
+  font-size: .78rem; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted); text-align: center; margin-bottom: 16px;
+}
+.dash-explore-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.dash-explore-card {
+  background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius);
+  padding: 14px; text-align: left; transition: border-color .15s, transform .15s;
+}
+.dash-explore-card[data-explore-tab] { cursor: pointer; }
+.dash-explore-card[data-explore-tab]:hover { border-color: var(--info); transform: translateY(-1px); }
+.dash-explore-soon { cursor: pointer; opacity: .6; }
+.dash-explore-soon:hover { border-color: var(--b1); }
+.dash-explore-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; color: var(--muted); }
+.dash-explore-badge {
+  font-family: var(--mono); font-size: .62rem; font-weight: 700; letter-spacing: .4px;
+  padding: 2px 7px; border-radius: 10px; white-space: nowrap;
+}
+.dash-explore-badge-ok   { background: rgba(0,245,160,.12); color: var(--ok); }
+.dash-explore-badge-soon { background: rgba(80,96,128,.15); color: var(--muted); }
+.dash-explore-title { font-size: .93rem; font-weight: 700; color: var(--txt); margin-bottom: 3px; }
+.dash-explore-desc { font-size: .78rem; color: var(--muted); line-height: 1.45; }
+
+@media (max-width: 560px) {
+  .dash-explore-grid { grid-template-columns: 1fr; }
+}
+
 /* ── Misc ── */
 /* sans, no mono — .empty son mensajes de estado vacío en prosa
  * ("Todavía no hay nada que mostrar acá"), no valores de código; usado en
@@ -1088,10 +1106,8 @@ input[type=file] { display: none; }
   .drawer-overlay.active { display: block; }
 
   /* Dashboard 2 columnas */
-  .stats-row  { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
   .charts-row { grid-template-columns: minmax(0,1fr); }
   .chart-card.wide { grid-column: span 1; }
-  .chart-wrap { height: 120px; }
   .dash-cc-fn-row { grid-template-columns: minmax(0,1fr) 80px 30px 70px; gap: 6px; }
 
   /* Topbar — .url-bar no necesita regla acá: ya está display:none desde el
@@ -1137,13 +1153,11 @@ input[type=file] { display: none; }
   .mobile-toggle { display: flex !important; }
 
   /* Dashboard */
-  .stats-row  { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 6px; }
   .stat-card  { padding: 12px; }
   .sc-val     { font-size: 1.7rem; }
   .sc-lbl     { font-size: .75rem; }
   .charts-row { grid-template-columns: minmax(0,1fr); gap: 10px; }
   .chart-card.wide { grid-column: span 1; }
-  .chart-wrap { height: 112px; }
   /* "PROJECT HEALTH" + subtítulo no wrappean (cc-head es flex sin wrap) — a
    * este ancho las dos partes juntas no entran y el subtítulo queda cortado
    * por el overflow:hidden de .chart-card en vez de visible. */
@@ -1250,7 +1264,6 @@ input[type=file] { display: none; }
 
   /* Dashboard */
   .dash-scroll  { padding: 10px; gap: 10px; }
-  .stats-row    { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 6px; }
   .stat-card    { padding: 10px 8px; }
   .sc-val       { font-size: 1.5rem; }
   .sc-lbl       { font-size: .73rem; letter-spacing: .8px; margin-bottom: 5px; }
@@ -1259,7 +1272,6 @@ input[type=file] { display: none; }
   .chart-card.wide { grid-column: span 1; }
   .chart-card   { padding: 10px; }
   .cc-head      { font-size: .73rem; margin-bottom: 8px; }
-  .chart-wrap   { height: 110px; }
   .dash-cc-fn-row { grid-template-columns: minmax(0,1fr) 60px 26px; gap: 5px; }
   .dash-cc-fn-bigo { display: none; }
 
@@ -1337,7 +1349,6 @@ input[type=file] { display: none; }
   /* Medido con Playwright: sin esto, #run-btn queda matemáticamente fuera
    * de pantalla a 340-360px (el badge de estado y "Terminal" ya se ocultan
    * desde los tiers de 1100px/750px de arriba, en cascada hasta acá). */
-  .stats-row { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 4px; }
   .stat-card { padding: 8px 6px; }
   .sc-val    { font-size: 1.3rem; }
   .bottom-nav { height: 56px; }
@@ -1360,6 +1371,15 @@ input[type=file] { display: none; }
   padding: 2px 4px;
   flex-shrink: 0;
 }
+
+/* Diagrama — toggle Árbol / Interactivo / Directorio, mismo shape que
+   .zoom-controls; ".active" mismo criterio que .up-tab.active */
+.diag-view-toggle {
+  display: flex; align-items: center;
+  background: var(--s2); border: 1px solid var(--b1); border-radius: 7px;
+  padding: 2px; flex-shrink: 0;
+}
+.diag-view-toggle button.active { background: #3d9eff14; border-color: var(--info); color: var(--info); font-weight: 600; }
 
 .zoom-btn {
   width: 26px;
@@ -1411,7 +1431,6 @@ input[type=file] { display: none; }
   background-position: center center;
 }
 .diag-viewport:active { cursor: grabbing; }
-.diag-viewport.zoom-cursor { cursor: zoom-in; }
 
 /* ── Canvas: el elemento que se transforma ── */
 .diag-canvas {

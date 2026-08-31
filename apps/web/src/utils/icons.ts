@@ -35,6 +35,9 @@ export type IconName =
   | 'warning'
   | 'check'
   | 'shield'
+  | 'puzzle'
+  | 'settings'
+  | 'users'
 
 const PATHS: Record<IconName, string> = {
   dashboard:
@@ -69,6 +72,12 @@ const PATHS: Record<IconName, string> = {
     '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   shield: '<path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5z"/>',
+  puzzle:
+    '<path d="M7 3h4v2a2 2 0 0 0 4 0V3h4a2 2 0 0 1 2 2v4h-2a2 2 0 0 0 0 4h2v4a2 2 0 0 1-2 2h-4v-2a2 2 0 0 0-4 0v2H7a2 2 0 0 1-2-2v-4h2a2 2 0 0 0 0-4H5V5a2 2 0 0 1 2-2Z"/>',
+  settings:
+    '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82A1.65 1.65 0 0 0 3 13.09H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V2a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V8a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  users:
+    '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
 }
 
 /** Devuelve un `<svg>` inline. `stroke="currentColor"` — hereda color de donde se use. */
@@ -116,6 +125,9 @@ const LANG: Record<string, LangDef> = {
   '.java': { label: 'JAVA', cls: 'lang-java' },
   '.cpp': { label: 'C++', cls: 'lang-cpp' },
   '.c': { label: 'C', cls: 'lang-cpp' },
+  '.f90': { label: 'F90', cls: 'lang-fortran' },
+  '.s': { label: 'ASM', cls: 'lang-asm' },
+  '.asm': { label: 'ASM', cls: 'lang-asm' },
   '.sh': { label: 'SH', cls: 'lang-shell' },
   '.rb': { label: 'RB', cls: 'lang-ruby' },
   '.php': { label: 'PHP', cls: 'lang-php' },
@@ -135,6 +147,8 @@ const LANG_NAME_TO_EXT: Record<string, string> = {
   cpp: '.cpp',
   javascript: '.js',
   typescript: '.ts',
+  fortran: '.f90',
+  assembly: '.s',
 }
 
 export function languageBadgeByName(lang: string): string {

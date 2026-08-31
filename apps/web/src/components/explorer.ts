@@ -370,7 +370,7 @@ function _renderFileTabs(): void {
       <span class="exp-tab-icon">${extIcon(_getExt(tab.name))}</span>
       <span class="exp-tab-name">${tab.name}</span>
       ${tab.modified ? '<span class="exp-tab-dot">●</span>' : ''}
-      <button class="exp-tab-close" data-close-tab="${tab.id}">✕</button>
+      <button class="exp-tab-close" data-close-tab="${tab.id}" title="Cerrar">✕</button>
     </div>
   `,
     )

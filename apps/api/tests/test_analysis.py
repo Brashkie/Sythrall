@@ -11,9 +11,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import services.complexity_client as complexity_client
 from main import app
 
 client = TestClient(app)
+
+_UNREACHABLE_URL = "http://127.0.0.1:1"
 
 
 # ─── /analyze/code ────────────────────────────────────────────────────────────
@@ -296,6 +299,17 @@ class TestAnalyzeProject:
 
 
 class TestAnalyzeML:
+    """La detección propiamente dicha (libraries/pipeline/models/metrics/
+    issues) es relay puro a `services/complexity/src/ml.rs` — `_analyze_ml_sync`
+    toma `detection` verbatim, solo agrega `version` por librería. Esos tests
+    se eliminaron (2026-08-31, política de toda la carpeta) — `ml.rs` tiene
+    47 tests propios cubriendo cada detector con más profundidad de la que
+    estos alcanzaban por HTTP. Lo que queda es genuinamente Python:
+    `_ml_score`/`_ml_diagram` (aritmética y armado de Mermaid sobre datos ya
+    detectados, sin equivalente en Rust) y los 2 tests de degradación al
+    fallback Python (`_detect_*_fallback`), que Rust no puede probar por
+    definición — solo corren cuando el sidecar NO responde."""
+
     SKLEARN_CODE = """
 import numpy as np
 import pandas as pd
@@ -319,94 +333,6 @@ preds = model.predict(X_test)
 score = accuracy_score(y_test, preds)
 """
 
-    TORCH_CODE = """
-import torch
-import torch.nn as nn
-
-torch.manual_seed(42)
-
-class MyNet(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.fc = nn.Linear(10, 2)
-    def forward(self, x):
-        return self.fc(x)
-
-model = MyNet()
-optimizer = torch.optim.Adam(model.parameters())
-loss_fn = nn.CrossEntropyLoss()
-
-for epoch in range(10):
-    optimizer.zero_grad()
-    out = model(torch.randn(32, 10))
-    loss = loss_fn(out, torch.zeros(32, dtype=torch.long))
-    loss.backward()
-    optimizer.step()
-"""
-
-    LEAKAGE_CODE = """
-import pandas as pd
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
-
-scaler = StandardScaler()
-X = scaler.fit_transform(X_raw)   # BUG: antes del split
-X_train, X_test = train_test_split(X)
-"""
-
-    def test_ml_detects_libraries(self):
-        res = client.post(
-            "/analyze/ml",
-            json={
-                "filename": "model.py",
-                "content": self.SKLEARN_CODE,
-            },
-        )
-        assert res.status_code == 200
-        data = res.json()
-        lib_names = [lib["name"] for lib in data["libraries"]]
-        assert "NumPy" in lib_names
-        assert "Pandas" in lib_names
-        assert "Scikit-learn" in lib_names
-
-    def test_ml_detects_pipeline_stages(self):
-        res = client.post(
-            "/analyze/ml",
-            json={
-                "filename": "model.py",
-                "content": self.SKLEARN_CODE,
-            },
-        )
-        stage_ids = [s["id"] for s in res.json()["pipeline"]]
-        assert "carga_datos" in stage_ids
-        assert "split" in stage_ids
-        assert "escalado" in stage_ids
-        assert "entrenamiento" in stage_ids
-        assert "prediccion" in stage_ids
-        assert "evaluacion" in stage_ids
-
-    def test_ml_detects_random_forest_model(self):
-        res = client.post(
-            "/analyze/ml",
-            json={
-                "filename": "model.py",
-                "content": self.SKLEARN_CODE,
-            },
-        )
-        model_names = [m["name"] for m in res.json()["models"]]
-        assert "RandomForestClassifier" in model_names
-
-    def test_ml_detects_metrics(self):
-        res = client.post(
-            "/analyze/ml",
-            json={
-                "filename": "model.py",
-                "content": self.SKLEARN_CODE,
-            },
-        )
-        metrics = res.json()["metrics"]
-        assert "accuracy" in metrics
-
     def test_ml_score_range(self):
         res = client.post(
             "/analyze/ml",
@@ -417,51 +343,6 @@ X_train, X_test = train_test_split(X)
         )
         score = res.json()["score"]
         assert 0 <= score <= 100
-
-    def test_ml_detects_data_leakage(self):
-        res = client.post(
-            "/analyze/ml",
-            json={
-                "filename": "bad.py",
-                "content": self.LEAKAGE_CODE,
-            },
-        )
-        issues = res.json()["issues"]
-        leakage = [i for i in issues if i.get("category") == "data_leakage"]
-        assert len(leakage) >= 1
-        assert leakage[0]["severity"] == "error"
-
-    def test_ml_pytorch_no_zero_grad_issue(self):
-        bad_torch = self.TORCH_CODE.replace("optimizer.zero_grad()", "")
-        res = client.post(
-            "/analyze/ml",
-            json={
-                "filename": "net.py",
-                "content": bad_torch,
-            },
-        )
-        issues = res.json()["issues"]
-        pytorch_issues = [i for i in issues if i.get("category") == "pytorch"]
-        assert any("zero_grad" in i["message"] for i in pytorch_issues)
-
-    def test_ml_pytorch_with_zero_grad_no_issue(self):
-        res = client.post(
-            "/analyze/ml",
-            json={
-                "filename": "net.py",
-                "content": self.TORCH_CODE,
-            },
-        )
-        issues = res.json()["issues"]
-        zero_grad_issues = [i for i in issues if i.get("category") == "pytorch" and "zero_grad" in i.get("message", "")]
-        assert len(zero_grad_issues) == 0
-
-    def test_ml_no_random_state_warning(self):
-        code = "from sklearn.model_selection import train_test_split\nX_train, X_test = train_test_split(X)\n"
-        res = client.post("/analyze/ml", json={"filename": "m.py", "content": code})
-        issues = res.json()["issues"]
-        rs_issues = [i for i in issues if "random_state" in i.get("message", "")]
-        assert len(rs_issues) >= 1
 
     def test_ml_generates_mermaid_diagram(self):
         res = client.post(
@@ -505,53 +386,6 @@ X_train, X_test = train_test_split(X)
         ):
             assert key in data, f"Falta clave: {key}"
 
-    def test_ml_icecream_warning(self):
-        code = "from icecream import ic\n" + "\n".join([f"ic(x{i})" for i in range(8)])
-        res = client.post("/analyze/ml", json={"filename": "debug.py", "content": code})
-        issues = res.json()["issues"]
-        ic_issues = [i for i in issues if i.get("category") == "icecream"]
-        assert len(ic_issues) >= 1
-        assert ic_issues[0]["severity"] == "warning"
-
-    def test_ml_lgbm_without_early_stopping(self):
-        code = "import lightgbm as lgb\nmodel = lgb.LGBMClassifier()\nmodel.fit(X, y)\n"
-        res = client.post("/analyze/ml", json={"filename": "lgbm.py", "content": code})
-        issues = res.json()["issues"]
-        lgbm_issues = [i for i in issues if i.get("category") == "lightgbm"]
-        assert any("early_stopping" in i["message"] for i in lgbm_issues)
-
-    def test_ml_opencv_no_none_check(self):
-        code = "import cv2\nimg = cv2.imread('file.jpg')\nprint(img.shape)\n"
-        res = client.post("/analyze/ml", json={"filename": "cv.py", "content": code})
-        issues = res.json()["issues"]
-        cv_issues = [i for i in issues if i.get("category") == "opencv"]
-        assert any("None" in i["message"] for i in cv_issues)
-
-    def test_ml_plotly_no_show(self):
-        code = "import plotly.express as px\nfig = px.scatter(df, x='a', y='b')\n"
-        res = client.post("/analyze/ml", json={"filename": "plot.py", "content": code})
-        issues = res.json()["issues"]
-        plot_issues = [i for i in issues if i.get("category") == "plotly"]
-        assert len(plot_issues) >= 1
-
-    def test_ml_polars_pandas_mix_warning(self):
-        code = "import polars as pl\nimport pandas as pd\ndf = pd.read_csv('f.csv')\ndf2 = pl.DataFrame()\n"
-        res = client.post("/analyze/ml", json={"filename": "mix.py", "content": code})
-        issues = res.json()["issues"]
-        polars_issues = [i for i in issues if i.get("category") == "polars"]
-        assert len(polars_issues) >= 1
-
-    def test_ml_pipeline_sorted_by_line(self):
-        res = client.post(
-            "/analyze/ml",
-            json={
-                "filename": "model.py",
-                "content": self.SKLEARN_CODE,
-            },
-        )
-        lines = [s["line"] for s in res.json()["pipeline"]]
-        assert lines == sorted(lines)
-
     def test_ml_suggestions_list(self):
         res = client.post(
             "/analyze/ml",
@@ -563,6 +397,31 @@ X_train, X_test = train_test_split(X)
         suggestions = res.json()["suggestions"]
         assert isinstance(suggestions, list)
         assert len(suggestions) <= 8
+
+    def test_ml_degrades_to_fallback_when_sidecar_unreachable(self, monkeypatch):
+        """Sin sidecar, los 4 detectores caen a `_detect_*_fallback` (el
+        `ast.walk`/regex original) y siguen produciendo el mismo shape —
+        mismo criterio que el resto del engine (diagram.py, heatmap)."""
+        monkeypatch.setattr(complexity_client, "COMPLEXITY_ENGINE_URL", _UNREACHABLE_URL)
+        res = client.post(
+            "/analyze/ml",
+            json={"filename": "model.py", "content": self.SKLEARN_CODE},
+        )
+        assert res.status_code == 200
+        data = res.json()
+        names = {lib["name"] for lib in data["libraries"]}
+        assert {"NumPy", "Pandas", "Scikit-learn"}.issubset(names)
+        assert len(data["pipeline"]) > 0
+
+    def test_ml_fallback_still_reports_syntax_error_correctly(self, monkeypatch):
+        monkeypatch.setattr(complexity_client, "COMPLEXITY_ENGINE_URL", _UNREACHABLE_URL)
+        res = client.post(
+            "/analyze/ml",
+            json={"filename": "bad.py", "content": "def bad(\n"},
+        )
+        data = res.json()
+        assert data["libraries"] == []
+        assert any("SyntaxError" in issue["message"] for issue in data["issues"])
 
 
 # ─── /analyze/diagram ─────────────────────────────────────────────────────────
@@ -762,6 +621,56 @@ class Dog(Animal):
         data = res.json()
         for key in ("filename", "diagram_type", "mermaid", "ts"):
             assert key in data
+
+    def test_classes_diagram_lists_attributes_from_multiple_methods(self):
+        # `attributes` en Rust cubre `self.x=` de CUALQUIER método, no solo
+        # `__init__` (a diferencia del fallback Python, que solo mira
+        # `__init__` + asignaciones sueltas a nivel de clase) — diferencia
+        # documentada, no un bug.
+        code = "class C:\n    def __init__(self):\n        self.a = 1\n    def other(self):\n        self.b = 2\n"
+        res = client.post(
+            "/analyze/diagram",
+            json={"filename": "c.py", "content": code, "diagram_type": "classes"},
+        )
+        mermaid = res.json()["mermaid"]
+        assert "+a" in mermaid
+        assert "+b" in mermaid
+
+    def test_diagram_degrades_to_fallback_when_sidecar_unreachable(self, monkeypatch):
+        """Mismo criterio que el resto del engine: sin sidecar, los 4
+        builders `.py` caen a `_py_*_fallback` (el `ast.walk` original) y
+        siguen produciendo el mismo tipo de diagrama, no un error."""
+        monkeypatch.setattr(complexity_client, "COMPLEXITY_ENGINE_URL", _UNREACHABLE_URL)
+        for diag_type, expected in [
+            ("flowchart", "flowchart TD"),
+            ("callgraph", "graph LR"),
+            ("classes", "classDiagram"),
+            ("sequence", "sequenceDiagram"),
+        ]:
+            res = client.post(
+                "/analyze/diagram",
+                json={"filename": "s.py", "content": self.SIMPLE_CODE, "diagram_type": diag_type},
+            )
+            assert res.status_code == 200
+            assert expected in res.json()["mermaid"], f"fallback de {diag_type} no produjo el shape esperado"
+
+    def test_diagram_fallback_flowchart_finds_functions(self, monkeypatch):
+        monkeypatch.setattr(complexity_client, "COMPLEXITY_ENGINE_URL", _UNREACHABLE_URL)
+        res = client.post(
+            "/analyze/diagram",
+            json={"filename": "s.py", "content": self.SIMPLE_CODE, "diagram_type": "flowchart"},
+        )
+        mermaid = res.json()["mermaid"]
+        assert "load_data" in mermaid
+        assert "process" in mermaid
+
+    def test_diagram_fallback_still_reports_syntax_error_correctly(self, monkeypatch):
+        monkeypatch.setattr(complexity_client, "COMPLEXITY_ENGINE_URL", _UNREACHABLE_URL)
+        res = client.post(
+            "/analyze/diagram",
+            json={"filename": "bad.py", "content": "def bad(\n", "diagram_type": "flowchart"},
+        )
+        assert "SyntaxError" in res.json()["mermaid"]
 
 
 # ─── /analyze/api (check externo) ─────────────────────────────────────────────

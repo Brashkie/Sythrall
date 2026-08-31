@@ -22,7 +22,9 @@ pydantic==2.9.2
 PyJWT==2.10.1                  # Firma/verifica los tokens de sesión de la terminal (ver routers/auth.py)
 
 # ─── PATCH ───────────────────────────────────────────────────────────────
-tree-sitter==0.23.2
-tree-sitter-c==0.23.4
-tree-sitter-cpp==0.23.4
-networkx==3.6.1
+# tree-sitter/tree-sitter-c/tree-sitter-cpp removidos (Fase 18): el parseo
+# C/C++ es Rust-only ahora (`services/complexity/src/cparse.rs`, mismas
+# gramáticas vía los bindings Rust), Python ya no las importa en ningún lado.
+# networkx removido (Fase 18, "Dependency Engine"): Architecture Smells
+# (su único usuario) es Rust-only ahora (`graph.rs::build_architecture_smells`),
+# Python ya no la importa en ningún lado.

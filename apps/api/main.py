@@ -1,5 +1,5 @@
 """
-Sythrall — Backend FastAPI v4.8
+Sythrall — Backend FastAPI v4.12
 Migración completa de Flask → FastAPI. Hepein Oficial
 """
 
@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 from shared import add_log, now, LIB_FLAGS, UPLOADS_DIR
 from services.complexity_client import check_complexity_engine_sync
+from services.plugin_registry import load_plugin_manifests_sync
 
 # ── Imports condicionales ────────────────────────────────────────────────────
 try:
@@ -30,6 +31,11 @@ except ImportError:
 # un chequeo de red — el sidecar Rust `complexity-engine` es un proceso
 # aparte (ver services/complexity), puede estar simplemente no-levantado todavía.
 LIB_FLAGS["HAS_COMPLEXITY_ENGINE"] = check_complexity_engine_sync()
+
+# Fase 24 — mismo momento e igual criterio de degradación que la línea de
+# arriba: si el sidecar no respondió a tiempo acá, `plugin_registry.py` cae
+# a su mapeo hardcodeado de respaldo por el resto de esta corrida del proceso.
+load_plugin_manifests_sync()
 try:
     import numpy as np
 
@@ -131,7 +137,7 @@ HAS_CYTHON = LIB_FLAGS["HAS_CYTHON"]
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     os.makedirs(UPLOADS_DIR, exist_ok=True)
-    add_log("info", "Sythrall v4.11 — FastAPI")
+    add_log("info", "Sythrall v4.12 — FastAPI")
     add_log(
         "info",
         f"   flake8={'✓' if HAS_FLAKE8 else '✗'}  pylint={'✓' if HAS_PYLINT else '✗'}  "
@@ -154,7 +160,7 @@ async def lifespan(app: FastAPI):
     add_log("info", "Sythrall detenido.")
 
 
-app = FastAPI(title="Sythrall", version="4.11.0", lifespan=lifespan)
+app = FastAPI(title="Sythrall", version="4.12.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )
@@ -170,6 +176,7 @@ from routers.intelligence import router as intel_router
 from routers.graph import router as graph_router
 from routers.metrics_live import router as metrics_router
 from routers.auth import router as auth_router
+from routers.execution import router as execution_router
 
 app.include_router(upload_router, prefix="/api/upload", tags=["Upload"])
 app.include_router(analysis_router, prefix="/analyze", tags=["Analysis"])
@@ -181,6 +188,7 @@ app.include_router(intel_router, prefix="/intel", tags=["Intelligence"])
 app.include_router(graph_router, prefix="/analyze", tags=["Graph"])
 app.include_router(metrics_router, prefix="/metrics", tags=["Live Metrics"])
 app.include_router(auth_router, prefix="/auth", tags=["Auth"])
+app.include_router(execution_router, prefix="/execution", tags=["Execution"])
 
 
 # ── System endpoints ─────────────────────────────────────────────────────────
@@ -215,7 +223,7 @@ def _tool_version(cmd: list[str]) -> str:
 async def capabilities():
     caps: dict = {
         "python": sys.version,
-        "server": "Sythrall v4.11",
+        "server": "Sythrall v4.12",
         "ts": now(),
         **{k: v for k, v in LIB_FLAGS.items()},
     }

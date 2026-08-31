@@ -81,6 +81,12 @@ htmlcov/
 # apps/api/, pero cualquier invocación con otro cwd también debe quedar afuera)
 uploads/
 
+# ── Logs (CBOR, ver services/complexity/src/logstore.rs) ─
+# complexity-engine/terminal-server crean logs/ relativo a su propio cwd
+# (raíz del repo en dev, apps/api/ cuando pytest levanta el sidecar) — nunca
+# se sube al repo, mismo criterio que uploads/ arriba.
+logs/
+
 # ── Docker ───────────────────────────────────────────────
 # Los volúmenes locales de Docker no se suben
 .docker/

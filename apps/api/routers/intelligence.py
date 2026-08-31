@@ -21,13 +21,29 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from shared import add_log, save_temp, safe_remove
-from services.complexity_client import analyze_complexity, parse_python_rich
+from shared import add_log, dedup_by_key, save_temp, safe_remove
+from services.complexity_client import (
+    analyze_complexity,
+    parse_python_rich,
+    find_definitions_python_rust,
+    find_definitions_jsts_rust,
+    find_references_python_rust,
+    find_references_jsts_rust,
+)
 from services.static_parser import (
     _parse_ts,
     _parse_js,
     _cyclomatic_python,
 )
+
+
+async def _parse_js_or_ts(filename: str, content: str, ext: str) -> dict:
+    """`_parse_ts` para `.ts`/`.tsx`, `_parse_js` para el resto — repetido 5
+    veces (heavy_analyze/hover/definitions/references/completions) como el
+    mismo `parse_fn = ... if ... else ...; await parse_fn(...)`."""
+    parse_fn = _parse_ts if ext in (".ts", ".tsx") else _parse_js
+    return await parse_fn(filename, content)
+
 
 router = APIRouter()
 
@@ -139,11 +155,6 @@ def _fast_lint_python(content: str) -> list[dict]:
         # assert desactivable
         if isinstance(node, ast.Assert):
             markers.append(_mk(ln, col, col + 6, "assert puede desactivarse con -O", 4, "W001", "ast"))
-
-        # f-string debug leaks (ic() / print(f"..."))
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Attribute) and node.func.attr == "debug":
-                pass  # logger.debug OK
 
     # Líneas largas
     for i, line in enumerate(lines, 1):
@@ -353,8 +364,7 @@ async def heavy_analyze(req: AnalyzeRequest) -> dict[str, Any]:
 
         elif ext in (".ts", ".tsx", ".js", ".jsx"):
             # Para TS/JS el heavy path usa el static parser
-            parse_fn = _parse_ts if ext in (".ts", ".tsx") else _parse_js
-            parsed = parse_fn(req.filename, req.content)
+            parsed = await _parse_js_or_ts(req.filename, req.content, ext)
             for fn in parsed.get("functions", []):
                 big_o.append(
                     {
@@ -386,13 +396,7 @@ async def heavy_analyze(req: AnalyzeRequest) -> dict[str, Any]:
             safe_remove(tmp_path)
 
     # Deduplicar markers (flake8 + pylint pueden solapar)
-    seen: set[str] = set()
-    unique: list[dict] = []
-    for m in markers:
-        key = f"{m['startLineNumber']}:{m.get('code','')}"
-        if key not in seen:
-            seen.add(key)
-            unique.append(m)
+    unique = dedup_by_key(markers, lambda m: f"{m['startLineNumber']}:{m.get('code', '')}")
 
     ms = round((time.perf_counter() - t0) * 1000, 1)
     return {
@@ -501,7 +505,7 @@ async def hover_info(req: HoverRequest) -> dict[str, Any]:
     if ext == ".py":
         return await _hover_python(req)
     elif ext in (".ts", ".tsx", ".js", ".jsx"):
-        return _hover_js_ts(req)
+        return await _hover_js_ts(req)
     else:
         return {"markdown": "", "range": None}
 
@@ -684,11 +688,10 @@ async def _build_hover_python(fn: ast.FunctionDef | ast.AsyncFunctionDef, req: H
     }
 
 
-def _hover_js_ts(req: HoverRequest) -> dict:
+async def _hover_js_ts(req: HoverRequest) -> dict:
     """Hover para JS/TS usando el static parser."""
     ext = Path(req.filename).suffix.lower()
-    parse_fn = _parse_ts if ext in (".ts", ".tsx") else _parse_js
-    parsed = parse_fn(req.filename, req.content)
+    parsed = await _parse_js_or_ts(req.filename, req.content, ext)
     target = req.line
 
     # Buscar función que contiene la línea
@@ -794,9 +797,9 @@ async def go_to_definition(req: DefinitionRequest) -> dict[str, Any]:
 
     try:
         if ext == ".py":
-            defs = _find_definitions_python(req.content, symbol)
+            defs = await _find_definitions_python(req.content, symbol)
         elif ext in (".ts", ".tsx", ".js", ".jsx"):
-            defs = _find_definitions_js_ts(req.content, symbol, ext)
+            defs = await _find_definitions_js_ts(req.content, symbol, ext)
         else:
             defs = []
 
@@ -811,8 +814,20 @@ async def go_to_definition(req: DefinitionRequest) -> dict[str, Any]:
         return {"found": False, "symbol": symbol, "definitions": []}
 
 
-def _find_definitions_python(content: str, symbol: str) -> list[dict]:
-    """Busca la definición de un símbolo en el AST Python."""
+async def _find_definitions_python(content: str, symbol: str) -> list[dict]:
+    """Fase 18, "Symbol Engine": go-to-definition para Python vía el sidecar
+    (`symbols.rs::find_definitions_python`, mismo `ast.walk` que este módulo
+    hacía antes, ahora en Rust). `_find_definitions_python_fallback` de acá
+    abajo es el camino sin sidecar — a diferencia de C/C++/JS/TS (que nunca
+    tuvieron un fallback propio, cutover completo), Python SÍ lo tenía desde
+    siempre (cero dependencia del sidecar) y perderlo sería una regresión
+    real, no una limpieza — mismo criterio que `call_graph`/`wasm_hints`."""
+    defs = await find_definitions_python_rust(content, symbol)
+    return defs if defs is not None else _find_definitions_python_fallback(content, symbol)
+
+
+def _find_definitions_python_fallback(content: str, symbol: str) -> list[dict]:
+    """Busca la definición de un símbolo en el AST Python — sin sidecar."""
     try:
         tree = ast.parse(content)
     except SyntaxError:
@@ -908,74 +923,19 @@ def _find_definitions_python(content: str, symbol: str) -> list[dict]:
     return defs
 
 
-def _find_definitions_js_ts(content: str, symbol: str, ext: str) -> list[dict]:
-    """Busca la definición de un símbolo en JS/TS usando el static parser."""
-    from services.static_parser import _parse_ts, _parse_js
-
-    parse_fn = _parse_ts if ext in (".ts", ".tsx") else _parse_js
-    parsed = parse_fn(f"file{ext}", content)
-    defs: list[dict] = []
-
-    # Funciones
-    for fn in parsed.get("functions", []):
-        if fn["name"] == symbol:
-            args = fn.get("args", [])
-            defs.append(
-                {
-                    "line": fn["line"],
-                    "column": 1,
-                    "end_line": fn.get("end_line", fn["line"]),
-                    "kind": "function",
-                    "signature": f"function {symbol}({', '.join(args[:6])})",
-                    "docstring": "",
-                }
-            )
-
-    # Clases
-    for cls in parsed.get("classes", []):
-        if cls["name"] == symbol:
-            extends = f" extends {cls['extends']}" if cls.get("extends") else ""
-            defs.append(
-                {
-                    "line": cls["line"],
-                    "column": 1,
-                    "end_line": cls["line"],
-                    "kind": "class",
-                    "signature": f"class {symbol}{extends}",
-                    "docstring": "",
-                }
-            )
-
-    # Interfaces (TS)
-    for iface in parsed.get("interfaces", []):
-        if iface["name"] == symbol:
-            defs.append(
-                {
-                    "line": iface["line"],
-                    "column": 1,
-                    "end_line": iface["line"],
-                    "kind": "interface",
-                    "signature": f"interface {symbol}",
-                    "docstring": "",
-                }
-            )
-
-    # Types (TS)
-    for t in parsed.get("types", []):
-        if t["name"] == symbol:
-            defs.append(
-                {
-                    "line": t["line"],
-                    "column": 1,
-                    "end_line": t["line"],
-                    "kind": "type",
-                    "signature": f"type {symbol}",
-                    "docstring": "",
-                }
-            )
-
-    defs.sort(key=lambda d: d["line"])
-    return defs
+async def _find_definitions_js_ts(content: str, symbol: str, ext: str) -> list[dict]:
+    """Fase 18, "Symbol Engine": go-to-definition para JS/TS vía el sidecar
+    (`symbols.rs::find_definitions_jsts`, que reusa `jsts::parse_js_ts` — el
+    mismo parseo que ya corre para `/parse/js`/`/parse/ts` — y filtra por
+    nombre ahí mismo, en vez de que Python reciba functions/classes/
+    interfaces/types completos y filtre acá). Sin fallback propio — igual
+    que el resto de JS/TS desde que ese parser se portó del todo a Rust:
+    si el sidecar no responde, `None` degrada a lista vacía, mismo criterio
+    que ya tenía antes de este cambio (`_unsupported()` también daba listas
+    vacías)."""
+    is_typescript = ext in (".ts", ".tsx")
+    defs = await find_definitions_jsts_rust(content, is_typescript, symbol)
+    return defs or []
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -998,9 +958,9 @@ async def find_references(req: ReferenceRequest) -> dict[str, Any]:
 
     try:
         if ext == ".py":
-            refs, def_line = _find_references_python(req.content, symbol)
+            refs, def_line = await _find_references_python(req.content, symbol)
         elif ext in (".ts", ".tsx", ".js", ".jsx"):
-            refs, def_line = _find_references_js_ts(req.content, symbol, ext)
+            refs, def_line = await _find_references_js_ts(req.content, symbol, ext)
         else:
             refs, def_line = [], None
 
@@ -1016,8 +976,21 @@ async def find_references(req: ReferenceRequest) -> dict[str, Any]:
         return {"symbol": symbol, "references": [], "definition_line": None, "total": 0}
 
 
-def _find_references_python(content: str, symbol: str) -> tuple[list[dict], int | None]:
-    """Encuentra todas las referencias a un símbolo en Python vía AST."""
+async def _find_references_python(content: str, symbol: str) -> tuple[list[dict], int | None]:
+    """Fase 18, "Symbol Engine": find-references para Python vía el sidecar
+    (`symbols.rs::find_references_python`) — mismo `ast.walk`/fallback regex
+    que este módulo hacía antes, ahora en Rust. `_find_references_python_fallback`
+    de acá abajo es el camino sin sidecar (mismo criterio que
+    `_find_definitions_python`/`call_graph`/`wasm_hints`: Python nunca
+    dependió del sidecar para esto, perderlo del todo sería una regresión)."""
+    result = await find_references_python_rust(content, symbol)
+    if result is not None:
+        return result["references"], result["definition_line"]
+    return _find_references_python_fallback(content, symbol)
+
+
+def _find_references_python_fallback(content: str, symbol: str) -> tuple[list[dict], int | None]:
+    """Encuentra todas las referencias a un símbolo en Python vía AST — sin sidecar."""
     try:
         tree = ast.parse(content)
     except SyntaxError:
@@ -1071,72 +1044,22 @@ def _find_references_python(content: str, symbol: str) -> tuple[list[dict], int 
             )
 
     # Deduplicar por línea+col
-    seen: set[str] = set()
-    unique: list[dict] = []
-    for r in refs:
-        key = f"{r['line']}:{r['column']}"
-        if key not in seen:
-            seen.add(key)
-            unique.append(r)
-
+    unique = dedup_by_key(refs, lambda r: f"{r['line']}:{r['column']}")
     unique.sort(key=lambda r: r["line"])
     return unique, def_line
 
 
-def _find_references_js_ts(content: str, symbol: str, ext: str) -> tuple[list[dict], int | None]:
-    """Encuentra referencias en JS/TS via regex + posiciones del parser."""
-    from services.static_parser import _parse_ts, _parse_js
-
-    parse_fn = _parse_ts if ext in (".ts", ".tsx") else _parse_js
-    parsed = parse_fn(f"file{ext}", content)
-
-    def_line: int | None = None
-    refs: list[dict] = []
-    lines = content.splitlines()
-
-    # Línea de definición desde el parser
-    for fn in parsed.get("functions", []):
-        if fn["name"] == symbol:
-            def_line = fn["line"]
-            refs.append(
-                {
-                    "line": fn["line"],
-                    "column": 1,
-                    "kind": "definition",
-                    "preview": _preview(lines, fn["line"]),
-                }
-            )
-    for cls in parsed.get("classes", []):
-        if cls["name"] == symbol:
-            def_line = cls["line"]
-            refs.append(
-                {
-                    "line": cls["line"],
-                    "column": 1,
-                    "kind": "definition",
-                    "preview": _preview(lines, cls["line"]),
-                }
-            )
-
-    # Resto de usos via regex word-boundary
-    pattern = re.compile(rf"\b{re.escape(symbol)}\b")
-    for i, line in enumerate(lines, 1):
-        for m in pattern.finditer(line):
-            col = m.start() + 1
-            # Evitar duplicar la línea de definición
-            if any(r["line"] == i and r["column"] == col for r in refs):
-                continue
-            refs.append(
-                {
-                    "line": i,
-                    "column": col,
-                    "kind": "use",
-                    "preview": _preview(lines, i),
-                }
-            )
-
-    refs.sort(key=lambda r: r["line"])
-    return refs, def_line
+async def _find_references_js_ts(content: str, symbol: str, ext: str) -> tuple[list[dict], int | None]:
+    """Fase 18, "Symbol Engine": find-references para JS/TS vía el sidecar
+    (`symbols.rs::find_references_jsts` — definiciones desde `jsts::parse_js_ts`,
+    resto de usos por regex de límite de palabra, mismo criterio que este
+    módulo hacía antes). Sin fallback propio, mismo criterio que
+    `_find_definitions_js_ts`: `None` (sidecar caído) degrada a vacío."""
+    is_typescript = ext in (".ts", ".tsx")
+    result = await find_references_jsts_rust(content, is_typescript, symbol)
+    if result is None:
+        return [], None
+    return result["references"], result["definition_line"]
 
 
 def _find_references_regex(content: str, symbol: str) -> list[dict]:
@@ -1190,7 +1113,7 @@ async def get_completions(req: CompletionRequest) -> dict[str, Any]:
         if ext == ".py":
             symbols = _completions_python(req.content)
         elif ext in (".ts", ".tsx", ".js", ".jsx"):
-            symbols = _completions_js_ts(req.content, ext)
+            symbols = await _completions_js_ts(req.content, ext)
         else:
             symbols = []
 
@@ -1344,23 +1267,12 @@ def _completions_python(content: str) -> list[dict]:
                 )
 
     # Deduplicar por label+kind
-    seen: set[str] = set()
-    unique: list[dict] = []
-    for s in symbols:
-        key = f"{s['label']}:{s['kind']}"
-        if key not in seen:
-            seen.add(key)
-            unique.append(s)
-
-    return unique
+    return dedup_by_key(symbols, lambda s: f"{s['label']}:{s['kind']}")
 
 
-def _completions_js_ts(content: str, ext: str) -> list[dict]:
+async def _completions_js_ts(content: str, ext: str) -> list[dict]:
     """Extrae símbolos de JS/TS para autocomplete."""
-    from services.static_parser import _parse_ts, _parse_js
-
-    parse_fn = _parse_ts if ext in (".ts", ".tsx") else _parse_js
-    parsed = parse_fn(f"file{ext}", content)
+    parsed = await _parse_js_or_ts(f"file{ext}", content, ext)
     symbols: list[dict] = []
 
     for fn in parsed.get("functions", []):
@@ -1433,14 +1345,7 @@ def _completions_js_ts(content: str, ext: str) -> list[dict]:
                 }
             )
 
-    seen: set[str] = set()
-    unique: list[dict] = []
-    for s in symbols:
-        key = f"{s['label']}:{s['kind']}"
-        if key not in seen:
-            seen.add(key)
-            unique.append(s)
-    return unique
+    return dedup_by_key(symbols, lambda s: f"{s['label']}:{s['kind']}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1479,9 +1384,9 @@ async def rename_symbol(req: RenameRequest) -> dict[str, Any]:
 
     try:
         if ext == ".py":
-            refs, _def_line = _find_references_python(req.content, req.symbol_name)
+            refs, _def_line = await _find_references_python(req.content, req.symbol_name)
         elif ext in (".ts", ".tsx", ".js", ".jsx"):
-            refs, _def_line = _find_references_js_ts(req.content, req.symbol_name, ext)
+            refs, _def_line = await _find_references_js_ts(req.content, req.symbol_name, ext)
         else:
             refs, _def_line = _find_references_regex(req.content, req.symbol_name), None
 

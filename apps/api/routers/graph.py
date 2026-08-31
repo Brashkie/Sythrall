@@ -1,37 +1,34 @@
 """
 Router: Code Graph Visual
-Endpoint unificado para los 4 tipos de grafo del panel Diagrama.
+Endpoint unificado para los 5 tipos de grafo del panel Diagrama — todos
+Rust-only ahora (Fase 18, Graph Engine): Import, Call, Circular, Centrality
+y Heatmap (la última pieza en migrar) viven en
+`services/complexity/src/graph.rs`; este archivo solo parsea/orquesta y
+degrada con gracia si el sidecar no responde.
 
-POST /analyze/graph   → Import Graph, Call Graph, Circular Deps, Complexity Heatmap
+POST /analyze/graph   → Import Graph, Call Graph, Circular Deps, Complexity Heatmap, Centrality
 GET  /analyze/graph/types → tipos disponibles
 """
 
 from __future__ import annotations
 
 import asyncio
-import re
 from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel
 
 from shared import add_log, UPLOADS_DIR
 from services.complexity_client import (
+    build_architecture_smells_rust,
     build_call_graph_rust,
     build_centrality_graph_rust,
     build_circular_graph_rust,
+    build_heatmap_rust,
     build_import_graph_rust,
 )
-from services.static_parser import find_cycles_capped
-from services.project_service import read_project_files
+from services.static_parser import parse_project_files
 
 router = APIRouter()
-
-try:
-    import networkx as nx
-
-    HAS_NX = True
-except ImportError:
-    HAS_NX = False
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -40,50 +37,6 @@ except ImportError:
 class GraphRequest(BaseModel):
     files: list[dict]  # [{"filename": "...", "content": "..."}]
     graph_type: str = "import"  # import | call | circular | heatmap
-
-
-# ── Colores heatmap ───────────────────────────────────────────────────────────
-
-
-def _cc_color(cc: int) -> str:
-    if cc <= 5:
-        return "#00f5a0"  # verde
-    if cc <= 10:
-        return "#ffb627"  # amarillo
-    if cc <= 20:
-        return "#ff8a00"  # naranja
-    return "#ff3366"  # rojo
-
-
-def _cc_level(cc: int) -> str:
-    if cc <= 5:
-        return "low"
-    if cc <= 10:
-        return "medium"
-    if cc <= 20:
-        return "high"
-    return "critical"
-
-
-def _bigo_color(bigo: str) -> str:
-    table = {
-        "O(1)": "#00f5a0",
-        "O(log n)": "#8ef5c0",
-        "O(n)": "#ffb627",
-        "O(n log n)": "#ff8a00",
-        "O(n²)": "#ff3366",
-        "O(n³)": "#ff3366",
-        "O(2^n)": "#ff3366",
-    }
-    return table.get(bigo, "#4a5880")
-
-
-def _bigo_level(bigo: str) -> str:
-    if bigo in ("O(1)", "O(log n)"):
-        return "efficient"
-    if bigo in ("O(n)", "O(n log n)"):
-        return "moderate"
-    return "expensive"
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -142,7 +95,7 @@ async def generate_graph(req: GraphRequest) -> dict[str, Any]:
         elif req.graph_type == "circular":
             return await _build_circular_graph(parsed_files)
         elif req.graph_type == "heatmap":
-            return _build_heatmap(parsed_files)
+            return await _build_heatmap(parsed_files)
         elif req.graph_type == "centrality":
             return await _build_centrality_graph(parsed_files)
         else:
@@ -165,62 +118,10 @@ async def _parse_all(files: list[dict]) -> list[dict]:
     parsed_list = await asyncio.gather(*(parse_file(fname, content) for fname, content in to_parse))
 
     results = []
-    for (fname, content), parsed in zip(to_parse, parsed_list, strict=True):
+    for (fname, _content), parsed in zip(to_parse, parsed_list, strict=True):
         parsed["_filename"] = fname
-        parsed["_content"] = content
         results.append(parsed)
     return results
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  EDGES / DIGRAPH COMPARTIDOS (Fase 22 — Architecture smells)
-#  `_build_import_graph`/`_build_circular_graph`/`_build_centrality_graph`
-#  reconstruían el mismo loop archivo→archivo 3 veces, cada una casi
-#  idéntica. Extraído acá para que `_build_architecture_smells` (abajo) no
-#  sea una 4ta copia — un solo shape de edge, un solo builder de DiGraph.
-# ══════════════════════════════════════════════════════════════════════════════
-
-
-def _build_project_edges(parsed_files: list[dict]) -> list[dict]:
-    """Edges archivo→archivo, solo entre archivos que el proyecto ya trae
-    (imports a librerías externas no generan edge, no hay archivo del
-    proyecto que resolver). Shape único `{"from", "to", "via", "line"}` —
-    antes `_build_import_graph` incluía `"line"` y los otros dos builders no;
-    unificado porque ningún test compara el dict completo, solo hace
-    `.get()`/`in` sobre keys puntuales."""
-    file_names = {p["_filename"] for p in parsed_files}
-    edges: list[dict] = []
-    seen: set[str] = set()
-
-    for p in parsed_files:
-        src = p["_filename"]
-        for imp in p.get("imports", []):
-            mod = imp.get("module", "")
-            for candidate in _module_to_candidates(mod, src):
-                if candidate in file_names and candidate != src:
-                    key = f"{src}→{candidate}"
-                    if key not in seen:
-                        seen.add(key)
-                        edges.append({"from": src, "to": candidate, "via": mod, "line": imp.get("line", 0)})
-                    break
-
-    return edges
-
-
-def _build_project_digraph(parsed_files: list[dict], edges: list[dict]) -> nx.DiGraph:
-    """DiGraph con TODOS los archivos como nodos (incluso sin edges) antes de
-    agregar las edges — así un archivo aislado aparece con in/out-degree 0
-    en vez de estar ausente del grafo. `nx.simple_cycles` ignora nodos
-    aislados de todos modos, así que esto no cambia el resultado de
-    `find_cycles_capped` para `_build_architecture_smells` — su único caller
-    ahora que Import/Centrality/Call/Circular Graph ya se portaron todos a
-    Rust (Fase 18)."""
-    G = nx.DiGraph()
-    for p in parsed_files:
-        G.add_node(p["_filename"])
-    for e in edges:
-        G.add_edge(e["from"], e["to"])
-    return G
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -248,6 +149,28 @@ def _files_summary_for_sidecar(parsed_files: list[dict]) -> list[dict]:
     ]
 
 
+_SIDECAR_DOWN_MSG = "complexity-engine sidecar no disponible"
+
+
+def _graph_degraded(graph_type: str, summary: dict, **extra) -> dict:
+    """Shape de degradación compartido por los builders de grafo cuando el
+    sidecar no responde — antes cada uno tenía su propia copia casi idéntica
+    de este dict más su propio `add_log`. `summary` varía por tipo de grafo
+    (cada uno tiene sus propias keys); `extra` cubre los campos puntuales que
+    solo Circular Deps necesita (`cycles`/`has_cycles`) o Import Graph
+    (`entry_points`)."""
+    add_log("warn", f"graph error ({graph_type}): {_SIDECAR_DOWN_MSG}")
+    return {
+        "graph_type": graph_type,
+        "nodes": [],
+        "edges": [],
+        "mermaid": f"flowchart TD\n    A[{_SIDECAR_DOWN_MSG}]",
+        "summary": summary,
+        "error": _SIDECAR_DOWN_MSG,
+        **extra,
+    }
+
+
 async def _build_import_graph(parsed_files: list[dict]) -> dict[str, Any]:
     """
     Construye el grafo de dependencias entre archivos.
@@ -258,22 +181,16 @@ async def _build_import_graph(parsed_files: list[dict]) -> dict[str, Any]:
     (`services/complexity/src/graph.rs::build_import_graph`, expuesto vía
     `POST /graph/import`) — mismo criterio Rust-only que Halstead/seguridad/
     smells en esta misma fase: sin fallback Python, degradación explícita si
-    el sidecar no responde. `_build_project_edges`/`_short_name`/`_safe_id`/
-    `_module_to_candidates` siguen viviendo acá porque Call/Circular Graph
-    todavía los usan (slices siguientes de esta misma fase).
+    el sidecar no responde. `_build_project_edges`/`_module_to_candidates` se
+    eliminaron del todo — ya viven en `graph.rs`
+    (`build_project_edges`/`module_to_candidates`) y Architecture Smells
+    (Fase 18, "Dependency Engine") era su único otro caller Python. Heatmap
+    también se portó del todo — `_short_name`/`_safe_id` ya no viven acá,
+    quedaron como `short_name`/`safe_id` en `graph.rs`.
     """
     result = await build_import_graph_rust(_files_summary_for_sidecar(parsed_files))
     if result is None:
-        add_log("warn", "graph error (import): complexity-engine sidecar no disponible")
-        return {
-            "graph_type": "import",
-            "nodes": [],
-            "edges": [],
-            "mermaid": "flowchart TD\n    A[complexity-engine no disponible]",
-            "entry_points": [],
-            "summary": {"total_files": 0, "total_imports": 0, "isolated": 0},
-            "error": "complexity-engine sidecar no disponible",
-        }
+        return _graph_degraded("import", {"total_files": 0, "total_imports": 0, "isolated": 0}, entry_points=[])
     return result
 
 
@@ -317,20 +234,10 @@ async def _build_call_graph(parsed_files: list[dict]) -> dict[str, Any]:
     (`services/complexity/src/graph.rs::build_call_graph`, expuesto vía
     `POST /graph/call`) — mismo criterio Rust-only que Import Graph/Centrality:
     sin fallback Python, degradación explícita si el sidecar no responde.
-    `_bigo_color`/`_bigo_level` no se tocan — `_build_heatmap` (todavía
-    Python) también los usa.
     """
     result = await build_call_graph_rust(_call_graph_payload(parsed_files))
     if result is None:
-        add_log("warn", "graph error (call): complexity-engine sidecar no disponible")
-        return {
-            "graph_type": "call",
-            "nodes": [],
-            "edges": [],
-            "mermaid": "flowchart TD\n    A[complexity-engine no disponible]",
-            "summary": {"total_functions": 0, "total_calls": 0, "hot_paths": []},
-            "error": "complexity-engine sidecar no disponible",
-        }
+        return _graph_degraded("call", {"total_functions": 0, "total_calls": 0, "hot_paths": []})
     return result
 
 
@@ -354,22 +261,19 @@ async def _build_circular_graph(parsed_files: list[dict]) -> dict[str, Any]:
     orden/contenido exacto de la enumeración de NetworkX, solo de cuenta/
     pertenencia, así que no hacía falta replicarlo ni agregar `petgraph`
     (ver el comentario de sección de `graph.rs` para el detalle del
-    algoritmo). `find_cycles_capped`/`_build_project_digraph`/`HAS_NX`/`nx`
-    no se tocan — `_build_architecture_smells` (Fase 22) los sigue usando.
+    algoritmo). `find_cycles_capped` (Python, en `static_parser.py`) y el
+    import de `networkx` en este archivo se eliminaron del todo — su último
+    caller (`_build_architecture_smells`) se cortó a Rust en la misma pasada
+    (Fase 18, "Dependency Engine").
     """
     result = await build_circular_graph_rust(_files_summary_for_sidecar(parsed_files))
     if result is None:
-        add_log("warn", "graph error (circular): complexity-engine sidecar no disponible")
-        return {
-            "graph_type": "circular",
-            "nodes": [],
-            "edges": [],
-            "cycles": [],
-            "mermaid": "flowchart TD\n    A[complexity-engine no disponible]",
-            "has_cycles": False,
-            "summary": {"total_files": 0, "total_cycles": 0, "affected_files": 0, "cycle_descriptions": []},
-            "error": "complexity-engine sidecar no disponible",
-        }
+        return _graph_degraded(
+            "circular",
+            {"total_files": 0, "total_cycles": 0, "affected_files": 0, "cycle_descriptions": []},
+            cycles=[],
+            has_cycles=False,
+        )
     return result
 
 
@@ -401,121 +305,42 @@ async def _build_centrality_graph(parsed_files: list[dict]) -> dict[str, Any]:
     """
     result = await build_centrality_graph_rust(_files_summary_for_sidecar(parsed_files))
     if result is None:
-        add_log("warn", "graph error (centrality): complexity-engine sidecar no disponible")
-        return {
-            "graph_type": "centrality",
-            "nodes": [],
-            "edges": [],
-            "mermaid": "flowchart TD\n    A[complexity-engine no disponible]",
-            "summary": {"total_files": 0, "hubs": [], "max_in_degree": 0},
-            "error": "complexity-engine sidecar no disponible",
-        }
+        return _graph_degraded("centrality", {"total_files": 0, "hubs": [], "max_in_degree": 0})
     return result
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  ARCHITECTURE SMELLS (Fase 22 — último ítem de Code Quality Intelligence)
-#  Python-only por ahora: el import graph cross-file (_module_to_candidates,
-#  arriba) solo existe acá — no fue portado a Rust. Portarlo ("Graph Engine")
-#  es un ítem propio y más grande de la Fase 18, deliberadamente no abordado
-#  en esta pasada. Caso espejo de Halstead (Rust-only, sin fallback Python
-#  porque sus datos solo existen en Rust): acá los datos (el grafo cross-
-#  file) solo existen en Python, así que el feature es Python-only por la
-#  razón inversa — no una excepción al mandato Rust-first, su contraparte.
+#  ARCHITECTURE SMELLS (Fase 18 — "Dependency Engine", último ítem del Graph
+#  Engine portado)
 # ══════════════════════════════════════════════════════════════════════════════
 
-_HIGH_EFFERENT_COUPLING = 15  # sin número de literatura Fowler/Martin para
-# conteos crudos de efferent coupling (a diferencia de LOC/métodos de los
-# structural smells, que sí tienen precedente). Calibrado contra
-# apps/api/main.py, que hoy importa 11 módulos del proyecto como composition
-# root legítimo — el umbral queda arriba de eso para no marcar el propio
-# entrypoint como smell.
-_UNSTABLE_MIN_CA = 3  # un archivo más estricto que el piso de "hub" de
-# _build_centrality_graph (≥2) — una segunda señal de coupling independiente
-# debería ser más exigente, no repetir el mismo umbral.
-_UNSTABLE_INSTABILITY = 0.5  # punto medio natural de la métrica de
-# inestabilidad de Robert Martin (I = Ce/(Ca+Ce)), no un número arbitrario.
 
-
-def _build_architecture_smells(parsed_files: list[dict], cycles: list[list[str]] | None = None) -> list[dict]:
+async def _build_architecture_smells(parsed_files: list[dict]) -> list[dict]:
     """
     Smells de arquitectura: acoplamiento eferente alto, dependencia inestable
     (afferent alto + inestabilidad alta — un módulo muy usado por otros que a
     la vez es frágil, un cambio se propaga en las dos direcciones), y
-    dependencia circular reencuadrada como un smell más (antes solo vivía
-    como su propio grafo en _build_circular_graph) — la "violación de capas
-    general" que pide la Fase 22 del roadmap.
+    dependencia circular reencuadrada como un smell más — la "violación de
+    capas general" que pide la Fase 22 del roadmap.
 
-    Mismo shape {kind, name, line, message} que structural_smells/
-    naming_smells, con dos diferencias deliberadas: `line` siempre es 0 acá
-    (estos smells son de archivo/grafo, no de línea) y `name` lleva la ruta
-    completa del archivo en vez de un basename corto — no hay un campo
-    `file` separado como en los otros dos smells (ya son globales, no se
-    agregan por archivo), así que `name` tiene que bastar por sí solo para
-    distinguir dos archivos con el mismo basename en carpetas distintas.
-
-    `cycles`, si se pasa (ej. desde parse_project, que ya corrió
-    _build_circular_graph), evita recalcular find_cycles_capped una segunda
-    vez sobre el mismo grafo.
+    Fase 18, "Dependency Engine": el cómputo (edges cross-file, in/out-degree,
+    enumeración de ciclos, y los 3 checks de smell con sus umbrales) vive
+    ahora en el sidecar Rust (`services/complexity/src/graph.rs::build_architecture_smells`,
+    expuesto vía `POST /graph/architecture`) — mismo criterio Rust-only que
+    el resto del Graph Engine: sin fallback Python, `[]` explícito si el
+    sidecar no responde. Cierra el motivo por el que esto era Python-only
+    ("el import graph cross-file solo existe en Python") — `build_project_edges`/
+    `module_to_candidates`/`find_cycles_capped` ya viven todos en Rust desde
+    las porciones anteriores de esta misma fila; esto es pura orquestación
+    sobre lo que esas 3 ya construyeron. `_build_project_edges`/
+    `_build_project_digraph`/`_module_to_candidates` (Python) y el import de
+    `networkx`/`find_cycles_capped` en este archivo se eliminaron — sin otro
+    caller, quedaban muertos apenas esto se cortó a Rust.
     """
-    edges = _build_project_edges(parsed_files)
-    file_names = [p["_filename"] for p in parsed_files]
-    smells: list[dict] = []
-
-    if HAS_NX:
-        G = _build_project_digraph(parsed_files, edges)
-        in_degree = dict(G.in_degree())
-        out_degree = dict(G.out_degree())
-        if cycles is None:
-            cycles = find_cycles_capped(G, max_cycles=20)
-    else:
-        in_degree = {f: 0 for f in file_names}
-        out_degree = {f: 0 for f in file_names}
-        cycles = cycles or []
-
-    for fname in file_names:
-        ca, ce = in_degree.get(fname, 0), out_degree.get(fname, 0)
-        if ce > _HIGH_EFFERENT_COUPLING:
-            smells.append(
-                {
-                    "kind": "high_efferent_coupling",
-                    "name": fname,
-                    "line": 0,
-                    "message": (
-                        f"{ce} imports internos del proyecto (> {_HIGH_EFFERENT_COUPLING}) — si no es "
-                        f"un punto de composición intencional (entrypoint, registro de routers), "
-                        f"considerar dividir responsabilidades."
-                    ),
-                }
-            )
-        instability = ce / (ca + ce) if (ca + ce) else 0.0
-        if ca >= _UNSTABLE_MIN_CA and instability > _UNSTABLE_INSTABILITY:
-            smells.append(
-                {
-                    "kind": "unstable_dependency",
-                    "name": fname,
-                    "line": 0,
-                    "message": (
-                        f"{ca} archivo(s) dependen de este módulo, pero él mismo depende de {ce} — "
-                        f"inestabilidad {instability:.2f} (umbral {_UNSTABLE_INSTABILITY}): un cambio "
-                        f"acá se propaga tanto hacia arriba como hacia abajo."
-                    ),
-                }
-            )
-
-    for cycle in cycles or []:
-        smells.append(
-            {
-                "kind": "circular_dependency",
-                "name": " → ".join(cycle) + f" → {cycle[0]}",  # mismo formato que cycle_descriptions
-                "line": 0,
-                "message": (
-                    f"Ciclo de imports entre {len(cycle)} archivo(s) — ninguno puede entenderse/"
-                    f"testearse en aislamiento del otro."
-                ),
-            }
-        )
-
+    smells = await build_architecture_smells_rust(_files_summary_for_sidecar(parsed_files))
+    if smells is None:
+        add_log("warn", f"graph error (architecture): {_SIDECAR_DOWN_MSG}")
+        return []
     return smells
 
 
@@ -524,158 +349,52 @@ def _build_architecture_smells(parsed_files: list[dict], cycles: list[list[str]]
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def _build_heatmap(parsed_files: list[dict]) -> dict[str, Any]:
+def _heatmap_payload(parsed_files: list[dict]) -> list[dict]:
+    """Shape que espera el sidecar Rust para Heatmap (`HeatmapFileInput` en
+    `services/complexity/src/graph.rs`) — detalle por función (name/big_o/
+    complexity/line/loc), distinto de `_files_summary_for_sidecar`
+    (Import/Centrality) y de `_call_graph_payload` (Call Graph, sin `loc`)."""
+    return [
+        {
+            "filename": p["_filename"],
+            "functions": [
+                {
+                    "name": fn["name"],
+                    "big_o": fn.get("big_o", "?"),
+                    "complexity": fn.get("complexity", 1),
+                    "line": fn.get("line", 0),
+                    "loc": fn.get("loc", 0),
+                }
+                for fn in p.get("functions", [])
+            ],
+        }
+        for p in parsed_files
+    ]
+
+
+async def _build_heatmap(parsed_files: list[dict]) -> dict[str, Any]:
     """
     Mapa de calor de complejidad: todos los archivos × todas las funciones.
     Colorea por CC y/o Big-O.
+
+    Última pieza del Graph Engine (Fase 18) que quedaba Python-only — Import/
+    Call/Circular/Centrality/Architecture Smells la nombraban explícitamente
+    como "todavía Python, fuera de este slice" cada vez. El cómputo (ordenar
+    por severidad, colorear, armar el Mermaid) vive ahora en
+    `graph.rs::build_heatmap`, expuesto vía `POST /graph/heatmap` — mismo
+    criterio Rust-only que sus 4 hermanos: sin fallback Python, degradación
+    explícita si el sidecar no responde. `_cc_color`/`_cc_level`/
+    `_bigo_color`/`_bigo_level`/`_short_name`/`_safe_id` se eliminaron del
+    todo — su único caller Python era este mismo par de funciones.
     """
-    functions: list[dict] = []
-
-    for p in parsed_files:
-        fname = p["_filename"]
-        for fn in p.get("functions", []):
-            cc = fn.get("complexity", 1)
-            bigo = fn.get("big_o", "?")
-            functions.append(
-                {
-                    "file": fname,
-                    "file_short": _short_name(fname),
-                    "name": fn["name"],
-                    "line": fn.get("line", 0),
-                    "cc": cc,
-                    "cc_color": _cc_color(cc),
-                    "cc_level": _cc_level(cc),
-                    "big_o": bigo,
-                    "bigo_color": _bigo_color(bigo),
-                    "bigo_level": _bigo_level(bigo),
-                    "loc": fn.get("loc", 0),
-                }
-            )
-
-    # Ordenar: más problemáticas primero
-    level_order = {"critical": 0, "expensive": 0, "high": 1, "medium": 1, "moderate": 2, "low": 3, "efficient": 3}
-    functions.sort(key=lambda f: (level_order.get(f["cc_level"], 5) + level_order.get(f["bigo_level"], 5), -f["cc"]))
-
-    mermaid = _heatmap_to_mermaid(functions)
-
-    # Stats
-    critical = [f for f in functions if f["cc_level"] in ("critical", "high")]
-    hot = [f for f in functions if f["bigo_level"] == "expensive"]
-    avg_cc = round(sum(f["cc"] for f in functions) / len(functions), 2) if functions else 0
-
-    return {
-        "graph_type": "heatmap",
-        "functions": functions,
-        "mermaid": mermaid,
-        "summary": {
-            "total_functions": len(functions),
-            "avg_cc": avg_cc,
-            "critical_count": len(critical),
-            "hot_paths": len(hot),
-            "by_level": {
-                "low": sum(1 for f in functions if f["cc_level"] == "low"),
-                "medium": sum(1 for f in functions if f["cc_level"] == "medium"),
-                "high": sum(1 for f in functions if f["cc_level"] == "high"),
-                "critical": sum(1 for f in functions if f["cc_level"] == "critical"),
-            },
-        },
-    }
-
-
-def _heatmap_to_mermaid(functions: list[dict]) -> str:
-    """Genera un flowchart coloreado por complejidad."""
-    if not functions:
-        return "flowchart TD\n    A[Sin funciones]"
-
-    lines = ["flowchart LR"]
-
-    # Agrupar por archivo
-    by_file: dict[str, list[dict]] = {}
-    for fn in functions:
-        by_file.setdefault(fn["file_short"], []).append(fn)
-
-    for file_short, fns in by_file.items():
-        fid = _safe_id(file_short)
-        lines.append(f'    subgraph {fid}["{file_short}"]')
-        for fn in fns:
-            fnid = _safe_id(f"{file_short}_{fn['name']}")
-            cc = fn["cc"]
-            bigo = fn["big_o"]
-            # El color del nodo (fill/stroke por fn["cc_color"], estilado más
-            # abajo) ya ES el heatmap — un ícono de semáforo acá repetiría la
-            # misma señal de severidad dos veces.
-            lines.append(f'    {fnid}["{fn["name"]}\\nCC={cc} · {bigo}"]')
-        lines.append("    end")
-
-    # Estilos por nivel de CC
-    for fn in functions:
-        fnid = _safe_id(f"{fn['file_short']}_{fn['name']}")
-        fill = fn["cc_color"] + "20"
-        stroke = fn["cc_color"]
-        lines.append(f"    style {fnid} fill:{fill},stroke:{stroke}")
-
-    return "\n".join(lines) + "\n"
-
-
-# ── Utilidades ────────────────────────────────────────────────────────────────
-
-
-def _safe_id(s: str) -> str:
-    """Convierte un string a ID válido para Mermaid."""
-    return re.sub(r"[^a-zA-Z0-9_]", "_", s)
-
-
-def _short_name(path: str) -> str:
-    """Retorna solo el nombre del archivo sin ruta."""
-    return path.split("/")[-1].split("\\")[-1]
-
-
-def _module_to_candidates(module: str, source_file: str = "") -> list[str]:
-    """
-    Genera posibles nombres de archivo desde un módulo Python/JS/TS.
-    Si se proporciona source_file, busca primero en la misma carpeta.
-    Esto permite resolver cross-folder deps correctamente.
-    """
-    import os
-
-    source_dir = os.path.dirname(source_file)  # e.g. "backend" o "frontend"
-
-    # Nombre base del módulo
-    if module.startswith("."):
-        # Relative import: ./api → api
-        short = module.lstrip("./").split("/")[-1]
-    else:
-        short = module.split("/")[-1].split(".")[-1] if "/" in module or "." in module else module
-
-    candidates: list[str] = []
-
-    # 1. Buscar en la misma carpeta que el archivo fuente
-    if source_dir:
-        for ext in (".py", ".ts", ".js"):
-            candidates.append(f"{source_dir}/{short}{ext}")
-        candidates.append(f"{source_dir}/{short}/index.ts")
-        candidates.append(f"{source_dir}/{short}/index.js")
-
-    # 2. Buscar como path relativo explícito (e.g. ./utils)
-    if module.startswith(".") and source_dir:
-        rel = module.lstrip("./")
-        for ext in (".py", ".ts", ".js"):
-            candidates.append(f"{source_dir}/{rel}{ext}")
-
-    # 3. Fallback: plano sin carpeta
-    for ext in (".py", ".ts", ".js"):
-        candidates.append(f"{short}{ext}")
-    candidates.append(f"{short}/index.ts")
-    candidates.append(f"{short}/index.js")
-
-    # Deduplicar preservando orden
-    seen: set[str] = set()
-    unique: list[str] = []
-    for c in candidates:
-        if c not in seen:
-            seen.add(c)
-            unique.append(c)
-    return unique
+    result = await build_heatmap_rust(_heatmap_payload(parsed_files))
+    if result is None:
+        return _graph_degraded(
+            "heatmap",
+            {"total_functions": 0, "avg_cc": 0, "critical_count": 0, "hot_paths": 0, "by_level": {}},
+            functions=[],
+        )
+    return result
 
 
 def _empty_response(graph_type: str) -> dict:
@@ -722,13 +441,19 @@ async def generate_project_graph(req: ProjectGraphRequest) -> dict[str, Any]:
         if not project_dir.exists():
             return {"error": f"Proyecto {req.project_id} no encontrado", "mermaid": "", "nodes": [], "edges": []}
 
-        files_for_graph = read_project_files(project_dir)
+        # Fase 18, "Project Scanner" — Rust lee del disco y parsea el
+        # proyecto entero en 1 sola llamada (`scanner.rs`), reemplazando el
+        # patrón anterior (`read_project_files` + `_parse_all`, N llamadas
+        # HTTP). Ninguno de los builders de grafo de acá abajo necesita el
+        # contenido crudo del archivo — solo `filename`/`functions`/`imports`/
+        # etc., que ya vienen en el resultado parseado.
+        parsed_files = await parse_project_files(project_dir)
 
-        if not files_for_graph:
+        if not parsed_files:
             return _empty_response(req.graph_type)
 
-        # Parsear y generar grafo
-        parsed_files = await _parse_all(files_for_graph)
+        for r in parsed_files:
+            r["_filename"] = r["filename"]
 
         if req.graph_type == "import":
             result = await _build_import_graph(parsed_files)
@@ -737,7 +462,7 @@ async def generate_project_graph(req: ProjectGraphRequest) -> dict[str, Any]:
         elif req.graph_type == "circular":
             result = await _build_circular_graph(parsed_files)
         elif req.graph_type == "heatmap":
-            result = _build_heatmap(parsed_files)
+            result = await _build_heatmap(parsed_files)
         elif req.graph_type == "centrality":
             result = await _build_centrality_graph(parsed_files)
         else:
@@ -745,13 +470,13 @@ async def generate_project_graph(req: ProjectGraphRequest) -> dict[str, Any]:
 
         # Agregar metadata del proyecto
         result["project_id"] = req.project_id
-        result["total_files"] = len(files_for_graph)
-        result["file_list"] = [f["filename"] for f in files_for_graph]
+        result["total_files"] = len(parsed_files)
+        result["file_list"] = [f["filename"] for f in parsed_files]
 
         # Agregar árbol de directorios para Tree View
-        result["dir_tree"] = _build_dir_tree(files_for_graph, parsed_files)
+        result["dir_tree"] = _build_dir_tree(parsed_files)
 
-        add_log("info", f"graph/project: {req.project_id} ({len(files_for_graph)} files, type={req.graph_type})")
+        add_log("info", f"graph/project: {req.project_id} ({len(parsed_files)} files, type={req.graph_type})")
         return result
 
     except Exception as e:
@@ -759,13 +484,15 @@ async def generate_project_graph(req: ProjectGraphRequest) -> dict[str, Any]:
         return {"error": str(e), "mermaid": "", "nodes": [], "edges": []}
 
 
-def _build_dir_tree(
-    files: list[dict],
-    parsed: list[dict],
-) -> dict:
+def _build_dir_tree(parsed: list[dict]) -> dict:
     """
     Construye el árbol de directorios con metadata de complejidad.
     Estructura: { name, type, path, children, stats }
+
+    Antes tomaba `files` (crudo, solo para `filename`) y `parsed` por
+    separado — con el Project Scanner (Fase 18) el único caller ya no lee
+    archivos crudos aparte, así que un solo parámetro alcanza: `parsed` ya
+    trae `filename` para cada archivo.
     """
     # Crear índice de stats por archivo
     stats_by_file: dict[str, dict] = {}
@@ -784,7 +511,7 @@ def _build_dir_tree(
     # Construir árbol
     root: dict = {"name": "root", "type": "directory", "path": "", "children": {}, "stats": {}}
 
-    for f in files:
+    for f in parsed:
         parts = f["filename"].split("/")
         node = root
         for i, part in enumerate(parts):

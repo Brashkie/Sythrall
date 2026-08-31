@@ -1,9 +1,20 @@
+# Todos los Dockerfiles viven acá mismo (docker/), no dispersos dentro de
+# cada apps/services/*. El build context de los 4 servicios sigue siendo la
+# RAÍZ del repo (`context: ..`, relativo a este archivo) — no `docker/` — así
+# que las rutas de COPY dentro de cada Dockerfile no cambian: siguen siendo
+# relativas al repo (`COPY apps/api/ .`, `COPY services/terminal/ ...`, etc.).
+#
+# IMPORTANTE: `.dockerignore` se queda en la raíz del repo a propósito, no
+# acá — Docker solo lo lee desde el directorio que es el build CONTEXT
+# (la raíz, por `context: ..`), nunca desde el directorio del Dockerfile.
+# Moverlo a docker/ lo dejaría de aplicar en silencio (contexto de build
+# gigante, node_modules/.git incluidos) sin ningún error visible.
 services:
 
   backend:
     build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+      context: ..
+      dockerfile: docker/api.Dockerfile
     container_name: sythrall-backend
     restart: unless-stopped
     ports:
@@ -26,8 +37,8 @@ services:
 
   frontend:
     build:
-      context: .
-      dockerfile: apps/web/Dockerfile.frontend
+      context: ..
+      dockerfile: docker/frontend.Dockerfile
     container_name: sythrall-frontend
     restart: unless-stopped
     ports:
@@ -40,8 +51,8 @@ services:
 
   terminal:
     build:
-      context: .
-      dockerfile: services/terminal/Dockerfile
+      context: ..
+      dockerfile: docker/terminal.Dockerfile
     container_name: sythrall-terminal
     restart: unless-stopped
     ports:
@@ -56,8 +67,8 @@ services:
 
   complexity:
     build:
-      context: .
-      dockerfile: services/complexity/Dockerfile
+      context: ..
+      dockerfile: docker/complexity.Dockerfile
     container_name: sythrall-complexity
     restart: unless-stopped
     ports:

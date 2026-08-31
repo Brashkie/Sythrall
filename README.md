@@ -9,7 +9,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-4.11.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-4.12.0-blue?style=flat-square)
 [![CI](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml/badge.svg)](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml)
 ![Frontend](https://img.shields.io/badge/Frontend-Vite%20%2B%20TypeScript-646cff?style=flat-square)
 ![Backend](https://img.shields.io/badge/Backend-FastAPI%20%2B%20Python-009688?style=flat-square)
@@ -22,6 +22,8 @@
 [English](./README.md) · [Español](./README.es.md) · [Roadmap](./ROADMAP.md) · [Changelog](./CHANGELOG.md)
 
 </div>
+
+> **⚠ Notice — this repository is no longer updated.** As of **v4.12.0**, Sythrall is transitioning to a private SaaS product. This GitHub repository stops receiving public updates from this version forward; development continues, but privately. What's published here remains available under its existing license, as a snapshot of the project up to this point.
 
 ---
 
@@ -69,9 +71,14 @@ sythrall/
 ├── pytest.ini                      ← testpaths: apps/api/tests
 ├── Cargo.toml                      ← Rust manifest — services/terminal + services/complexity sidecars (2 [[bin]], 1 [lib])
 ├── Cargo.lock
-├── docker-compose.yml
-├── .dockerignore
+├── .dockerignore                   ← stays at repo root — Docker only reads it from the build context dir
 ├── START.bat / STOP.bat
+├── docker/                         ← all Docker files live here, not scattered across apps/services
+│   ├── docker-compose.yml          ← build context: .. (repo root) for all 4 services
+│   ├── api.Dockerfile
+│   ├── frontend.Dockerfile
+│   ├── terminal.Dockerfile
+│   └── complexity.Dockerfile
 ├── scripts/                        ← Dev workflow without Docker (setup/dev/build/test/lint/format, .ps1 + .sh)
 │   ├── run-backend.mjs             ← spawns uvicorn (npm run dev:api)
 │   ├── run-terminal.mjs            ← spawns the Rust terminal sidecar (npm run dev:term)
@@ -81,7 +88,6 @@ sythrall/
 │   ├── api/                        ← FastAPI backend
 │   │   ├── main.py                 ← FastAPI (35+ routes)
 │   │   ├── shared.py
-│   │   ├── Dockerfile
 │   │   ├── routers/
 │   │   │   ├── upload.py           ← POST /api/upload/{files,folder,zip} + CRUD
 │   │   │   ├── analysis.py         ← POST /analyze/{code,api,logs-analyze}
@@ -99,7 +105,6 @@ sythrall/
 │   │   └── tests/                  ← 436 tests total (see Tests section below)
 │   └── web/                        ← TypeScript frontend (Vite, zero frameworks)
 │       ├── index.html
-│       ├── Dockerfile.frontend
 │       └── src/
 │           ├── api/client.ts          ← Full API client
 │           ├── components/
@@ -137,13 +142,11 @@ sythrall/
 │               └── theme.ts           ← Light/dark toggle + persistence
 ├── services/                       ← independent Rust processes `apps/` calls over HTTP — no one launches these directly
 │   ├── terminal/                   ← real interactive shell over WebSocket
-│   │   ├── Dockerfile
 │   │   └── src/
 │   │       ├── main.rs             ← axum WS handler, token auth, PTY bridging
 │   │       ├── pty_session.rs      ← portable-pty wrapper (ConPTY/Unix PTY, one impl)
 │   │       └── auth.rs             ← token generation + constant-time comparison
 │   └── complexity/                 ← cyclomatic complexity + MI + raw metrics (replaces radon) + rich Python analysis
-│       ├── Dockerfile
 │       ├── benches/
 │       │   ├── complexity_bench.rs ← Criterion — measured 9-21x faster than radon
 │       │   └── parse_bench.rs      ← Criterion — analyze_rich() vs. _parse_python(), 5.6-20.6x faster
@@ -198,7 +201,7 @@ cd Sythrall
 
 **Any OS:**
 ```bash
-docker compose up --build
+docker compose -f docker/docker-compose.yml up --build
 ```
 
 ### 3 — Development mode (without Docker)
@@ -399,13 +402,15 @@ Equivalent direct commands (from repo root): `npm run lint` / `npm run format`, 
 
 ## Docker commands
 
+All Docker files live in `docker/` (`docker/docker-compose.yml`, `docker/*.Dockerfile`) — `-f docker/docker-compose.yml` runs these from the repo root without `cd`-ing into `docker/` first. `.dockerignore` stays at the repo root (Docker requires it there — see the comment in `docker/docker-compose.yml`).
+
 ```bash
-docker compose logs -f                         # Live logs
-docker compose build --no-cache && docker compose up -d  # Full rebuild
-docker compose ps                              # Active containers
-docker exec -it sythrall-backend bash          # Backend shell
-docker compose down                            # Stop (keep volumes)
-docker compose down -v                         # Stop + delete volumes
+docker compose -f docker/docker-compose.yml logs -f                         # Live logs
+docker compose -f docker/docker-compose.yml build --no-cache && docker compose -f docker/docker-compose.yml up -d  # Full rebuild
+docker compose -f docker/docker-compose.yml ps                              # Active containers
+docker exec -it sythrall-backend bash                                       # Backend shell
+docker compose -f docker/docker-compose.yml down                            # Stop (keep volumes)
+docker compose -f docker/docker-compose.yml down -v                         # Stop + delete volumes
 ```
 
 ---
@@ -433,9 +438,9 @@ Complexity sidecar environment variables (optional — default `127.0.0.1:7682`)
 COMPLEXITY_HOST=127.0.0.1
 COMPLEXITY_PORT=7682
 ```
-The backend finds it via `COMPLEXITY_ENGINE_URL` (default `http://127.0.0.1:7682`; overridden to `http://complexity:7682` in `docker-compose.yml`, the Docker network service name).
+The backend finds it via `COMPLEXITY_ENGINE_URL` (default `http://127.0.0.1:7682`; overridden to `http://complexity:7682` in `docker/docker-compose.yml`, the Docker network service name).
 
-Changing ports in `docker-compose.yml`:
+Changing ports in `docker/docker-compose.yml`:
 ```yaml
 services:
   backend:
@@ -461,8 +466,8 @@ Whatever owns it isn't necessarily a leftover Sythrall process — on Windows in
 
 **Backend shows "No backend"**
 ```bash
-docker compose ps
-docker compose logs backend
+docker compose -f docker/docker-compose.yml ps
+docker compose -f docker/docker-compose.yml logs backend
 ```
 The first run can take ~25s (downloading PyTorch).
 
@@ -470,7 +475,7 @@ The first run can take ~25s (downloading PyTorch).
 
 **Module not found**
 ```bash
-docker compose build --no-cache && docker compose up -d
+docker compose -f docker/docker-compose.yml build --no-cache && docker compose -f docker/docker-compose.yml up -d
 ```
 
 **Terminal button doesn't connect** → The Rust toolchain is missing. Install it from [rustup.rs](https://rustup.rs), restart your terminal/console so `PATH` picks it up, and run `npm run dev` again — the `[term]` process should build and start on its own. The rest of the app works the same without it.

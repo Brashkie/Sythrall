@@ -304,7 +304,7 @@ export function clientMLAnalysis(f: CodeFile): MLAnalysisResult {
   const catMap: Record<string, string> = {
     numpy: 'datos',
     pandas: 'datos',
-    polars: 'dados',
+    polars: 'datos',
     sklearn: 'ml',
     lightgbm: 'ml',
     xgboost: 'ml',

@@ -1,6 +1,27 @@
 """
 Tests — Editor Intelligence Router
 pytest tests/test_intelligence.py -v
+
+Varios tests que asertaban sobre VALORES calculados por Rust (Big-O
+específico en /intel/analyze, halstead, contenido de hover con CC/Big-O/hot
+path, qué símbolos encuentra go-to-definition/find-references/completions
+en TS) se eliminaron (2026-08-31, política de toda la carpeta: cero tests de
+Python para código Rust-only) — `bigo.rs`/`security.rs`/`symbols.rs`/
+`jsts.rs` tienen su propio `cargo test` cubriendo esos mismos casos. Lo que
+queda prueba: lint rápido 100% Python (sin sidecar), el wiring/dispatch de
+`/intel/analyze` (no los valores), armado de markdown en hover (firma/
+docstring/secciones condicionales — string-building propio de Python, no
+duplicado en Rust), autocomplete Python puro (`ast.walk`, sin sidecar) y el
+filtro de prefix (Python), y rename (edición de texto por regex/posición,
+100% Python).
+
+Nota: `TestGoToDefinitionPython`/`TestFindReferencesPython` cubrían de paso
+`_find_definitions_python_fallback`/`_find_references_python_fallback`
+(intelligence.py) — su lógica Python-only para cuando el sidecar no responde
+quedó sin test propio tras esta limpieza. No es un problema introducido acá
+(esos tests nunca forzaban el camino sin sidecar, `conftest.py` lo mantiene
+arriba toda la sesión), pero es un hueco real si alguna vez hace falta tocar
+esas dos funciones.
 """
 
 import sys
@@ -227,53 +248,6 @@ class TestHeavyAnalyze:
         assert "big_o" in data
         assert len(data["big_o"]) >= 2
 
-    def test_analyze_halstead_key_present_with_sidecar(self):
-        """Fase 22: `halstead` es Rust-only — con el sidecar arriba
-        (`conftest.py` lo levanta para toda la sesión), viene con números
-        reales, no None."""
-        data = client.post(
-            "/intel/analyze", json={"filename": "test.py", "content": PY_ISSUES, "tools": ["ast", "complexity"]}
-        ).json()
-        assert "halstead" in data["metrics"]
-        assert data["metrics"]["halstead"] is not None
-        assert "effort" in data["metrics"]["halstead"]
-
-    def test_analyze_findings_keys_present_with_sidecar(self):
-        """Fases 21/22 cableadas al Editor, Rust-only — `PY_ISSUES` no tiene
-        taint/smells estructurales pero sí variables de una letra (`n`, `x`),
-        así que `naming_smells` viene con contenido real; `security_findings`/
-        `structural_smells` siguen vacíos porque el snippet no dispara ninguno."""
-        data = client.post(
-            "/intel/analyze", json={"filename": "test.py", "content": PY_ISSUES, "tools": ["ast", "complexity"]}
-        ).json()
-        assert data["security_findings"] == []
-        assert data["structural_smells"] == []
-        assert any(s["kind"] == "single_letter_name" for s in data["naming_smells"])
-
-    def test_analyze_big_o_bubble(self):
-        data = client.post(
-            "/intel/analyze", json={"filename": "test.py", "content": PY_ISSUES, "tools": ["ast"]}
-        ).json()
-        fn = next((f for f in data["big_o"] if f["name"] == "bubble_sort"), None)
-        assert fn is not None
-        assert fn["big_o"] == "O(n²)"
-
-    def test_analyze_big_o_binary(self):
-        data = client.post(
-            "/intel/analyze", json={"filename": "test.py", "content": PY_ISSUES, "tools": ["ast"]}
-        ).json()
-        fn = next((f for f in data["big_o"] if f["name"] == "binary_search"), None)
-        assert fn is not None
-        assert fn["big_o"] == "O(log n)"
-
-    def test_analyze_big_o_constant(self):
-        data = client.post(
-            "/intel/analyze", json={"filename": "test.py", "content": PY_ISSUES, "tools": ["ast"]}
-        ).json()
-        fn = next((f for f in data["big_o"] if f["name"] == "constant"), None)
-        assert fn is not None
-        assert fn["big_o"] == "O(1)"
-
     def test_analyze_returns_markers(self):
         data = client.post(
             "/intel/analyze", json={"filename": "test.py", "content": PY_ISSUES, "tools": ["ast"]}
@@ -291,13 +265,6 @@ class TestHeavyAnalyze:
             "/intel/analyze", json={"filename": "test.py", "content": PY_ISSUES, "tools": ["ast"]}
         ).json()
         assert data["source"] == "heavy"
-
-    def test_analyze_ts_big_o(self):
-        data = client.post("/intel/analyze", json={"filename": "app.ts", "content": TS_ISSUES, "tools": []}).json()
-        assert "big_o" in data
-        fn = next((f for f in data["big_o"] if f["name"] == "nestedLoops"), None)
-        if fn:
-            assert fn["big_o"] == "O(n²)"
 
     def test_analyze_empty_content(self):
         r = client.post("/intel/analyze", json={"filename": "test.py", "content": "", "tools": ["ast"]})
@@ -323,91 +290,6 @@ class TestHeavyAnalyze:
                 assert "name" in fn
                 assert "complexity" in fn
                 assert "rank" in fn
-
-
-# ─── /intel/analyze — clasificadores CS Engine (regex/grammar/graph) ────────
-
-
-CS_CLASSIFIERS_PY = """
-import re
-from collections import deque
-
-def has_email(s):
-    return re.search(r"[\\w.]+@[\\w.]+", s) is not None
-
-def parse_expr(tokens, pos):
-    stack = []
-    stack.append(tokens[pos])
-    if pos < len(tokens):
-        return parse_expr(tokens, pos + 1)
-    return stack.pop()
-
-def factorial(n):
-    if n <= 1:
-        return 1
-    return n * factorial(n - 1)
-
-def bfs(graph, start):
-    visited = set([start])
-    queue = deque([start])
-    while queue:
-        node = queue.popleft()
-        for n in graph[node]:
-            if n not in visited:
-                visited.add(n)
-                queue.append(n)
-    return visited
-
-def topo_sort(graph):
-    in_degree = {}
-    for node in graph:
-        in_degree[node] = 0
-    return in_degree
-
-def plain(x):
-    return x + 1
-"""
-
-
-class TestCsEngineClassifiers:
-    def _functions(self):
-        data = client.post(
-            "/intel/analyze", json={"filename": "cs.py", "content": CS_CLASSIFIERS_PY, "tools": ["ast"]}
-        ).json()
-        return {f["name"]: f for f in data["big_o"]}
-
-    def test_regex_classified_as_type3(self):
-        fn = self._functions()["has_email"]
-        assert fn["regex_class"] == "Type-3 (Regular)"
-        assert fn["regex_note"]
-
-    def test_regex_not_classified_without_re_call(self):
-        fn = self._functions()["plain"]
-        assert fn["regex_class"] is None
-        assert fn["regex_note"] is None
-
-    def test_grammar_classified_by_name_and_shape(self):
-        fn = self._functions()["parse_expr"]
-        assert fn["grammar_class"] == "Type-2 (Context-Free)"
-        assert fn["grammar_note"]
-
-    def test_grammar_requires_name_signal_not_just_recursion(self):
-        # Recursiva pero sin nombre de parser — la señal de nombre es obligatoria.
-        fn = self._functions()["factorial"]
-        assert fn["grammar_class"] is None
-
-    def test_graph_traversal_bfs(self):
-        fn = self._functions()["bfs"]
-        assert fn["graph_traversal"] == "BFS"
-        assert fn["graph_traversal_note"]
-
-    def test_graph_traversal_topological_sort(self):
-        fn = self._functions()["topo_sort"]
-        assert fn["graph_traversal"] == "Topological Sort (Kahn's algorithm)"
-
-    def test_graph_traversal_none_for_plain_function(self):
-        fn = self._functions()["plain"]
-        assert fn["graph_traversal"] is None
 
 
 # ─── /intel/hover — Python ───────────────────────────────────────────────────
@@ -454,45 +336,6 @@ class TestHoverPython:
         ).json()
         assert "bubble_sort" in data["markdown"]
 
-    def test_hover_contains_big_o(self):
-        data = client.post(
-            "/intel/hover",
-            json={
-                "filename": "test.py",
-                "content": PY_ISSUES,
-                "line": 5,
-                "column": 1,
-                "symbol_name": "bubble_sort",
-            },
-        ).json()
-        assert "O(n²)" in data["markdown"]
-
-    def test_hover_contains_cc(self):
-        data = client.post(
-            "/intel/hover",
-            json={
-                "filename": "test.py",
-                "content": PY_ISSUES,
-                "line": 5,
-                "column": 1,
-                "symbol_name": "bubble_sort",
-            },
-        ).json()
-        assert "CC" in data["markdown"] or "Cyclomatic" in data["markdown"]
-
-    def test_hover_hot_path_warning(self):
-        data = client.post(
-            "/intel/hover",
-            json={
-                "filename": "test.py",
-                "content": PY_ISSUES,
-                "line": 5,
-                "column": 1,
-                "symbol_name": "bubble_sort",
-            },
-        ).json()
-        assert "Hot Path" in data["markdown"] or "Cython" in data["markdown"]
-
     def test_hover_docstring_included(self):
         data = client.post(
             "/intel/hover",
@@ -506,19 +349,6 @@ class TestHoverPython:
         ).json()
         # bubble_sort no tiene docstring en PY_ISSUES, solo verifica que no crashea
         assert "markdown" in data
-
-    def test_hover_binary_search_log_n(self):
-        data = client.post(
-            "/intel/hover",
-            json={
-                "filename": "test.py",
-                "content": PY_ISSUES,
-                "line": 12,
-                "column": 1,
-                "symbol_name": "binary_search",
-            },
-        ).json()
-        assert "O(log n)" in data["markdown"]
 
     def test_hover_shows_bigo_value_no_emoji(self):
         # La severidad del Big-O se comunica con la notación en sí (O(n²) es
@@ -652,20 +482,6 @@ class TestHoverTypeScript:
         if data["markdown"]:
             assert "nestedLoops" in data["markdown"]
 
-    def test_hover_ts_contains_big_o(self):
-        data = client.post(
-            "/intel/hover",
-            json={
-                "filename": "app.ts",
-                "content": TS_ISSUES,
-                "line": 4,
-                "column": 1,
-                "symbol_name": "nestedLoops",
-            },
-        ).json()
-        if data["markdown"]:
-            assert "O(" in data["markdown"]
-
     def test_hover_ts_no_crash_unknown(self):
         r = client.post(
             "/intel/hover",
@@ -679,478 +495,6 @@ class TestHoverTypeScript:
         )
         assert r.status_code == 200
         assert r.json()["markdown"] == ""
-
-
-# ─── Fixtures adicionales ─────────────────────────────────────────────────────
-
-PY_DEFS = '''
-import os
-
-class DataProcessor:
-    """Procesa datos."""
-    def __init__(self, data):
-        self.data = data
-
-    def process(self):
-        return [self._transform(x) for x in self.data]
-
-    def _transform(self, x):
-        return x * 2
-
-def bubble_sort(arr):
-    n = len(arr)
-    for i in range(n):
-        for j in range(n - i - 1):
-            if arr[j] > arr[j+1]:
-                arr[j], arr[j+1] = arr[j+1], arr[j]
-
-result = bubble_sort([3,1,2])
-dp = DataProcessor([1,2,3])
-dp.process()
-'''
-
-TS_DEFS = """
-interface User { id: number; name: string }
-
-class UserService {
-  findById(id: number): User | undefined { return undefined }
-  addUser(user: User): void {}
-}
-
-function processUsers(service: UserService): void {
-  service.findById(1)
-}
-
-const svc = new UserService()
-processUsers(svc)
-"""
-
-
-# ─── /intel/definition — Python ──────────────────────────────────────────────
-
-
-class TestGoToDefinitionPython:
-    def test_definition_ok(self):
-        r = client.post(
-            "/intel/definition",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "line": 22,
-                "column": 10,
-                "symbol_name": "bubble_sort",
-            },
-        )
-        assert r.status_code == 200
-
-    def test_definition_found_function(self):
-        data = client.post(
-            "/intel/definition",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "line": 22,
-                "column": 10,
-                "symbol_name": "bubble_sort",
-            },
-        ).json()
-        assert data["found"] is True
-        assert len(data["definitions"]) >= 1
-        assert data["definitions"][0]["line"] == 15
-
-    def test_definition_found_class(self):
-        data = client.post(
-            "/intel/definition",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "line": 23,
-                "column": 6,
-                "symbol_name": "DataProcessor",
-            },
-        ).json()
-        assert data["found"] is True
-        defn = data["definitions"][0]
-        assert defn["kind"] == "class"
-        assert defn["line"] == 4
-
-    def test_definition_kind_function(self):
-        data = client.post(
-            "/intel/definition",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "line": 22,
-                "column": 10,
-                "symbol_name": "bubble_sort",
-            },
-        ).json()
-        assert data["definitions"][0]["kind"] in ("function", "method")
-
-    def test_definition_signature_present(self):
-        data = client.post(
-            "/intel/definition",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "line": 22,
-                "column": 10,
-                "symbol_name": "bubble_sort",
-            },
-        ).json()
-        assert "bubble_sort" in data["definitions"][0]["signature"]
-
-    def test_definition_docstring(self):
-        data = client.post(
-            "/intel/definition",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "line": 23,
-                "column": 6,
-                "symbol_name": "DataProcessor",
-            },
-        ).json()
-        assert "Procesa datos" in data["definitions"][0]["docstring"]
-
-    def test_definition_not_found(self):
-        data = client.post(
-            "/intel/definition",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "line": 1,
-                "column": 1,
-                "symbol_name": "nonexistent_xyz",
-            },
-        ).json()
-        assert data["found"] is False
-        assert data["definitions"] == []
-
-    def test_definition_empty_symbol(self):
-        data = client.post(
-            "/intel/definition",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "line": 1,
-                "column": 1,
-                "symbol_name": "",
-            },
-        ).json()
-        assert data["found"] is False
-
-    def test_definition_method(self):
-        data = client.post(
-            "/intel/definition",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "line": 24,
-                "column": 4,
-                "symbol_name": "process",
-            },
-        ).json()
-        assert data["found"] is True
-        assert data["definitions"][0]["kind"] == "method"
-
-    def test_definition_response_structure(self):
-        data = client.post(
-            "/intel/definition",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "line": 22,
-                "column": 10,
-                "symbol_name": "bubble_sort",
-            },
-        ).json()
-        assert "found" in data
-        assert "symbol" in data
-        assert "definitions" in data
-        for d in data["definitions"]:
-            assert "line" in d
-            assert "column" in d
-            assert "kind" in d
-            assert "signature" in d
-            assert "docstring" in d
-
-    def test_definition_syntax_error_no_crash(self):
-        r = client.post(
-            "/intel/definition",
-            json={
-                "filename": "test.py",
-                "content": "def broken(\n  pass",
-                "line": 1,
-                "column": 1,
-                "symbol_name": "broken",
-            },
-        )
-        assert r.status_code == 200
-
-
-# ─── /intel/definition — TypeScript ──────────────────────────────────────────
-
-
-class TestGoToDefinitionTS:
-    def test_definition_ts_ok(self):
-        r = client.post(
-            "/intel/definition",
-            json={
-                "filename": "service.ts",
-                "content": TS_DEFS,
-                "line": 9,
-                "column": 10,
-                "symbol_name": "processUsers",
-            },
-        )
-        assert r.status_code == 200
-
-    def test_definition_ts_function(self):
-        data = client.post(
-            "/intel/definition",
-            json={
-                "filename": "service.ts",
-                "content": TS_DEFS,
-                "line": 13,
-                "column": 1,
-                "symbol_name": "processUsers",
-            },
-        ).json()
-        assert data["found"] is True
-        assert data["definitions"][0]["kind"] == "function"
-
-    def test_definition_ts_class(self):
-        data = client.post(
-            "/intel/definition",
-            json={
-                "filename": "service.ts",
-                "content": TS_DEFS,
-                "line": 12,
-                "column": 16,
-                "symbol_name": "UserService",
-            },
-        ).json()
-        assert data["found"] is True
-        assert data["definitions"][0]["kind"] == "class"
-
-    def test_definition_ts_interface(self):
-        data = client.post(
-            "/intel/definition",
-            json={
-                "filename": "service.ts",
-                "content": TS_DEFS,
-                "line": 8,
-                "column": 20,
-                "symbol_name": "User",
-            },
-        ).json()
-        assert data["found"] is True
-        assert data["definitions"][0]["kind"] in ("interface", "class")
-
-    def test_definition_ts_not_found(self):
-        data = client.post(
-            "/intel/definition",
-            json={
-                "filename": "service.ts",
-                "content": TS_DEFS,
-                "line": 1,
-                "column": 1,
-                "symbol_name": "NonExistentXYZ",
-            },
-        ).json()
-        assert data["found"] is False
-
-
-# ─── /intel/references — Python ──────────────────────────────────────────────
-
-
-class TestFindReferencesPython:
-    def test_references_ok(self):
-        r = client.post(
-            "/intel/references",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "symbol_name": "bubble_sort",
-            },
-        )
-        assert r.status_code == 200
-
-    def test_references_finds_definition(self):
-        data = client.post(
-            "/intel/references",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "symbol_name": "bubble_sort",
-            },
-        ).json()
-        kinds = [r["kind"] for r in data["references"]]
-        assert "definition" in kinds
-
-    def test_references_finds_usage(self):
-        data = client.post(
-            "/intel/references",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "symbol_name": "bubble_sort",
-            },
-        ).json()
-        # Debe encontrar al menos 2: definición + uso
-        assert data["total"] >= 2
-
-    def test_references_definition_line(self):
-        data = client.post(
-            "/intel/references",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "symbol_name": "bubble_sort",
-            },
-        ).json()
-        assert data["definition_line"] == 15
-
-    def test_references_method_call(self):
-        data = client.post(
-            "/intel/references",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "symbol_name": "process",
-            },
-        ).json()
-        kinds = [r["kind"] for r in data["references"]]
-        assert "definition" in kinds
-        assert "call" in kinds
-
-    def test_references_preview_present(self):
-        data = client.post(
-            "/intel/references",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "symbol_name": "bubble_sort",
-            },
-        ).json()
-        for ref in data["references"]:
-            assert "preview" in ref
-            assert len(ref["preview"]) > 0
-
-    def test_references_sorted_by_line(self):
-        data = client.post(
-            "/intel/references",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "symbol_name": "bubble_sort",
-            },
-        ).json()
-        lines = [r["line"] for r in data["references"]]
-        assert lines == sorted(lines)
-
-    def test_references_response_structure(self):
-        data = client.post(
-            "/intel/references",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "symbol_name": "bubble_sort",
-            },
-        ).json()
-        assert "symbol" in data
-        assert "references" in data
-        assert "definition_line" in data
-        assert "total" in data
-        for ref in data["references"]:
-            assert "line" in ref
-            assert "column" in ref
-            assert "kind" in ref
-            assert "preview" in ref
-
-    def test_references_empty_symbol(self):
-        data = client.post(
-            "/intel/references",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "symbol_name": "",
-            },
-        ).json()
-        assert data["total"] == 0
-
-    def test_references_not_found(self):
-        data = client.post(
-            "/intel/references",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "symbol_name": "nonexistent_xyz_abc",
-            },
-        ).json()
-        assert data["total"] == 0
-
-    def test_references_class(self):
-        data = client.post(
-            "/intel/references",
-            json={
-                "filename": "test.py",
-                "content": PY_DEFS,
-                "symbol_name": "DataProcessor",
-            },
-        ).json()
-        assert data["total"] >= 2  # definición + uso en dp = DataProcessor(...)
-        assert data["definition_line"] == 4
-
-
-# ─── /intel/references — TypeScript ──────────────────────────────────────────
-
-
-class TestFindReferencesTS:
-    def test_references_ts_ok(self):
-        r = client.post(
-            "/intel/references",
-            json={
-                "filename": "service.ts",
-                "content": TS_DEFS,
-                "symbol_name": "processUsers",
-            },
-        )
-        assert r.status_code == 200
-
-    def test_references_ts_finds_usage(self):
-        data = client.post(
-            "/intel/references",
-            json={
-                "filename": "service.ts",
-                "content": TS_DEFS,
-                "symbol_name": "processUsers",
-            },
-        ).json()
-        assert data["total"] >= 2
-
-    def test_references_ts_definition_line(self):
-        data = client.post(
-            "/intel/references",
-            json={
-                "filename": "service.ts",
-                "content": TS_DEFS,
-                "symbol_name": "processUsers",
-            },
-        ).json()
-        assert data["definition_line"] is not None
-
-    def test_references_ts_empty(self):
-        data = client.post(
-            "/intel/references",
-            json={
-                "filename": "service.ts",
-                "content": TS_DEFS,
-                "symbol_name": "nonExistentSymbol123",
-            },
-        ).json()
-        assert data["total"] == 0
 
 
 # ─── Fixtures Fase 3 ─────────────────────────────────────────────────────────
@@ -1307,27 +651,6 @@ class TestCompletionsTS:
     def test_completions_ts_ok(self):
         r = client.post("/intel/completions", json={"filename": "service.ts", "content": TS_COMPLETE, "prefix": ""})
         assert r.status_code == 200
-
-    def test_completions_ts_finds_functions(self):
-        data = client.post(
-            "/intel/completions", json={"filename": "service.ts", "content": TS_COMPLETE, "prefix": ""}
-        ).json()
-        labels = [s["label"] for s in data["symbols"]]
-        assert "processUsers" in labels or "validateUser" in labels
-
-    def test_completions_ts_finds_classes(self):
-        data = client.post(
-            "/intel/completions", json={"filename": "service.ts", "content": TS_COMPLETE, "prefix": ""}
-        ).json()
-        labels = [s["label"] for s in data["symbols"]]
-        assert "UserService" in labels
-
-    def test_completions_ts_finds_interfaces(self):
-        data = client.post(
-            "/intel/completions", json={"filename": "service.ts", "content": TS_COMPLETE, "prefix": ""}
-        ).json()
-        labels = [s["label"] for s in data["symbols"]]
-        assert "User" in labels
 
     def test_completions_ts_prefix(self):
         data = client.post(

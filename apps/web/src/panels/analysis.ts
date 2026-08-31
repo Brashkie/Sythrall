@@ -160,7 +160,7 @@ export function renderMetrics(): void {
     <div class="metric-section" style="cursor:pointer" data-select-file="${f.id}">
       <div class="ms-title" style="display:flex;align-items:center;gap:6px;text-transform:none">
         <span>${languageBadge(f.ext)}</span>${f.name}
-        <span class="tag ${f.issues.length ? 'tg-err' : 'tg-ok'}" style="margin-left:auto">${f.issues.length || 'OK'}</span>
+        <span class="tag ${f.issues.some((i) => i.severity === 'error') ? 'tg-err' : f.issues.length ? 'tg-warn' : 'tg-ok'}" style="margin-left:auto">${f.issues.length || 'OK'}</span>
       </div>
       ${f.metrics.pylint_score != null ? mr('Pylint', f.metrics.pylint_score.toFixed(1) + '/10', f.metrics.pylint_score >= 8 ? 'var(--ok)' : f.metrics.pylint_score >= 5 ? 'var(--warn)' : 'var(--err)') : ''}
       ${f.metrics.mi != null ? mr('Maintainability', f.metrics.mi + '/100', f.metrics.mi > 70 ? 'var(--ok)' : f.metrics.mi > 40 ? 'var(--warn)' : 'var(--err)') : ''}

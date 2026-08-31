@@ -86,6 +86,8 @@ async def live_metrics(req: LiveMetricsRequest) -> dict[str, Any]:
             _metrics_js_ts(req.content, result)
         elif ext in (".c", ".cpp", ".h", ".hpp"):
             _metrics_c(req.content, result)
+        elif ext in (".f", ".f90", ".f95", ".f03", ".f08", ".for"):
+            _metrics_fortran(req.content, result)
         else:
             _metrics_generic(req.content, result)
     except SyntaxError as e:
@@ -190,6 +192,27 @@ def _metrics_c(content: str, result: dict) -> None:
     result["big_o_dist"] = {bigo: fn_count} if fn_count else {}
 
 
+def _metrics_fortran(content: str, result: dict) -> None:
+    """Métricas Fortran via regex — mismo nivel de heurística rápida que
+    `_metrics_c` para la barra de métricas en vivo del editor, no el parser
+    tree-sitter real (ese vive en `fparse.rs`/`parse_fortran_rust`, usado por
+    `/static/parse`, no por este endpoint)."""
+    fn_count = len(re.findall(r"(?i)\b(?:subroutine|function)\s+\w+", content))
+    imp_count = len(re.findall(r"(?i)^\s*use\s+\w+", content, re.MULTILINE))
+    cc_tokens = len(re.findall(r"(?i)\b(?:if|do|select|case|\.and\.|\.or\.)\b", content))
+    has_nested_do = bool(re.search(r"(?i)do\s+\w+\s*=.*?do\s+\w+\s*=", content, re.DOTALL))
+    has_do = bool(re.search(r"(?i)\bdo\s+\w+\s*=", content))
+    bigo = "O(n²)" if has_nested_do else ("O(n)" if has_do else "O(1)")
+
+    result["functions"] = fn_count
+    result["classes"] = 0
+    result["imports"] = imp_count
+    result["avg_cc"] = round(cc_tokens / max(fn_count, 1), 1)
+    result["max_cc"] = cc_tokens
+    result["big_o_worst"] = bigo
+    result["big_o_dist"] = {bigo: fn_count} if fn_count else {}
+
+
 def _metrics_generic(content: str, result: dict) -> None:
     """Métricas genéricas por regex para lenguajes no soportados."""
     _metrics_fallback_regex(content, "", result)
@@ -271,6 +294,12 @@ def _detect_language(ext: str) -> str:
         ".cpp": "cpp",
         ".h": "c",
         ".hpp": "cpp",
+        ".f": "fortran",
+        ".f90": "fortran",
+        ".f95": "fortran",
+        ".f03": "fortran",
+        ".f08": "fortran",
+        ".for": "fortran",
         ".java": "java",
         ".go": "go",
         ".rs": "rust",
@@ -379,13 +408,11 @@ async def metrics_health() -> dict[str, Any]:
     except Exception:
         caps["python_ast"] = False
 
-    try:
-        import tree_sitter  # noqa: F401
-
-        caps["tree_sitter"] = True
-    except ImportError:
-        caps["tree_sitter"] = False
-
+    # C/C++ (tree-sitter) y JS/TS ya no dependen de un paquete Python propio
+    # (Fase 18) — dependen del mismo sidecar que `caps["complexity"]` ya
+    # reporta, así que un flag `tree_sitter` aparte sería una duplicación
+    # engañosa (podía quedar en `True` con el paquete Python instalado pero
+    # sin usarse para nada).
     caps["complexity"] = await check_complexity_engine()
 
     try:
@@ -394,13 +421,6 @@ async def metrics_health() -> dict[str, Any]:
         caps["pylint"] = True
     except ImportError:
         caps["pylint"] = False
-
-    try:
-        import networkx  # noqa: F401
-
-        caps["networkx"] = True
-    except ImportError:
-        caps["networkx"] = False
 
     return {
         "status": "ok",
@@ -413,6 +433,7 @@ async def metrics_health() -> dict[str, Any]:
             "javascript",
             "c",
             "cpp",
+            "fortran",
             "java",
             "go",
             "rust",
