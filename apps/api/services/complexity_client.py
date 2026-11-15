@@ -321,9 +321,7 @@ async def verificar_spark_rust(content: str) -> dict | None:
 
     **Timeout propio y más largo que el del resto.** Un probador no es un
     parser: puede tardar minutos donde un parseo tarda milisegundos."""
-    return await post_to_sidecar(
-        "/verify/spark", {"filename": "fuente.adb", "content": content}, timeout=300.0
-    )
+    return await post_to_sidecar("/verify/spark", {"filename": "fuente.adb", "content": content}, timeout=300.0)
 
 
 async def parse_d_rust(filename: str, content: str) -> dict | None:

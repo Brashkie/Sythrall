@@ -197,11 +197,43 @@ mod tests {
         assert!(result.available);
         assert!(result.measurements.len() >= 2, "esperaba al menos 2 mediciones válidas");
         let exp = result.estimated_exponent.expect("con >=2 mediciones debería poder ajustar un exponente");
+        // Que se pueda ajustar un exponente y que sea un numero real NO
+        // depende de la carga de la maquina: depende de que el kernel
+        // compile, corra y devuelva tiempos crecientes. La asercion sobre
+        // su VALOR si depende, y por eso vive en el test `#[ignore]` de
+        // abajo.
+        assert!(exp.is_finite(), "el ajuste no dio un numero: {exp}");
+    }
+
+    /// **Fuera de la suite que bloquea, y el motivo esta medido.**
+    ///
+    /// Esta asercion mira un exponente ajustado sobre TIEMPO DE PARED, que es
+    /// la unica clase de test intermitente que este repo tuvo nunca —
+    /// `dcost.rs` ya lo tenia escrito: *"los benchmarks que asertan tiempo de
+    /// pared fueron el unico punto intermitente de una suite de mas de mil
+    /// tests"*—. El 2026-11-14 fallo durante la suite completa y paso 3 de 3
+    /// aislado: bajo carga, el numero se mueve.
+    ///
+    /// Lo determinista se quedo gateando en el test de arriba (que corra, que
+    /// produzca mediciones, que se pueda ajustar un exponente). Esto se corre
+    /// a pedido: `cargo test -- --ignored`.
+    #[test]
+    #[ignore]
+    fn validate_sum_squares_end_to_end_si_gcc_esta_disponible_exponente_en_rango() {
+        if !gcc_available() {
+            eprintln!("gcc no disponible en este entorno — test salteado");
+            return;
+        }
+        let result = validate_sum_squares_linear();
+        assert!(result.available);
+        assert!(result.measurements.len() >= 2, "esperaba al menos 2 mediciones válidas");
+        let exp = result.estimated_exponent.expect("con >=2 mediciones debería poder ajustar un exponente");
         // Rango generoso a propósito, mismo criterio que fortran_bench.rs:
         // atrapar una implementación rota (exponente ~0 o ~2), no exigir
         // precisión de laboratorio con clock() de resolución gruesa.
         assert!((0.5..1.7).contains(&exp), "exponente medido fuera de rango razonable: {exp}");
     }
+
 
     #[test]
     fn validate_sum_squares_degrada_con_gracia_sin_gcc() {

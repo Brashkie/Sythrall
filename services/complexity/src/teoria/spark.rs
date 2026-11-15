@@ -145,7 +145,7 @@ pub fn obligaciones_de_sarif(sarif: &str) -> Option<(Option<String>, Vec<Obligac
                 .to_string(),
         });
     }
-    out.sort_by(|a, b| (a.file.clone(), a.line).cmp(&(b.file.clone(), b.line)));
+    out.sort_by_key(|a| (a.file.clone(), a.line));
     Some((prover, out))
 }
 
