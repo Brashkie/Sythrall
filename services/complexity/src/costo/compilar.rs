@@ -646,6 +646,17 @@ mod tests {
 
     /// El resultado que justifica el módulo entero: dos niveles del MISMO
     /// fuente dan binarios distintos, y la diferencia es medible.
+    ///
+    /// **Lo que NO se asierta, y por qué.** Este test decía que `-O2` emite
+    /// MENOS instrucciones que `-O0`, y eso es una creencia sobre un
+    /// compilador, no un hecho sobre los compiladores: medido el 2026-11-14
+    /// en el runner de CI (gcc moderno, Linux), `-O0` dio **22** y `-O2` dio
+    /// **44** — más del doble. No está roto: a `-O2` el compilador desenrolla
+    /// y vectoriza, así que emite más instrucciones que se ejecutan menos
+    /// veces. Contar instrucciones estáticas no mide velocidad.
+    ///
+    /// Lo invariante es lo que el doc-comment de arriba ya decía: el código
+    /// **cambia**. Eso se asierta; el conteo se reporta.
     #[test]
     fn o0_y_o2_dan_codigo_distinto_y_la_diferencia_se_mide() {
         if !hay("gcc") {
@@ -664,8 +675,11 @@ mod tests {
                 .unwrap_or(0)
         };
         let (n0, n2) = (cuenta(o0), cuenta(o2));
-        assert!(n0 > 0 && n2 > 0, "O0={n0} O2={n2}");
-        assert!(n2 < n0, "-O2 debería emitir menos instrucciones que -O0 (O0={n0}, O2={n2})");
+        assert!(n0 > 0 && n2 > 0, "los dos niveles tienen que emitir algo (O0={n0} O2={n2})");
+        assert_ne!(
+            o0.assembly, o2.assembly,
+            "el mismo fuente a dos niveles tiene que dar codigo distinto (O0={n0} instr, O2={n2})"
+        );
     }
 
     #[test]
@@ -795,11 +809,25 @@ mod tests {
         assert!(s.vectorized, "no vectorizó: {s:?}");
         assert_eq!(s.max_width_bits, 256);
         assert_eq!(s.isa, "avx2");
-        // Sin pedir nada, este gcc no emite SIMD para el mismo bucle.
-        assert!(
-            simd_de(&sin).is_none_or(|x| !x.vectorized),
-            "sin -mavx2 no debería reportar vectorización"
-        );
+        // **Lo que compra AVX2 es el ANCHO, y eso es lo invariante.**
+        //
+        // Este test decía que sin `-mavx2` no hay vectorización, y eso vale
+        // para el gcc 6.3 de esta máquina pero no para los compiladores en
+        // general: en x86-64 **SSE2 es línea base**, así que un gcc moderno a
+        // `-O3` vectoriza igual, a 128 bits, sin que se le pida nada. Medido
+        // el 2026-11-14: el runner de CI reportó vectorización sin la flag y
+        // el test falló afirmando algo que no era cierto del compilador, sino
+        // de uno.
+        //
+        // Lo que sí distingue a AVX2 es que **los 256 bits sólo aparecen
+        // cuando se piden**. Eso es cierto en las dos plataformas.
+        if let Some(base) = simd_de(&sin) {
+            assert!(
+                base.max_width_bits <= 128,
+                "sin -mavx2 no deberían aparecer registros de 256 bits: {base:?}"
+            );
+            assert_ne!(base.isa, "avx2", "sin pedir avx2 no debería reportarse avx2: {base:?}");
+        }
     }
 
     /// **Una feature que no está en la tabla se ignora, no se pasa.** Es lo
