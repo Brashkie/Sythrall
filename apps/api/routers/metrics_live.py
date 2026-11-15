@@ -17,6 +17,7 @@ from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from services.static_parser import _cyclomatic_python
 from services.complexity_client import check_complexity_engine
@@ -79,31 +80,47 @@ async def live_metrics(req: LiveMetricsRequest) -> dict[str, Any]:
     result["loc"] = len(lines)
     result["sloc"] = sum(1 for ln in lines if ln.strip() and not ln.strip().startswith(("#", "//")))
 
+    # `run_in_threadpool` y no una llamada directa: `_compute_metrics_sync`
+    # corre `ast.parse` (y varios regex sobre todo el archivo), todo CPU puro
+    # y todo sincrónico. Este endpoint es el que más veces se llama de toda
+    # la app — el editor lo dispara mientras se escribe (con debounce, pero
+    # igual: una vez por pausa de tecleo) — así que ejecutarlo en el hilo del
+    # event loop congelaba el backend ENTERO en cada pulsación: la terminal,
+    # los uploads y cualquier análisis en curso quedaban esperando a que
+    # terminara de parsear. Mismo criterio que `analysis.py`/`diagram.py`/
+    # `upload.py` ya aplican para su trabajo pesado.
+    await run_in_threadpool(_compute_metrics_sync, req.content, ext, result)
+
+    result["ms"] = round((time.perf_counter() - t0) * 1000, 2)
+    return result
+
+
+def _compute_metrics_sync(content: str, ext: str, result: dict[str, Any]) -> None:
+    """Todo el trabajo CPU-bound de `live_metrics`, extraído para poder
+    mandarlo al threadpool de una sola vez. Muta `result` en vez de devolver
+    un dict nuevo — mismo contrato que ya tenían las `_metrics_*`."""
     try:
         if ext == ".py":
-            _metrics_python(req.content, result)
+            _metrics_python(content, result)
         elif ext in (".ts", ".tsx", ".js", ".jsx"):
-            _metrics_js_ts(req.content, result)
+            _metrics_js_ts(content, result)
         elif ext in (".c", ".cpp", ".h", ".hpp"):
-            _metrics_c(req.content, result)
+            _metrics_c(content, result)
         elif ext in (".f", ".f90", ".f95", ".f03", ".f08", ".for"):
-            _metrics_fortran(req.content, result)
+            _metrics_fortran(content, result)
         else:
-            _metrics_generic(req.content, result)
+            _metrics_generic(content, result)
     except SyntaxError as e:
         result["parse_ok"] = False
         result["parse_error"] = f"SyntaxError: {e.msg} (línea {e.lineno})"
         result["safe_mode"] = True
         # Fallback: métricas básicas por regex aunque haya error de sintaxis
-        _metrics_fallback_regex(req.content, ext, result)
+        _metrics_fallback_regex(content, ext, result)
     except Exception as e:
         result["parse_ok"] = False
         result["parse_error"] = str(e)
         result["safe_mode"] = True
-        _metrics_fallback_regex(req.content, ext, result)
-
-    result["ms"] = round((time.perf_counter() - t0) * 1000, 2)
-    return result
+        _metrics_fallback_regex(content, ext, result)
 
 
 def _metrics_python(content: str, result: dict) -> None:
@@ -357,10 +374,12 @@ async def validate_file(req: ValidateRequest) -> dict[str, Any]:
         diff = stripped.count("{") - stripped.count("}")
         result["warnings"].append(f"Llaves desbalanceadas ({diff:+d}) — archivo posiblemente incompleto")
 
-    # 3. Validar sintaxis
+    # 3. Validar sintaxis — mismo motivo que `live_metrics` de arriba:
+    # `ast.parse` sobre un archivo grande no puede correr en el hilo del
+    # event loop.
     if ext == ".py":
         try:
-            ast.parse(content)
+            await run_in_threadpool(ast.parse, content)
         except SyntaxError as e:
             result["safe_mode"] = True
             result["warnings"].append(f"SyntaxError en línea {e.lineno}: {e.msg} — modo seguro activado")
@@ -377,10 +396,10 @@ async def validate_file(req: ValidateRequest) -> dict[str, Any]:
 
     # 5. Archivo muy largo (puede degradar rendimiento)
     lines = content.count("\n")
-    if lines > 5000:
-        result["warnings"].append(f"Archivo muy largo ({lines} líneas) — análisis puede ser lento")
-    elif lines > 10000:
+    if lines > 10000:
         result["errors"].append(f"Archivo extremadamente largo ({lines} líneas) — considera dividirlo")
+    elif lines > 5000:
+        result["warnings"].append(f"Archivo muy largo ({lines} líneas) — análisis puede ser lento")
 
     # 6. Archivo vacío
     if not content.strip():

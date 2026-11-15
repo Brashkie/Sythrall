@@ -20,7 +20,7 @@ export function renderProjectContextBanner(): string {
     <div class="project-context-banner" data-project-context-banner>
       <span class="project-context-lbl">Proyecto</span>
       <span class="project-context-name">${esc(name)}</span>
-      <button class="btn btn-ghost btn-sm" data-project-context-switch style="margin-left:auto">Cambiar</button>
+      <button class="btn btn-ghost btn-sm ml-auto" data-project-context-switch>Cambiar</button>
     </div>`
 }
 

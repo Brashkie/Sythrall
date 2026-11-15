@@ -7,6 +7,10 @@ Parser multi-lenguaje SIN IA.
 - Fortran → Rust (sidecar, tree-sitter vía `services/complexity/src/fparse.rs`) —
   Fase 20 (Scientific Intelligence): DO-loops/vectorización, algoritmos
   numéricos, uso de BLAS/LAPACK
+- Notebook (.ipynb) → Rust (sidecar, extracción de celdas de código vía
+  `services/complexity/src/notebook.rs`) — Fase 27 (AI Intelligence): delega
+  en el mismo motor de análisis de Python sobre el texto de las celdas ya
+  concatenado
 - Big O   → heurística por patrones AST/regex, calculada en Rust para los 5 lenguajes
 - WASM    → detección de hot paths y recomendaciones, calculada en Rust (no aplica a
   Fortran — ya compila a nativo, WASM no es un target relevante ahí)
@@ -37,13 +41,20 @@ from services.complexity_client import (
     parse_asm_rust,
     parse_c_rust,
     parse_cpp_rust,
+    parse_css_rust,
+    parse_ada_rust,
+    parse_d_rust,
     parse_fortran_rust,
+    parse_rust_rust,
+    parse_html_rust,
     parse_js_rust,
+    parse_manifest_rust,
+    parse_notebook_rust,
     parse_python_rich,
     parse_ts_rust,
     scan_project_rust,
 )
-from services.plugin_registry import extension_map
+from services.plugin_registry import extension_map, filename_map
 from services.project_service import IGNORED_DIRS, PARSEABLE_EXTENSIONS, read_project_files
 
 
@@ -55,15 +66,23 @@ from services.project_service import IGNORED_DIRS, PARSEABLE_EXTENSIONS, read_pr
 async def parse_file(filename: str, content: str) -> dict[str, Any]:
     """Despacha al parser correcto según extensión — resuelto vía
     `plugin_registry.extension_map()` (Fase 24), no una cadena `if/elif` de
-    extensiones hardcodeadas acá. Async porque los 7 lenguajes ahora
+    extensiones hardcodeadas acá. Async porque los 8 lenguajes ahora
     consultan el sidecar Rust — Python (`parse_python_rich`), C/C++
     (`parse_c_rust`/`parse_cpp_rust`, tree-sitter), JS/TS
     (`parse_js_rust`/`parse_ts_rust`, regex+heurística), Fortran
     (`parse_fortran_rust`, tree-sitter), Assembly (`parse_asm_rust`,
-    pattern-matching AT&T/Intel — Fase 19)."""
+    pattern-matching AT&T/Intel — Fase 19), Notebook (`parse_notebook_rust`,
+    extracción de celdas — Fase 27)."""
     ext = Path(filename).suffix.lower()
     try:
-        lang_id = extension_map().get(ext)
+        # Nombre exacto primero, extension despues (Fase 31, primera Format
+        # Extension): `package.json` es un `.json` como cualquier otro, asi
+        # que resolver por extension mandaria todo JSON del proyecto al
+        # analizador de manifests. `requirements-dev.txt` no matchea por
+        # nombre exacto, pero su handler igual lo reconoce por prefijo — el
+        # mapa cubre el caso comun, el parser el resto.
+        base = Path(filename).name.lower()
+        lang_id = filename_map().get(base) or extension_map().get(ext)
         handler = _LANGUAGE_HANDLERS.get(lang_id) if lang_id else None
         if handler is not None:
             return await handler(filename, content)
@@ -100,7 +119,9 @@ async def parse_project_files(project_dir: Path) -> list[dict[str, Any]]:
     `project_service.py` — única fuente de verdad de esas listas, para que
     no diverjan entre las dos implementaciones (Python valida/resuelve el
     path; Rust solo recibe las listas ya armadas, no las duplica)."""
-    files = await scan_project_rust(str(project_dir), sorted(PARSEABLE_EXTENSIONS), sorted(IGNORED_DIRS))
+    files = await scan_project_rust(
+        str(project_dir), sorted(PARSEABLE_EXTENSIONS), sorted(IGNORED_DIRS), sorted(filename_map())
+    )
     if files is not None:
         return files
 
@@ -147,7 +168,10 @@ async def _parse_python(filename: str, content: str) -> dict:
         wasm_hints = rich["wasm_hints"]
         security_findings = list(rich["security_findings"])
         structural_smells = list(rich["structural_smells"])
+        proof_surface_py = rich.get("proof_surface")
         naming_smells = list(rich["naming_smells"])
+        control_findings = list(rich["control_findings"])
+        modernization = rich["modernization"]
     else:
         functions = _skeleton_functions_python(tree)
         classes = _skeleton_classes_python(tree)
@@ -155,6 +179,11 @@ async def _parse_python(filename: str, content: str) -> dict:
         call_graph = _build_call_graph(functions)
         wasm_hints = _wasm_hints_python(functions, content)
         security_findings, structural_smells, naming_smells = [], [], []
+        control_findings = []
+        # Sin sidecar no hay motor de modernización: se devuelve el shape
+        # vacío en vez de omitir la clave, para que la agregación de proyecto
+        # no tenga que distinguir "no hay hallazgos" de "no se analizó".
+        modernization = {"candidates": [], "summary": {"total": 0}, "note": ""}
 
         # ── Imports no usados (heurística) — solo en el camino sin sidecar ──
         used_names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
@@ -189,7 +218,16 @@ async def _parse_python(filename: str, content: str) -> dict:
         "wasm_hints": wasm_hints,
         "security_findings": security_findings,
         "structural_smells": structural_smells,
+        # Fase 34, Linea D — completa el trio con Rust y TypeScript.
+        **({"proof_surface": proof_surface_py} if proof_surface_py else {}),
         "naming_smells": naming_smells,
+        # Fase 15 (Mathematical Intelligence, 2026-09-02) — precondiciones
+        # de control optimo violadas de forma demostrable; ver `control.rs`.
+        "control_findings": control_findings,
+        # Fase 25 (Modernization Intelligence, 2026-09-05) — APIs de Python
+        # deprecadas/removidas; ver `pymodern.rs`. Mismo shape que el motor
+        # de C/C++, así que `parse_project` lo agrega sin ningún caso especial.
+        "modernization": modernization,
         "summary": {
             "total_functions": len(functions),
             "total_classes": len(classes),
@@ -392,8 +430,20 @@ async def _parse_c_cpp_via_rust(filename: str, content: str, lang: str) -> dict:
         "wasm_hints": result["wasm_hints"],
         "memory_layout": result["memory"],
         "modernization": result["modernization"],
-        "security_findings": [],
-        "structural_smells": [],
+        # Fase 32 (2026-09-05) — localidad espacial; ver `locality.rs`.
+        "locality_findings": result["locality"],
+        # Fase 34, Línea A — métricas de FORMA de la metaprogramación de
+        # C++; ver `plantillas.rs`. Vacías para C, que no tiene templates.
+        "template_complexity": result["templates"],
+        # Fase 22 (2026-09-05) — hasta acá esto era `[]` fijo, así que un
+        # proyecto de puro C daba Quality 100/100 por ausencia de análisis.
+        # Ver `cparse.rs::structural_smells_c`.
+        "structural_smells": result["structural_smells"],
+        # Fase 21 (2026-09-05) — hasta acá esto era `[]` fijo, así que un
+        # proyecto de puro C daba Security 100/100 por ausencia de análisis.
+        # Ver `csecurity.rs`.
+        "security_findings": result["security_findings"],
+        # C/C++ no tiene análisis de nombres propio: este SÍ es honesto.
         "naming_smells": [],
         "summary": summary,
     }
@@ -423,12 +473,152 @@ async def _parse_fortran(filename: str, content: str) -> dict:
         "macros": [],
         "call_graph": result["call_graph"],
         "wasm_hints": [],
+        # Fase 22 (2026-09-05) — ver `fparse.rs::structural_smells_fortran`.
+        "structural_smells": result["structural_smells"],
+        # Fase 32 (2026-09-25) — localidad espacial, segunda porción. Fortran
+        # es column-major, o sea la regla OPUESTA a la de C; ver
+        # `locality.rs::locality_findings_fortran`.
+        "locality_findings": result["locality"],
+        # Fortran no tiene taint tracking ni análisis de nombres.
         "security_findings": [],
-        "structural_smells": [],
         "naming_smells": [],
         "summary": {
             "total_functions": len(result["functions"]),
             "total_uses": len(result["imports"]),
+        },
+    }
+
+
+async def _parse_d(filename: str, content: str) -> dict:
+    """Fase 34, Línea C, paso 1 — D como lenguaje analizado.
+
+    **Lo que hace distinto a este handler**: devuelve `trust_surface` con los
+    tres niveles de D y, dentro, `review_surface` — la lista con nombre y
+    línea de cada `@trusted`. Esa lista es el punto entero de que D entrara a
+    la fase: en Rust habría que leer comentarios para armarla.
+
+    `security_findings`/`naming_smells` van vacíos porque no hay taint
+    tracking ni análisis de nombres para D todavía."""
+    result = await parse_d_rust(filename, content)
+    if result is None:
+        return _unsupported(filename, ".d", reason="sidecar Rust no disponible")
+
+    return {
+        "filename": filename,
+        "language": "d",
+        "functions": result["functions"],
+        "classes": [],
+        "imports": result["imports"],
+        "exports": [],
+        "dead_code": [],
+        "macros": [],
+        "call_graph": result["call_graph"],
+        "wasm_hints": [],
+        "structural_smells": result["structural_smells"],
+        "security_findings": [],
+        "naming_smells": [],
+        "trust_surface": result["trust_surface"],
+        "summary": {
+            "total_functions": len(result["functions"]),
+            "total_unittests": result["unittests"],
+            "total_imports": len(result["imports"]),
+            "trusted_fns": result["trust_surface"]["trusted_fns"],
+        },
+    }
+
+
+async def _parse_ada(filename: str, content: str) -> dict:
+    """Fase 34, Línea E, paso 1 — Ada como lenguaje analizado.
+
+    **Lo que hace distinto a este handler: `exports` trae las firmas sin
+    cuerpo.** Un `.ads` es una especificación: no tiene ni un `begin`, así que
+    produce cero `functions` y N `specs`. Darles `loc`, `complexity` y Big-O a
+    partir de la firma sería reportar métricas de un cuerpo que no se leyó, y
+    devolver el archivo vacío sería perder su interfaz entera. Van en
+    `exports`, que es el campo del shape común que significa justo eso.
+
+    `classes` trae las unidades (paquetes, tipos tarea, tipos protegidos): un
+    paquete Ada no es una clase, pero es la unidad que agrupa estado y
+    operaciones, que es lo que el panel muestra en esa columna.
+
+    `security_findings`/`naming_smells` van vacíos porque no hay taint
+    tracking ni análisis de nombres para Ada todavía; `macros`/`wasm_hints`
+    porque el lenguaje no tiene esos conceptos."""
+    result = await parse_ada_rust(filename, content)
+    if result is None:
+        return _unsupported(filename, ".adb", reason="sidecar Rust no disponible")
+
+    return {
+        "filename": filename,
+        "language": "ada",
+        "functions": result["functions"],
+        "classes": result["units"],
+        "imports": result["imports"],
+        "exports": result["specs"],
+        "dead_code": [],
+        "macros": [],
+        "call_graph": result["call_graph"],
+        "wasm_hints": [],
+        "structural_smells": result["structural_smells"],
+        "security_findings": [],
+        "naming_smells": [],
+        "summary": {
+            "total_functions": len(result["functions"]),
+            "total_specs": len(result["specs"]),
+            "total_units": len(result["units"]),
+            "total_uses": len(result["imports"]),
+        },
+    }
+
+
+async def _parse_rust(filename: str, content: str) -> dict:
+    """Fase 34, Línea B (Trust Surface) — Rust como target de análisis.
+
+    Lo que hace distinto a este handler de los otros: además del shape común
+    devuelve `trust_surface`, el mapa de dónde el código renuncia a las
+    garantías del compilador y si lo justificó. No es una métrica de calidad
+    — un `unsafe` documentado es legítimo —, es el inventario de lo que hay
+    que revisar a mano.
+
+    `rsparse.rs` no trae `macros`: los macros declarativos de Rust existen y
+    son extraíbles, pero son otra porción. Va vacío para mantener el shape
+    uniforme, no porque Rust no los tenga. **`call_graph` y `classes` sí
+    vienen desde 2026-09-26**: una auditoría de la matriz de capacidades
+    mostró que Rust era el único de los 8 targets sin grafo de llamadas y sin
+    tipos. `classes` trae struct/enum/trait/union con los métodos que sus
+    `impl` les agregan — se llama así por el nombre que el panel ya usa, pero
+    Rust no tiene clases."""
+    result = await parse_rust_rust(filename, content)
+    if result is None:
+        return _unsupported(filename, ".rs", reason="sidecar Rust no disponible")
+
+    surface = result["trust_surface"]
+    proof = result["proof_surface"]
+    return {
+        "filename": filename,
+        "language": "rust",
+        "functions": result["functions"],
+        "classes": result["classes"],
+        "imports": result["imports"],
+        "exports": [],
+        "dead_code": [],
+        "macros": [],
+        "call_graph": result["call_graph"],
+        "wasm_hints": [],
+        "structural_smells": result["structural_smells"],
+        # Sin taint tracking ni análisis de nombres para Rust todavía.
+        "security_findings": [],
+        "naming_smells": [],
+        "trust_surface": surface,
+        "proof_surface": proof,
+        "summary": {
+            "total_functions": len(result["functions"]),
+            "total_uses": len(result["imports"]),
+            "unsafe_blocks": surface["unsafe_blocks"],
+            "unsafe_fns": surface["unsafe_fns"],
+            "unsafe_impls": surface["unsafe_impls"],
+            "unwrap_calls": proof["unwrap_calls"],
+            "expect_calls": proof["expect_calls"],
         },
     }
 
@@ -442,7 +632,7 @@ async def _parse_asm(filename: str, content: str) -> dict:
     de este bloque: sin sidecar, `_unsupported()`. Los "procedimientos"
     (delimitados por labels) viajan en la clave `functions` — mismo nombre
     que el resto de lenguajes, para que el Big-O table del frontend los
-    renderice sin ningún cambio. `asm_syntax` (`"att"`/`"intel"`, detectado
+    renderice sin ningún cambio. `asm_syntax` (`"att"`/`"intel"`/`"arm"`, detectado
     automáticamente) es el único campo nuevo a nivel raíz."""
     result = await parse_asm_rust(filename, content)
     if result is None:
@@ -460,13 +650,165 @@ async def _parse_asm(filename: str, content: str) -> dict:
         "macros": [],
         "call_graph": result["call_graph"],
         "wasm_hints": [],
+        # Fase 22 (2026-09-05) — ver `asmparse.rs::structural_smells_asm`.
+        "structural_smells": result["structural_smells"],
+        # Assembly no tiene taint tracking ni análisis de nombres.
         "security_findings": [],
-        "structural_smells": [],
         "naming_smells": [],
         "summary": {
             "total_procedures": len(result["procedures"]),
             "syntax": result["syntax"],
         },
+    }
+
+
+async def _parse_notebook(filename: str, content: str) -> dict:
+    """Fase 27 (AI Intelligence), Jupyter Notebook analysis — como Fortran/
+    Assembly, nace 100% en Rust (`notebook.rs`), sin ningún fallback Python:
+    a diferencia de `.py`, `content` acá es JSON de notebook, no código
+    Python — `ast.parse(content)` reventaría con un `SyntaxError` inmediato
+    si se intentara el mismo camino degradado que `_parse_python` usa, así
+    que ni se intenta. Sin sidecar, `_unsupported()` directo, mismo criterio
+    que el resto de los lenguajes Rust-only. `code_cells`/`cell_ranges` son
+    los 2 campos nuevos a nivel raíz — el resto del shape es idéntico al de
+    `/parse/python` (mismo `analyze_rich` corriendo sobre el texto de las
+    celdas ya concatenado), así que el frontend reusa el mismo renderer sin
+    ningún cambio para `functions`/`security_findings`/etc."""
+    result = await parse_notebook_rust(filename, content)
+    if result is None:
+        return _unsupported(filename, ".ipynb", reason="sidecar Rust no disponible")
+
+    return {
+        "filename": filename,
+        "language": "notebook",
+        "functions": result["functions"],
+        "classes": result["classes"],
+        "imports": result["imports"],
+        "exports": [],
+        "dead_code": result["dead_code"],
+        "macros": [],
+        "call_graph": result["call_graph"],
+        "wasm_hints": result["wasm_hints"],
+        "security_findings": result["security_findings"],
+        "structural_smells": result["structural_smells"],
+        "naming_smells": result["naming_smells"],
+        "control_findings": result["control_findings"],
+        "code_cells": result["code_cells"],
+        "cell_ranges": result["cell_ranges"],
+        # Reproducibilidad (2026-09-02) — sale del `execution_count` del
+        # propio `.ipynb`, no de analizar el código; ver `notebook.rs`.
+        "execution_counts": result["execution_counts"],
+        "reproducibility": result["reproducibility"],
+        "summary": result["summary"],
+        "error": result.get("error"),
+    }
+
+
+async def _parse_css(filename: str, content: str) -> dict:
+    """Sythrall CSS Engine (2026-09-02) — 9no lenguaje analizado. Rust-only,
+    mismo criterio que Fortran/Assembly/Notebook: `cssparse.rs` trae su
+    propio tokenizador y no hay ninguna implementacion Python que degradar.
+
+    **El shape es deliberadamente distinto al de los otros 8.** CSS no tiene
+    funciones, clases, imports ni complejidad algoritmica, asi que devolver
+    `functions: []` seria fingir un shape que no aplica. En su lugar trae
+    `rules`/`findings`/`summary` propios. Los campos genericos que el resto
+    del panel espera (`functions`, `security_findings`, ...) van vacios: el
+    frontend ya los renderiza solo si tienen contenido, asi que no rompe
+    nada — mismo mecanismo por el que `memory_layout`/`modernization` (que
+    solo existen para C/C++) conviven con los demas lenguajes."""
+    result = await parse_css_rust(filename, content)
+    if result is None:
+        return _unsupported(filename, ".css", reason="sidecar Rust no disponible")
+
+    return {
+        "filename": filename,
+        "language": "css",
+        "functions": [],
+        "classes": [],
+        "imports": [],
+        "exports": [],
+        "dead_code": [],
+        "call_graph": [],
+        "wasm_hints": [],
+        "security_findings": [],
+        "structural_smells": [],
+        "naming_smells": [],
+        "css_rules": result["rules"],
+        "css_findings": result["findings"],
+        "css_note": result["note"],
+        "summary": {
+            "total_rules": result["summary"]["total_rules"],
+            "total_selectors": result["summary"]["total_selectors"],
+            "total_declarations": result["summary"]["total_declarations"],
+            "total_at_rules": result["summary"]["total_at_rules"],
+            "important_count": result["summary"]["important_count"],
+            "bytes": result["summary"]["bytes"],
+            "max_specificity": result["summary"]["max_specificity"],
+        },
+    }
+
+
+async def _parse_manifest(filename: str, content: str) -> dict:
+    """Dependency Intelligence (Fase 31) — primera Format Extension: no
+    analiza codigo sino un manifest de dependencias. Rust-only, mismo
+    criterio que el resto de los parsers nacidos en Rust.
+
+    Shape propio, como `_parse_css`: un manifest no tiene funciones, clases
+    ni complejidad, asi que devolver `functions: []` con una tabla de Big-O
+    seria fingir una forma que no aplica. Los campos genericos van vacios y
+    el frontend, que ya los renderiza solo si tienen contenido, no necesita
+    saber nada nuevo para el resto del panel."""
+    result = await parse_manifest_rust(filename, content)
+    if result is None:
+        return _unsupported(filename, Path(filename).suffix.lower(), reason="sidecar Rust no disponible")
+
+    return {
+        "filename": filename,
+        "language": "manifest",
+        "functions": [],
+        "classes": [],
+        "imports": [],
+        "exports": [],
+        "dead_code": [],
+        "call_graph": [],
+        "wasm_hints": [],
+        "security_findings": [],
+        "structural_smells": [],
+        "naming_smells": [],
+        "manifest_dependencies": result["dependencies"],
+        "manifest_findings": result["findings"],
+        "manifest_note": result["note"],
+        "summary": result["summary"],
+        "error": result.get("error"),
+    }
+
+
+async def _parse_html(filename: str, content: str) -> dict:
+    """HTML (Fase 31) — 10mo lenguaje analizado. Accesibilidad y estructura,
+    no metricas de codigo. Shape propio como `_parse_css`/`_parse_manifest`:
+    devolver `functions: []` con una tabla de Big-O seria fingir una forma
+    que no aplica a un documento."""
+    result = await parse_html_rust(filename, content)
+    if result is None:
+        return _unsupported(filename, ".html", reason="sidecar Rust no disponible")
+
+    return {
+        "filename": filename,
+        "language": "html",
+        "functions": [],
+        "classes": [],
+        "imports": [],
+        "exports": [],
+        "dead_code": [],
+        "call_graph": [],
+        "wasm_hints": [],
+        "security_findings": [],
+        "structural_smells": [],
+        "naming_smells": [],
+        "html_findings": result["findings"],
+        "html_note": result["note"],
+        "summary": result["summary"],
     }
 
 
@@ -491,7 +833,14 @@ _LANGUAGE_HANDLERS: dict[str, Callable[[str, str], Awaitable[dict[str, Any]]]] =
     "javascript": _parse_js,
     "typescript": _parse_ts,
     "fortran": _parse_fortran,
+    "ada": _parse_ada,
+    "d": _parse_d,
     "assembly": _parse_asm,
+    "rust": _parse_rust,
+    "notebook": _parse_notebook,
+    "css": _parse_css,
+    "html": _parse_html,
+    "manifest": _parse_manifest,
 }
 
 
@@ -512,8 +861,25 @@ async def _parse_js_ts_via_rust(filename: str, content: str, lang: str) -> dict:
         "dead_code": result["dead_code"],
         "call_graph": result["call_graph"],
         "wasm_hints": result["wasm_hints"],
-        "security_findings": [],
-        "structural_smells": [],
+        # Fase 21 (2026-09-02): antes esto era `[]` fijo, así que el Project
+        # Health de cualquier proyecto JS/TS daba Security 100/100 por
+        # ausencia de análisis, no por código limpio. Ahora viene de
+        # `jsts_security.rs` (presencia de sink, sin taint tracking — ese
+        # módulo documenta el alcance). `structural_smells`/`naming_smells`
+        # siguen vacíos a propósito: `smells.rs`/`naming.rs` trabajan sobre
+        # el AST de `rustpython_parser`, que JS/TS no tiene.
+        "security_findings": result["security_findings"],
+        # Fase 22 (2026-09-02): misma historia que `security_findings` de
+        # arriba — era `[]` fijo, así que el score `Quality` de cualquier
+        # proyecto JS/TS daba 100/100 por ausencia de análisis. Ahora trae
+        # `long_function`/`excessive_parameters` desde `jsts.rs`, calculados
+        # con los mismos umbrales que Python. `naming_smells` sigue vacío a
+        # propósito: `naming.rs` sí necesita el AST de `rustpython_parser`.
+        "structural_smells": result["structural_smells"],
+        # Fase 34, Linea D — solo TypeScript. El sidecar lo omite para
+        # JS (`as`/`!`/`any` son sintaxis de TS), asi que la clave
+        # tampoco aparece aca: ausente es distinto de vacio.
+        **({"proof_surface": result["proof_surface"]} if result.get("proof_surface") else {}),
         "naming_smells": [],
         "summary": {
             "total_functions": len(result["functions"]),

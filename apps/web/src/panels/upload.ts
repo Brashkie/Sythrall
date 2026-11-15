@@ -6,10 +6,11 @@
 
 import type { ProjectSummary, ProjectTreeNode, UploadProgress, UploadResult } from '../api/client'
 import { api } from '../api/client'
-import { addFile, setActiveProject, state } from '../store/state'
+import { addFile, olvidarUltimoAnalisis, setActiveProject, state } from '../store/state'
 import type { CodeFile } from '../types'
+import { askConfirm, askText } from '../utils/dialog'
 import { healthTier } from '../utils/health'
-import { appendLog, toast } from '../utils/helpers'
+import { appendLog, esc, toast } from '../utils/helpers'
 import { icon, languageBadge } from '../utils/icons'
 
 // ─── Filtro de carpetas del sistema en uploads de carpeta ─────────────────────
@@ -72,6 +73,18 @@ interface UploadPanelState {
    * grid por atención. Se muestra al tocar ese botón, y vuelve a ocultarse
    * al cancelar o terminar de subir. */
   showCreateForm: boolean
+}
+
+/** Mismo diálogo en los 2 puntos desde donde se puede borrar un proyecto
+ * (la fila de la lista y la tarjeta del grid) — antes eran dos `confirm()`
+ * con el mismo texto copiado. */
+function confirmDeleteProject(): Promise<boolean> {
+  return askConfirm({
+    title: '¿Eliminar este proyecto?',
+    message: 'Se borran del disco sus archivos y su historial de snapshots. No se puede deshacer.',
+    confirmLabel: 'Eliminar',
+    danger: true,
+  })
 }
 
 const st: UploadPanelState = {
@@ -202,7 +215,7 @@ export function renderUploadPanel(): void {
     }
 
     <!-- Input oculto -->
-    <input type="file" id="up-file-input" style="display:none" />
+    <input type="file" id="up-file-input" class="hidden" />
 
     <!-- Nombre del proyecto — siempre visible en "Vacío" (no depende de
     tener archivos pendientes, no hay ninguno en ese modo) -->
@@ -276,12 +289,12 @@ function renderResult(r: UploadResult): string {
 
   return `
     <div class="up-result">
-      <div class="up-result-header" style="color:var(--ok)">
+      <div class="up-result-header text-ok">
         <div>
           <strong>${esc(r.project_name)}</strong>
           <span class="up-result-meta">${r.total_files} archivos · tipo: ${r.type}${info ? ' · ' + info.total_size_fmt : ''}</span>
         </div>
-        <button class="btn btn-ghost btn-sm" id="up-cancel-create-btn" style="margin-left:auto">← Volver a Proyectos</button>
+        <button class="btn btn-ghost btn-sm ml-auto" id="up-cancel-create-btn">← Volver a Proyectos</button>
       </div>
       ${errHtml}
       ${
@@ -345,7 +358,7 @@ function renderTree(node: ProjectTreeNode, depth: number): string {
           <span class="tree-name">${esc(node.name)}</span>
           ${node.children?.length ? `<span class="tree-count">${node.children.length}</span>` : ''}
         </div>
-        <div class="tree-children" ${isOpen ? '' : 'style="display:none"'}>
+        <div class="tree-children hidden" ${isOpen ? '' : ''}>
           ${childrenHtml}
           ${isOpen && hiddenCount > 0 ? `<div class="tree-truncated" style="padding-left:${(depth + 1) * 14 + 20}px">… +${hiddenCount} más (carpeta muy grande, no se muestran todos)</div>` : ''}
           ${node.truncated ? `<div class="tree-truncated" style="padding-left:${(depth + 1) * 14 + 20}px">… árbol truncado</div>` : ''}
@@ -585,7 +598,7 @@ function attachUploadEvents(el: HTMLElement): void {
       const delBtn = target.closest<HTMLElement>('[data-del-project]')
       if (delBtn) {
         e.stopPropagation()
-        if (!confirm('¿Eliminar este proyecto?')) return
+        if (!(await confirmDeleteProject())) return
         await removeProject(delBtn.dataset['delProject']!)
         return
       }
@@ -602,7 +615,7 @@ function attachUploadEvents(el: HTMLElement): void {
   el.querySelectorAll<HTMLElement>('[data-del-project]').forEach((btn) => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation()
-      if (!confirm('¿Eliminar este proyecto?')) return
+      if (!(await confirmDeleteProject())) return
       await removeProject(btn.dataset['delProject']!)
     })
   })
@@ -758,7 +771,14 @@ async function doCreateEmpty(): Promise<void> {
 // de subir algo ya escrito.
 async function doCreateFile(): Promise<void> {
   if (!st.activeResult) return
-  const path = prompt('Nombre del archivo (con ruta si querés, ej. src/app.py):')?.trim()
+  const path = (
+    await askText({
+      title: 'Nuevo archivo',
+      message: 'Podés incluir la ruta dentro del proyecto.',
+      placeholder: 'src/app.py',
+      confirmLabel: 'Crear archivo',
+    })
+  )?.trim()
   if (!path) return
 
   try {
@@ -833,7 +853,7 @@ export async function openProjectFile(projectId: string, filePath: string): Prom
 
 // ─── Cargar proyecto reciente ─────────────────────────────────────────────────
 
-async function loadProject(projectId: string): Promise<void> {
+export async function loadProject(projectId: string): Promise<void> {
   try {
     const data = await api.getProjectTree(projectId)
     st.activeResult = {
@@ -859,6 +879,10 @@ async function loadProject(projectId: string): Promise<void> {
 async function removeProject(projectId: string): Promise<void> {
   try {
     await api.deleteProject(projectId)
+    // Sin esto, el caché del último análisis del proyecto borrado queda
+    // ocupando localStorage para siempre — y peor, si algún día se reusara
+    // ese id, mostraría números de otro proyecto.
+    olvidarUltimoAnalisis(projectId)
     if (st.activeResult?.project_id === projectId) st.activeResult = null
     if (state.activeProjectId === projectId) setActiveProject(null)
     toast('Proyecto eliminado', 'warn')
@@ -896,8 +920,4 @@ function fmtSize(bytes: number): string {
     s /= 1024
   }
   return `${s.toFixed(1)} TB`
-}
-
-function esc(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }

@@ -12,6 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from shared import add_log, now, LIB_FLAGS, UPLOADS_DIR
 from services.complexity_client import check_complexity_engine_sync
 from services.plugin_registry import load_plugin_manifests_sync
+from services import complexity_client, history_store
 
 # ── Imports condicionales ────────────────────────────────────────────────────
 try:
@@ -137,6 +138,7 @@ HAS_CYTHON = LIB_FLAGS["HAS_CYTHON"]
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     os.makedirs(UPLOADS_DIR, exist_ok=True)
+    history_store.init_db()
     add_log("info", "Sythrall v4.12 — FastAPI")
     add_log(
         "info",
@@ -157,6 +159,10 @@ async def lifespan(app: FastAPI):
         f"   scipy={'✓' if HAS_SCIPY else '✗'}  spacy={'✓' if HAS_SPACY else '✗'}  cython={'✓' if HAS_CYTHON else '✗'}",
     )
     yield
+    # El cliente HTTP hacia el sidecar es compartido y con keep-alive (ver
+    # `complexity_client.py`); si no se cierra, httpx avisa por conexiones
+    # abiertas al terminar el proceso.
+    await complexity_client.close_clients()
     add_log("info", "Sythrall detenido.")
 
 
@@ -177,6 +183,8 @@ from routers.graph import router as graph_router
 from routers.metrics_live import router as metrics_router
 from routers.auth import router as auth_router
 from routers.execution import router as execution_router
+from routers.binary_analysis import router as binary_router
+from routers.history import router as history_router
 
 app.include_router(upload_router, prefix="/api/upload", tags=["Upload"])
 app.include_router(analysis_router, prefix="/analyze", tags=["Analysis"])
@@ -189,6 +197,8 @@ app.include_router(graph_router, prefix="/analyze", tags=["Graph"])
 app.include_router(metrics_router, prefix="/metrics", tags=["Live Metrics"])
 app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 app.include_router(execution_router, prefix="/execution", tags=["Execution"])
+app.include_router(binary_router, prefix="/binary", tags=["Binary Analysis"])
+app.include_router(history_router, prefix="/history", tags=["History"])
 
 
 # ── System endpoints ─────────────────────────────────────────────────────────

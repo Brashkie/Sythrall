@@ -1,4 +1,4 @@
-use complexity_core::graph::{
+use complexity_core::flujo::graph::{
     build_call_graph, build_centrality_graph, build_circular_graph, build_import_graph, CallEdgeInput,
     CallGraphFileInput, CallGraphFunctionInput, FileSummary, ImportRef,
 };
@@ -25,7 +25,7 @@ fn synthetic_project(n: usize) -> Vec<FileSummary> {
 }
 
 fn bench_build_import_graph(c: &mut Criterion) {
-    let mut group = c.benchmark_group("complexity_core::graph::build_import_graph");
+    let mut group = c.benchmark_group("complexity_core::flujo::graph::build_import_graph");
     for &n in &[10usize, 100, 1000] {
         group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, &n| {
             b.iter_batched(|| synthetic_project(n), |files| build_import_graph(black_box(files)), criterion::BatchSize::SmallInput);
@@ -35,7 +35,7 @@ fn bench_build_import_graph(c: &mut Criterion) {
 }
 
 fn bench_build_centrality_graph(c: &mut Criterion) {
-    let mut group = c.benchmark_group("complexity_core::graph::build_centrality_graph");
+    let mut group = c.benchmark_group("complexity_core::flujo::graph::build_centrality_graph");
     for &n in &[10usize, 100, 1000] {
         group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, &n| {
             b.iter_batched(
@@ -72,7 +72,7 @@ fn synthetic_call_graph_project(n: usize) -> Vec<CallGraphFileInput> {
 }
 
 fn bench_build_call_graph(c: &mut Criterion) {
-    let mut group = c.benchmark_group("complexity_core::graph::build_call_graph");
+    let mut group = c.benchmark_group("complexity_core::flujo::graph::build_call_graph");
     for &n in &[10usize, 100, 1000] {
         group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, &n| {
             b.iter_batched(
@@ -97,7 +97,7 @@ fn synthetic_project_with_cycle(n: usize) -> Vec<FileSummary> {
 }
 
 fn bench_build_circular_graph(c: &mut Criterion) {
-    let mut group = c.benchmark_group("complexity_core::graph::build_circular_graph");
+    let mut group = c.benchmark_group("complexity_core::flujo::graph::build_circular_graph");
     for &n in &[10usize, 100, 1000] {
         group.bench_with_input(BenchmarkId::new("acyclic", n), &n, |b, &n| {
             b.iter_batched(|| synthetic_project(n), |files| build_circular_graph(black_box(files)), criterion::BatchSize::SmallInput);

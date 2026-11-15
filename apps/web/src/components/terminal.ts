@@ -19,7 +19,7 @@ import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { getApiBase } from '../store/state'
 import type { LogEntry } from '../utils/helpers'
-import { LOG_ENTRIES, logRowHtml, subscribeToLogs, toast } from '../utils/helpers'
+import { esc, LOG_ENTRIES, logRowHtml, subscribeToLogs, toast } from '../utils/helpers'
 import { icon } from '../utils/icons'
 import { createResizer } from '../utils/resizer'
 import { terminalWelcomeBanner } from '../utils/terminalBanner'
@@ -418,9 +418,9 @@ function renderSessionsSidebar(): void {
   bar.innerHTML = sessions
     .map(
       (s) => `
-    <div class="term-session-row ${s.id === activeId ? 'active' : ''}" data-tab-id="${s.id}" title="${escapeHtml(s.name)}">
+    <div class="term-session-row ${s.id === activeId ? 'active' : ''}" data-tab-id="${s.id}" title="${esc(s.name)}">
       <span class="term-session-icon">${icon('terminal', 13)}</span>
-      <span class="term-session-name" data-name-id="${s.id}">${escapeHtml(s.name)}</span>
+      <span class="term-session-name" data-name-id="${s.id}">${esc(s.name)}</span>
       <span class="term-session-close" data-close-id="${s.id}" title="Cerrar">
         <svg class="icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
       </span>
@@ -452,12 +452,6 @@ function renderSessionsSidebar(): void {
       startRename(el)
     })
   }
-}
-
-function escapeHtml(s: string): string {
-  const div = document.createElement('div')
-  div.textContent = s
-  return div.innerHTML
 }
 
 function startRename(nameEl: HTMLElement): void {
@@ -509,7 +503,7 @@ async function showShellMenuOrCreate(anchor: HTMLElement): Promise<void> {
   menu.style.top = `${rect.bottom + 4}px`
   menu.style.left = `${Math.max(4, rect.right - 150)}px`
   menu.innerHTML = shells
-    .map((s, i) => `<button class="term-shell-menu-item" data-shell-idx="${i}">${escapeHtml(s.label)}</button>`)
+    .map((s, i) => `<button class="term-shell-menu-item" data-shell-idx="${i}">${esc(s.label)}</button>`)
     .join('')
   document.body.appendChild(menu)
 

@@ -5,6 +5,7 @@
 import { currentIssueSource } from '../panels/apis'
 import { state } from '../store/state'
 import type { CodeFile, HalsteadMetrics } from '../types'
+import { esc } from '../utils/helpers'
 import { languageBadge } from '../utils/icons'
 import { renderProjectContextBanner, wireProjectContextBanner } from '../utils/projectHeader'
 
@@ -16,14 +17,14 @@ const mr = (k: string, v: unknown, color?: string) =>
 // arriba — antes solo se usaba el Volumen, cocinado dentro de la fórmula de
 // Coleman-Oman; esto muestra los 5 componentes por separado.
 function _renderHalstead(h: HalsteadMetrics): string {
-  return `<details style="margin-top:8px">
+  return `<details class="mt-2">
     <summary style="font-size:.6rem;color:var(--muted);cursor:pointer;user-select:none">Halstead — desglose</summary>
     <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-family:var(--mono);font-size:.65rem">
-      <span style="color:var(--muted)">Vocabulario (η)</span><span>${h.vocabulary}</span>
-      <span style="color:var(--muted)">Longitud (N)</span><span>${h.length}</span>
-      <span style="color:var(--muted)">Volumen (V)</span><span>${h.volume.toFixed(1)}</span>
-      <span style="color:var(--muted)">Dificultad (D)</span><span>${h.difficulty.toFixed(1)}</span>
-      <span style="color:var(--muted)">Esfuerzo (E)</span><span>${h.effort.toFixed(0)}</span>
+      <span class="text-muted">Vocabulario (η)</span><span>${h.vocabulary}</span>
+      <span class="text-muted">Longitud (N)</span><span>${h.length}</span>
+      <span class="text-muted">Volumen (V)</span><span>${h.volume.toFixed(1)}</span>
+      <span class="text-muted">Dificultad (D)</span><span>${h.difficulty.toFixed(1)}</span>
+      <span class="text-muted">Esfuerzo (E)</span><span>${h.effort.toFixed(0)}</span>
     </div>
   </details>`
 }
@@ -39,7 +40,7 @@ export function renderFileAnalysis(f: CodeFile): void {
   const miColor = mi == null ? 'var(--muted)' : mi > 70 ? 'var(--ok)' : mi > 40 ? 'var(--warn)' : 'var(--err)'
 
   el.innerHTML = `
-    <div style="font-size:.58rem;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">ANÁLISIS: ${f.name}</div>
+    <div style="font-size:.58rem;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">ANÁLISIS: ${esc(f.name)}</div>
     ${
       m.pylint_score != null
         ? `<div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:10px;text-align:center">
@@ -79,7 +80,7 @@ export function renderFileAnalysis(f: CodeFile): void {
           (
             fn,
           ) => `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 8px;border-radius:5px;margin-bottom:4px;background:var(--s2)">
-        <span style="font-family:var(--mono);font-size:.68rem">${fn.name}<span style="color:var(--muted)">:${fn.line}</span></span>
+        <span style="font-family:var(--mono);font-size:.68rem">${fn.name}<span class="text-muted">:${fn.line}</span></span>
         <span class="rank-${fn.rank}" style="font-family:var(--mono);font-size:.72rem;font-weight:700">CC=${fn.complexity} (${fn.rank})</span>
       </div>`,
         )
@@ -98,7 +99,7 @@ export function renderFileAnalysis(f: CodeFile): void {
                 (i) => `<div class="issue-item ii-${i.severity}" style="margin-bottom:5px">
           <div class="ii-head"><span class="ii-sev sev-${i.severity}">${i.severity.toUpperCase()}</span><span class="ii-tool t-${i.tool}">${i.tool}</span></div>
           <div class="ii-msg">${i.message ?? ''}</div>
-          ${i.line ? `<div style="font-family:var(--mono);font-size:.6rem;color:var(--muted)">Línea ${i.line}</div>` : ''}
+          ${i.line ? `<div class="meta">Línea ${i.line}</div>` : ''}
         </div>`,
               )
               .join('')
@@ -157,10 +158,10 @@ export function renderMetrics(): void {
     ${analyzed
       .map(
         (f) => `
-    <div class="metric-section" style="cursor:pointer" data-select-file="${f.id}">
+    <div class="metric-section" style="cursor:pointer" data-select-file="${esc(f.id)}">
       <div class="ms-title" style="display:flex;align-items:center;gap:6px;text-transform:none">
-        <span>${languageBadge(f.ext)}</span>${f.name}
-        <span class="tag ${f.issues.some((i) => i.severity === 'error') ? 'tg-err' : f.issues.length ? 'tg-warn' : 'tg-ok'}" style="margin-left:auto">${f.issues.length || 'OK'}</span>
+        <span>${languageBadge(f.ext)}</span>${esc(f.name)}
+        <span class="tag ${f.issues.some((i) => i.severity === 'error') ? 'tg-err' : f.issues.length ? 'tg-warn' : 'tg-ok'} ml-auto">${f.issues.length || 'OK'}</span>
       </div>
       ${f.metrics.pylint_score != null ? mr('Pylint', f.metrics.pylint_score.toFixed(1) + '/10', f.metrics.pylint_score >= 8 ? 'var(--ok)' : f.metrics.pylint_score >= 5 ? 'var(--warn)' : 'var(--err)') : ''}
       ${f.metrics.mi != null ? mr('Maintainability', f.metrics.mi + '/100', f.metrics.mi > 70 ? 'var(--ok)' : f.metrics.mi > 40 ? 'var(--warn)' : 'var(--err)') : ''}

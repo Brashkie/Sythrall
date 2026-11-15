@@ -14,7 +14,19 @@ const CAT_COLORS: Record<string, string> = {
   ciencia: 'var(--info)',
   debug: '#ff69b4',
   rendimiento: '#ffd43b',
+  // Fase 32 — categorias que NO son de machine learning, y por eso tienen
+  // color propio en vez de reusar el de `dl`.
+  cuantico: '#6929c4',
+  pqc: '#00b8a9',
+  render: '#ff8c42',
 }
+
+/** Fase 32 — las categorias que este panel muestra pero que no son ML.
+ *
+ * Se separan en su propio grupo por lo mismo que `rendimiento` ya se
+ * separaba: un SDK cuantico listado bajo "Librerias ML/DL" estaria mal
+ * etiquetado, y el panel se llama asi por su origen, no por su alcance. */
+const CATEGORIAS_NO_ML = ['cuantico', 'pqc', 'render']
 
 // ── Definición de entornos de notebook instalables
 const NOTEBOOK_ENVS: NotebookEnv[] = [
@@ -64,26 +76,27 @@ export function renderMLResults(data: MLAnalysisResult, container: HTMLElement):
 
   // Separar libs normales de libs de rendimiento (Cython)
   const perfLibs = libraries.filter((l) => l.category === 'rendimiento')
-  const mlLibs = libraries.filter((l) => l.category !== 'rendimiento')
+  const otrasLibs = libraries.filter((l) => CATEGORIAS_NO_ML.includes(l.category))
+  const mlLibs = libraries.filter((l) => l.category !== 'rendimiento' && !CATEGORIAS_NO_ML.includes(l.category))
 
   container.innerHTML = `
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:16px">
-    <div class="stat-card" style="text-align:center">
+    <div class="stat-card">
       <div class="sc-lbl">Score ML</div>
       <div class="sc-val" style="color:${scoreColor}">${score}</div>
       <div class="sc-sub">${scoreLabel}</div>
     </div>
-    <div class="stat-card" style="text-align:center">
+    <div class="stat-card">
       <div class="sc-lbl">Librerías</div>
-      <div class="sc-val" style="color:var(--info)">${libraries.length}</div>
+      <div class="sc-val text-info">${libraries.length}</div>
       <div class="sc-sub">detectadas</div>
     </div>
-    <div class="stat-card" style="text-align:center">
+    <div class="stat-card">
       <div class="sc-lbl">Etapas</div>
-      <div class="sc-val" style="color:var(--purple)">${pipeline.length}</div>
+      <div class="sc-val text-purple">${pipeline.length}</div>
       <div class="sc-sub">pipeline</div>
     </div>
-    <div class="stat-card" style="text-align:center">
+    <div class="stat-card">
       <div class="sc-lbl">Issues ML</div>
       <div class="sc-val" style="color:${issues.length ? 'var(--err)' : 'var(--ok)'}">${issues.length}</div>
       <div class="sc-sub">encontrados</div>
@@ -103,10 +116,40 @@ export function renderMLResults(data: MLAnalysisResult, container: HTMLElement):
           <div style="width:9px;height:9px;border-radius:50%;background:${CAT_COLORS[lib.category] ?? 'var(--muted)'}"></div>
           <div>
             <div style="font-size:.78rem;font-weight:600">${lib.name}</div>
-            <div style="font-size:.63rem;color:var(--muted);font-family:var(--mono)">${lib.version ? 'v' + lib.version : lib.category}</div>
+            <div class="meta">${lib.version ? 'v' + lib.version : lib.category}</div>
           </div>
         </div>`,
         )
+        .join('')}
+    </div>
+  </div>`
+      : ''
+  }
+
+  ${
+    otrasLibs.length
+      ? `
+  <div class="metric-section">
+    <div class="ms-title">Otras librerías detectadas (no son de machine learning)</div>
+    <div style="display:flex;flex-wrap:wrap;gap:7px;padding:4px 0">
+      ${otrasLibs
+        .map((lib) => {
+          const color = CAT_COLORS[lib.category] ?? 'var(--muted)'
+          const etiqueta =
+            lib.category === 'cuantico'
+              ? 'SDK cuántico'
+              : lib.category === 'pqc'
+                ? 'criptografía post-cuántica'
+                : 'renderizado neuronal'
+          return `
+        <div style="background:var(--s2);border:1px solid ${color};border-radius:7px;padding:7px 11px;display:flex;align-items:center;gap:7px">
+          <div style="width:9px;height:9px;border-radius:50%;background:${color}"></div>
+          <div>
+            <div style="font-size:.78rem;font-weight:600;color:${color}">${lib.name}</div>
+            <div class="meta">${lib.version ? 'v' + lib.version : etiqueta}</div>
+          </div>
+        </div>`
+        })
         .join('')}
     </div>
   </div>`
@@ -126,7 +169,7 @@ export function renderMLResults(data: MLAnalysisResult, container: HTMLElement):
           <div style="width:9px;height:9px;border-radius:50%;background:#ffd43b"></div>
           <div>
             <div style="font-size:.78rem;font-weight:600;color:#ffd43b">${lib.name}</div>
-            <div style="font-size:.63rem;color:var(--muted);font-family:var(--mono)">${lib.version ? 'v' + lib.version : 'rendimiento'}</div>
+            <div class="meta">${lib.version ? 'v' + lib.version : 'rendimiento'}</div>
           </div>
         </div>`,
         )
@@ -146,9 +189,9 @@ export function renderMLResults(data: MLAnalysisResult, container: HTMLElement):
         (step, i) => `
       <div style="display:flex;align-items:center;gap:9px;padding:7px 0;${i < pipeline.length - 1 ? 'border-bottom:1px solid var(--b0)' : ''}">
         <div style="width:26px;height:26px;border-radius:50%;background:${step.id === 'cython_compile' ? 'rgba(255,212,59,.12)' : 'var(--s2)'};border:1px solid ${step.id === 'cython_compile' ? 'rgba(255,212,59,.4)' : 'var(--b1)'};display:grid;place-items:center;font-size:.68rem;font-weight:600;font-family:var(--mono);color:var(--muted);flex-shrink:0">${i + 1}</div>
-        <div style="flex:1">
+        <div class="flex-1">
           <div style="font-size:.78rem;font-weight:600;${step.id === 'cython_compile' ? 'color:#ffd43b' : ''}">${step.description}</div>
-          <div style="font-size:.63rem;color:var(--muted);font-family:var(--mono)">línea ~${step.line}${step.count > 1 ? ' · ' + step.count + 'x' : ''}</div>
+          <div class="meta">línea ~${step.line}${step.count > 1 ? ' · ' + step.count + 'x' : ''}</div>
         </div>
         <span style="font-size:.6rem;padding:1px 6px;border-radius:3px;background:var(--s2);color:var(--muted);font-family:var(--mono)">${i + 1}/${pipeline.length}</span>
       </div>`,
@@ -157,7 +200,7 @@ export function renderMLResults(data: MLAnalysisResult, container: HTMLElement):
     ${
       diagram
         ? `
-    <div style="margin-top:12px">
+    <div class="mt-3">
       <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" data-ml-diagram='${JSON.stringify(diagram).replace(/'/g, "\\'")}'>
         Ver diagrama del pipeline
       </button>
@@ -177,9 +220,9 @@ export function renderMLResults(data: MLAnalysisResult, container: HTMLElement):
       .map(
         (m) => `
       <div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid var(--b0)">
-        <div style="flex:1">
+        <div class="flex-1">
           <div style="font-size:.78rem;font-weight:600">${m.name}</div>
-          <div style="font-size:.63rem;color:var(--muted);font-family:var(--mono)">${m.type} · ${m.family} · ${m.framework}</div>
+          <div class="meta">${m.type} · ${m.family} · ${m.framework}</div>
         </div>
       </div>`,
       )
@@ -253,6 +296,16 @@ export function renderMLResults(data: MLAnalysisResult, container: HTMLElement):
   `
 }
 
+// Convierte un hex `#rrggbb` a `"r,g,b"` para armar `rgba(...)` — reemplaza
+// una cadena de ternarios hardcodeados que solo cubría 3 de los 4 colores
+// reales de NOTEBOOK_ENVS (el 4to "funcionaba" por coincidencia: su fallback
+// igualaba por casualidad el RGB de starboard). Un 4to entorno con un color
+// genuinamente distinto habría heredado el naranja de starboard en silencio.
+function hexToRgb(hex: string): string {
+  const n = Number.parseInt(hex.replace('#', ''), 16)
+  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`
+}
+
 // ── Sección de entornos de notebook (Thebe / Pyodide / Starboard)
 function _renderNotebookSection(): string {
   return `
@@ -271,7 +324,7 @@ function _renderNotebookSection(): string {
       </div>
       <div style="font-size:.68rem;color:var(--t2);margin-bottom:7px;line-height:1.5">${env.description}</div>
       <div style="display:flex;flex-wrap:wrap;gap:5px">
-        ${env.useCases.map((u) => `<span style="font-size:.6rem;padding:2px 7px;border-radius:3px;background:rgba(${env.color === '#ffd43b' ? '255,212,59' : env.color === '#e86e4d' ? '232,110,77' : env.color === '#3572a5' ? '53,114,165' : '245,166,35'},.1);color:${env.color};border:1px solid rgba(${env.color === '#ffd43b' ? '255,212,59' : env.color === '#e86e4d' ? '232,110,77' : env.color === '#3572a5' ? '53,114,165' : '245,166,35'},.25)">${u}</span>`).join('')}
+        ${env.useCases.map((u) => `<span style="font-size:.6rem;padding:2px 7px;border-radius:3px;background:rgba(${hexToRgb(env.color)},.1);color:${env.color};border:1px solid rgba(${hexToRgb(env.color)},.25)">${u}</span>`).join('')}
       </div>
     </div>`,
     ).join('')}

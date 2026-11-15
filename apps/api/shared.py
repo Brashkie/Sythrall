@@ -37,6 +37,14 @@ for _stream in (sys.stdout, sys.stderr):
 LOG_HISTORY: list[dict] = []
 API_HISTORY: dict[str, list] = {}
 
+# `add_log()` dispara `persist_log()` como tarea de fondo (fire-and-forget) —
+# sin guardar una referencia, el event loop solo retiene la tarea débilmente
+# y puede recolectarla en medio de la ejecución (pitfall documentado de
+# asyncio, no teórico: la propia doc de `asyncio.create_task` recomienda
+# exactamente este patrón). El callback la saca del set apenas termina, así
+# que este set nunca crece sin límite.
+_BACKGROUND_LOG_TASKS: set[asyncio.Task] = set()
+
 # ── Flags de libs (se rellenan en main.py al importar) ───────────────────────
 # Los routers los leen desde aquí para no volver a importar main.
 LIB_FLAGS: dict[str, bool] = {
@@ -78,7 +86,9 @@ def add_log(level: str, msg: str) -> None:
     from services.log_client import persist_log
 
     try:
-        asyncio.get_running_loop().create_task(persist_log(entry))
+        task = asyncio.get_running_loop().create_task(persist_log(entry))
+        _BACKGROUND_LOG_TASKS.add(task)
+        task.add_done_callback(_BACKGROUND_LOG_TASKS.discard)
     except RuntimeError:
         pass  # no hay event loop corriendo todavía (no debería pasar en la práctica)
 

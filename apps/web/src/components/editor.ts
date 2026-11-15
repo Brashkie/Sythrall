@@ -14,6 +14,7 @@ import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 import { initLiveMetrics, updateLiveMetricsContent, updateProblems } from '../panels/problems'
 import type { CodeFile } from '../types'
 import { debounce } from '../utils/helpers'
+import { THEME_EVENT } from '../utils/theme'
 import { initEditorIntelligence, notifyFileChanged } from './editor-intelligence'
 
 ;(self as any).MonacoEnvironment = {
@@ -47,7 +48,13 @@ const EXT_LANG: Record<string, string> = {
   '.txt': 'plaintext',
 }
 
-export function initEditor(): void {
+/** Monaco no lee variables CSS: sus temas se declaran con colores literales.
+ * Por eso el editor se quedaba en oscuro aunque el resto de la app pasara a
+ * tema claro — el contraste más chocante de toda la UI, porque el editor es
+ * la superficie más grande de la pantalla. Ahora hay dos temas y se cambian
+ * escuchando el evento que emite `utils/theme.ts`. Los hex de cada uno son
+ * los mismos tokens que `main.css` define para su tema. */
+function defineThemes(): void {
   monaco.editor.defineTheme('sythrall', {
     base: 'vs-dark',
     inherit: true,
@@ -68,6 +75,37 @@ export function initEditor(): void {
       'editor.selectionBackground': '#1a2040',
     },
   })
+  monaco.editor.defineTheme('sythrall-light', {
+    base: 'vs',
+    inherit: true,
+    rules: [
+      { token: 'comment', foreground: '6b7494', fontStyle: 'italic' },
+      { token: 'keyword', foreground: '8b4fd6' },
+      { token: 'string', foreground: '00875f' },
+      { token: 'number', foreground: 'b8790a' },
+      { token: 'type', foreground: '1a6fd4' },
+    ],
+    colors: {
+      'editor.background': '#ffffff',
+      'editor.foreground': '#1a2036',
+      'editorLineNumber.foreground': '#b3bad6',
+      'editor.lineHighlightBackground': '#eef1f8',
+      'editorCursor.foreground': '#1a6fd4',
+      'editorGutter.background': '#ffffff',
+      'editor.selectionBackground': '#d7e4f8',
+    },
+  })
+}
+
+function monacoThemeForApp(): string {
+  return document.documentElement.dataset['theme'] === 'light' ? 'sythrall-light' : 'sythrall'
+}
+
+export function initEditor(): void {
+  defineThemes()
+  // El editor puede crearse antes o después de un cambio de tema; suscribirse
+  // acá cubre los dos casos sin que `theme.ts` tenga que conocer a Monaco.
+  document.addEventListener(THEME_EVENT, () => monaco.editor.setTheme(monacoThemeForApp()))
 
   const container = document.getElementById('editor-container')
   if (!container) {
@@ -76,7 +114,7 @@ export function initEditor(): void {
   }
 
   editorInstance = monaco.editor.create(container, {
-    theme: 'sythrall',
+    theme: monacoThemeForApp(),
     language: 'python',
     value: '# Sythrall\n# Sube archivos o escribe aquí\n',
     fontSize: 13,

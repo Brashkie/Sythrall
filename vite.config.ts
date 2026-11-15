@@ -102,6 +102,33 @@ const BACKEND_PROXY: Record<string, ProxyOptions> = {
     changeOrigin: true,
     xfwd: true,
   },
+
+  // ── Execution Intelligence (Fase 23/26 — Algorithm Validation Engine):
+  // faltaba esta entrada desde que `execution.py` se creó — invisible hasta
+  // ahora porque nunca se había probado el panel Static sirviendo desde
+  // `vite dev` en un navegador real contra este router específico (las
+  // verificaciones previas de matmul-vs-numpy/agregación-vs-pandas fueron
+  // por curl directo al backend, no a través de este proxy). Sin esto,
+  // cualquier botón de "Validar empíricamente"/"Comparar con numpy/pandas"
+  // se cuelga con un 404 silencioso en dev.
+  '/execution': {
+    target: 'http://localhost:8420',
+    changeOrigin: true,
+  },
+
+  // ── Binary/Executable Analysis (Fase 19 — Machine Intelligence, segundo
+  // bullet): mismo patrón, agregado junto con el router.
+  '/binary': {
+    target: 'http://localhost:8420',
+    changeOrigin: true,
+  },
+
+  // ── History (Fase 28 — Enterprise Intelligence, primera porción):
+  // snapshots locales de Project Health, mismo patrón que el resto.
+  '/history': {
+    target: 'http://localhost:8420',
+    changeOrigin: true,
+  },
 }
 
 export default defineConfig({

@@ -6,10 +6,10 @@
 import type { StaticProjectResult } from '../api/client'
 import { api } from '../api/client'
 import { state } from '../store/state'
+import { ARCH_SMELL_LABEL, NAMING_SMELL_LABEL, SMELL_LABEL, smellColorSeverity } from '../utils/etiquetas'
 import { toast } from '../utils/helpers'
 import { icon } from '../utils/icons'
 import { renderProjectContextBanner, wireProjectContextBanner } from '../utils/projectHeader'
-import { ARCH_SMELL_LABEL, NAMING_SMELL_LABEL, SMELL_LABEL, smellColorSeverity } from './static'
 
 export function renderAPICards(): void {
   const el = document.getElementById('api-cards')
@@ -39,7 +39,7 @@ export function renderAPICards(): void {
       </div>
       <div class="ac-metrics">
         <div class="acm"><div class="acm-k">Estado</div><div class="acm-v" style="color:${c}">${a.status.toUpperCase()}</div></div>
-        <div class="acm"><div class="acm-k">Respuesta</div><div class="acm-v" style="color:var(--info)">${a.ms != null ? a.ms + 'ms' : '—'}</div></div>
+        <div class="acm"><div class="acm-k">Respuesta</div><div class="acm-v text-info">${a.ms != null ? a.ms + 'ms' : '—'}</div></div>
         <div class="acm"><div class="acm-k">HTTP</div><div class="acm-v">${a.code ?? '—'}</div></div>
       </div>
       ${a.error ? `<div style="margin-top:7px;font-family:var(--mono);font-size:.65rem;color:var(--err);background:rgba(255,51,102,.07);padding:6px;border-radius:5px">${icon('warning', 12)} ${a.error}</div>` : ''}
@@ -58,7 +58,7 @@ export function renderAPICards(): void {
   }
 }
 
-export async function recheckAPI(url: string): Promise<void> {
+async function recheckAPI(url: string): Promise<void> {
   try {
     const res = await api.checkUrls([url])
     const idx = state.results.apis.findIndex((a) => a.url === url)
@@ -175,7 +175,7 @@ export function renderIssuesList(list?: Issue[]): void {
         document.getElementById('btn-add-code')?.click()
       })
     } else {
-      el.innerHTML = `${banner}<div class="empty" style="color:var(--ok)">Sin problemas detectados</div>`
+      el.innerHTML = `${banner}<div class="empty text-ok">Sin problemas detectados</div>`
     }
     wireProjectContextBanner(el)
     return
@@ -194,14 +194,14 @@ export function renderIssuesList(list?: Issue[]): void {
       <div class="ii-head">
         <span class="ii-sev sev-${maxSev}">${maxSev.toUpperCase()}</span>
         <span class="ii-file">${first.file ?? ''}</span>
-        ${first.line ? `<span style="font-family:var(--mono);font-size:.6rem;color:var(--muted)">:${first.line}</span>` : ''}
+        ${first.line ? `<span class="meta">:${first.line}</span>` : ''}
       </div>
       ${group
         .map(
           (iss) => `
       <div class="ii-sub">
         <span class="ii-tool t-${iss.tool}">${iss.tool}</span>
-        ${iss.code ? `<span style="font-family:var(--mono);font-size:.6rem;color:var(--muted)">${iss.code}</span>` : ''}
+        ${iss.code ? `<span class="meta">${iss.code}</span>` : ''}
         <span class="ii-msg">${iss.message ?? ''}</span>
         ${iss.preview ? `<div class="ii-preview">→ ${iss.preview.substring(0, 70)}</div>` : ''}
       </div>`,

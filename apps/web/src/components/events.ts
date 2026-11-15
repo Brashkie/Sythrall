@@ -8,7 +8,7 @@ import { api } from '../api/client'
 import { filterAPIs, filterIssues, renderIssuesList, setIssueFilter } from '../panels/apis'
 import { state } from '../store/state'
 import type { TabId } from '../types'
-import { appendLog, debounce } from '../utils/helpers'
+import { appendLog, debounce, toast } from '../utils/helpers'
 import { icon } from '../utils/icons'
 import { toggleTheme } from '../utils/theme'
 import type { DiagView } from './app'
@@ -31,19 +31,37 @@ import {
 import { getEditorValue } from './editor'
 import { toggleSearch } from './explorer'
 import { fitDiagram, initDiagramZoom, resetZoom, zoomIn, zoomOut } from './mermaid'
+import { initUserMenu } from './userMenu'
 
 export function wireAllEvents(): void {
   document.getElementById('exp-search-btn')?.addEventListener('click', toggleSearch)
 
   // ── Tabs
+  // Son `<div role="tab" tabindex="0">`, no `<button>` — a diferencia de un
+  // botón nativo, un div no activa su `click` con Enter/Espacio solo, así
+  // que hace falta el keydown de abajo para que sean de verdad navegables
+  // por teclado (antes tenían tabindex pero ninguna forma de activarse sin mouse).
   document.querySelectorAll<HTMLElement>('.tab[data-tab]').forEach((el) => {
     el.addEventListener('click', () => switchTab(el.dataset['tab'] as TabId))
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        switchTab(el.dataset['tab'] as TabId)
+      }
+    })
   })
 
   // ── Indicador de proyecto activo (nav-rail) — no es un ".tab" (estilo
   // propio, no debe heredar el hover/active de las pestañas) así que se
   // wirea aparte en vez de sumarlo al selector de arriba.
-  document.getElementById('nav-rail-project')?.addEventListener('click', () => switchTab('upload'))
+  const navRailProject = document.getElementById('nav-rail-project')
+  navRailProject?.addEventListener('click', () => switchTab('upload'))
+  navRailProject?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      switchTab('upload')
+    }
+  })
 
   // ── Colapsar/expandir el nav-rail — colapsado significa DESAPARECE del
   // todo (solo el botón de abajo queda visible, ver .nav-rail.collapsed en
@@ -177,6 +195,9 @@ export function wireAllEvents(): void {
   // ── Tema
   document.getElementById('theme-toggle-btn')?.addEventListener('click', toggleTheme)
 
+  // ── Menú de usuario + modal de Configuración (footer del nav-rail)
+  initUserMenu()
+
   // ── Export
   document.getElementById('btn-export')?.addEventListener('click', exportZip)
 
@@ -222,8 +243,10 @@ export function wireAllEvents(): void {
       })
       const { renderAPICards } = await import('../panels/apis')
       renderAPICards()
+      toast(`↺ ${r.results.length} endpoints`, 'ok')
     } catch (e) {
       appendLog('err', 'Error: ' + (e as Error).message, 'fe')
+      toast('Error: ' + (e as Error).message, 'err')
     }
   })
 

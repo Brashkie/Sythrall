@@ -15,11 +15,11 @@ fn synthetic_source(n: usize) -> String {
 }
 
 fn bench_parse_c(c: &mut Criterion) {
-    let mut group = c.benchmark_group("complexity_core::cparse::parse_c");
+    let mut group = c.benchmark_group("complexity_core::lenguajes::cparse::parse_c");
     for &n in &[10usize, 100, 1000] {
         let source = synthetic_source(n);
         group.bench_with_input(BenchmarkId::from_parameter(n), &source, |b, src| {
-            b.iter(|| complexity_core::cparse::parse_c(black_box(src)));
+            b.iter(|| complexity_core::lenguajes::cparse::parse_c(black_box(src)));
         });
     }
     group.finish();

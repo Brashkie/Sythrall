@@ -57,6 +57,16 @@ export function renderFlow(): void {
   const el = document.getElementById('flow-diag')
   if (!el) return
   const steps = _computeSteps()
+  // Sin nada empezado, las 5 etapas dicen "Esperando..." cinco veces y ocupan
+  // media pantalla para no informar nada. Un diagrama de ejecución sin
+  // ejecución no es un diagrama vacío, es una vista que todavía no aplica.
+  if (Object.values(steps).every((s) => s === 'idle')) {
+    el.innerHTML = `<div class="flow-idle">
+      <div class="flow-idle-title">Sin actividad</div>
+      <div class="flow-idle-desc">Abrí un proyecto y ejecutá un análisis para ver acá cada etapa.</div>
+    </div>`
+    return
+  }
   el.innerHTML = STEPS.map((s, i) => {
     const st: StepState = steps[s.id] ?? 'idle'
     const isLast = i === STEPS.length - 1

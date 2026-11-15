@@ -69,7 +69,7 @@ function sortTree(node: FolderTreeNode): void {
  * (archivo suelto de "+ Código"/"+ Log") el archivo cuelga como hoja de
  * nivel raíz, sin carpeta contenedora.
  */
-export function buildTreeFromCodeFiles(files: CodeFile[]): FolderTreeNode {
+function buildTreeFromCodeFiles(files: CodeFile[]): FolderTreeNode {
   const root: FolderTreeNode = { name: '', path: '', type: 'directory', children: [] }
   const dirsByPath = new Map<string, FolderTreeNode>([['', root]])
 

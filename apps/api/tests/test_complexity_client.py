@@ -289,18 +289,36 @@ class TestPluginManifestsRustUnavailable:
 
 class TestPluginManifestsRustAgainstRealSidecar:
     """Contra el sidecar real — confirma que `GET /plugins/manifests` trae
-    los 7 plugins built-in con el shape que `plugin_registry.py` espera."""
+    los 12 plugins built-in (11 de lenguaje + 1 de formato) con el shape que
+    `plugin_registry.py` espera."""
 
-    def test_returns_seven_builtin_language_plugins(self):
+    def test_returns_thirteen_language_plugins_plus_the_format_one(self):
         result = asyncio.run(get_plugin_manifests_rust())
         assert result is not None
-        assert len(result) == 7
+        assert len(result) == 14
         ids = {m["id"] for m in result}
-        assert ids == {"python", "c", "cpp", "javascript", "typescript", "fortran", "assembly"}
+        assert ids == {
+            "python",
+            "c",
+            "cpp",
+            "javascript",
+            "typescript",
+            "fortran",
+            "ada",
+            "d",
+            "assembly",
+            "rust",
+            "notebook",
+            "css",
+            "html",
+            "manifest",
+        }
         for m in result:
             assert m["builtin"] is True
-            assert m["category"] == "language"
-            assert m["extensions"]
+            # Un plugin tiene que reclamar por extensión O por nombre exacto:
+            # los de lenguaje lo primero, el de formato lo segundo.
+            assert m["extensions"] or m["filenames"]
+            assert m["category"] in ("language", "format")
 
 
 class TestSymbolEngineRustUnavailable:
@@ -395,3 +413,51 @@ class TestLogClient:
         assert r.status_code == 200
         data = r.json()
         assert "logs" in data and "total" in data
+
+
+class TestClienteCompartido:
+    """El cliente HTTP hacia el sidecar es compartido y con keep-alive.
+
+    **Medido antes de cambiarlo**: crear un `AsyncClient` por llamada costaba
+    166 ms contra 1,3 ms reutilizándolo — 123x. El análisis en Rust de un
+    archivo tarda 4,5 ms, así que el 98% del tiempo de una request se iba en
+    abrir y cerrar la conexión. De punta a punta, `parse-project` con 200
+    archivos pasó de 34,2 s a 0,99 s, que es esencialmente el tiempo del
+    análisis (200 x 4,5 ms = 0,9 s).
+
+    Lo que estos tests cuidan no es la velocidad —eso se mide, no se
+    asserta— sino las dos invariantes que hacen que reutilizarlo sea seguro.
+    """
+
+    def test_el_mismo_loop_reusa_el_mismo_cliente(self):
+        async def dos_veces():
+            return complexity_client._get_client(), complexity_client._get_client()
+
+        a, b = asyncio.run(dos_veces())
+        assert a is b, "dos llamadas en el mismo loop deben compartir cliente"
+
+    def test_un_loop_nuevo_no_hereda_el_cliente_del_anterior(self):
+        # **Esta es la invariante que hace que no explote.** Un `AsyncClient`
+        # se ata al loop en el que nació; `asyncio.run` crea y destruye uno
+        # por llamada, igual que hace pytest entre tests y `uvicorn --reload`
+        # entre recargas. Con una global pelada, la segunda vuelta daría
+        # "Event loop is closed".
+        primero = asyncio.run(_devolver_cliente())
+        segundo = asyncio.run(_devolver_cliente())
+        assert primero is not segundo
+
+    def test_sigue_degradando_con_gracia_si_el_sidecar_no_esta(self, monkeypatch):
+        # El cliente compartido no debe cambiar el contrato: `None` ante
+        # cualquier falla de red, que es de lo que dependen todos los callers.
+        monkeypatch.setattr(complexity_client, "COMPLEXITY_ENGINE_URL", _UNREACHABLE_URL)
+        assert asyncio.run(complexity_client.post_to_sidecar("/parse/python", {"a": 1})) is None
+        assert asyncio.run(complexity_client.get_from_sidecar("/log")) is None
+
+    def test_close_clients_limpia_el_registro(self):
+        asyncio.run(_devolver_cliente())
+        asyncio.run(complexity_client.close_clients())
+        assert complexity_client._clients == {}
+
+
+async def _devolver_cliente():
+    return complexity_client._get_client()

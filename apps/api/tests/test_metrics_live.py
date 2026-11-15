@@ -246,6 +246,25 @@ class TestValidate:
         for key in required:
             assert key in data, f"Falta campo: {key}"
 
+    def test_validate_muy_largo_es_warning_no_error(self):
+        # Regresión: un `elif` con el orden de umbrales invertido hacía que
+        # 5000 < líneas <= 10000 cayera en la rama correcta por casualidad,
+        # pero >10000 líneas nunca llegaba a su propia rama (la de arriba ya
+        # la capturaba primero) — ver test siguiente.
+        content = "x = 1\n" * 6000
+        data = client.post("/metrics/validate", json={"filename": "test.py", "content": content}).json()
+        assert any("muy largo" in w for w in data["warnings"])
+        assert data["errors"] == []
+
+    def test_validate_extremadamente_largo_es_error_real(self):
+        # Antes del fix, este caso (>10000 líneas) quedaba atrapado por el
+        # `if lines > 5000` de arriba y nunca llegaba al `errors.append` de
+        # "extremadamente largo" — el `elif` era código muerto.
+        content = "x = 1\n" * 10001
+        data = client.post("/metrics/validate", json={"filename": "test.py", "content": content}).json()
+        assert any("extremadamente largo" in e for e in data["errors"])
+        assert data["valid"] is False
+
 
 # ─── /metrics/health ─────────────────────────────────────────────────────────
 

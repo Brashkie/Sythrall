@@ -36,6 +36,30 @@ tree-sitter-c = "0.23"
 tree-sitter-cpp = "0.23"
 jsonwebtoken = { version = "11.0.0", default-features = false, features = ["rust_crypto"] }
 tree-sitter-fortran = "0.6.0"
+tree-sitter-javascript = "0.23"
+tree-sitter-typescript = "0.23"
+tree-sitter-rust = "0.23"
+# Gramatica de Ada (Fase 34, Linea E — paso 1: Ada como lenguaje ANALIZADO).
+# Verificada contra el tree-sitter 0.25 de arriba antes de agregarla: ABI
+# compatible, parsea Ada real sin errores. Las etapas que dependen de GNAT
+# (codigo maquina, SPARK) no necesitan esta dependencia y siguen bloqueadas
+# por el toolchain, no por el diseno.
+tree-sitter-ada = "0.1"
+
+# Gramatica de D (Fase 34, Linea C — paso 1 del orden interno que fija el
+# ROADMAP: `@trusted`/`@system`). D entro a esa linea por GRADUAR la frontera
+# de confianza en tres niveles donde Rust tiene dos, y para medir eso hay que
+# leer los atributos de cada funcion, no compilar sondas como hace `dcost.rs`.
+tree-sitter-d = "0.8"
+object = "0.36"
+# Parser TOML para `Cargo.toml`/`pyproject.toml` en `manifest.rs`. El doc de
+# ese modulo dejo escrito que se agregaba "cuando haya un motivo, no antes";
+# el motivo es cerrar el grafo de dependencias multi-lenguaje. Es un parser de
+# FORMATO, de la misma familia que `serde_json`/`tree-sitter`/`object` que ya
+# son dependencias — la regla del proyecto es no reconstruir ANALISIS ajeno,
+# no evitar leer formatos estandar. `default-features = false` saca el
+# serializador y `toml_edit`, que no se usan: solo hace falta leer.
+toml = { version = "0.8", default-features = false, features = ["parse"] }
 
 [dev-dependencies]
 criterion = "0.5"

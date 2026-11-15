@@ -12,9 +12,20 @@
 //  claramente rotulado como "Archivos sueltos" para no reintroducir esa
 //  ambigüedad (ver _renderAdHocSummary). El health-check de APIs sigue
 //  exclusivamente en APIs.
+//
+//  Única excepción a "todo acá es del proyecto activo", agregada en la Fase
+//  28: `_renderOverviewSection` — el panorama entre TODOS los proyectos con
+//  snapshots guardados. No rompe la regla de arriba por 2 motivos
+//  deliberados: va siempre al final (nunca mezclado con las tarjetas del
+//  proyecto activo) y lleva su propio rótulo explícito ("Panorama entre
+//  proyectos"), que es exactamente el remedio que _renderAdHocSummary ya
+//  usó para el mismo riesgo.
 // ══════════════════════════════════════════
 
 import type {
+  HistoryComparison,
+  HistoryOverview,
+  HistorySnapshot,
   NamingSmell,
   SecurityFinding,
   StaticLanguagesResult,
@@ -22,19 +33,14 @@ import type {
   StructuralSmell,
 } from '../api/client'
 import { api } from '../api/client'
-import { state } from '../store/state'
+import { guardarUltimoAnalisis, leerUltimoAnalisis, setActiveProject, state } from '../store/state'
 import type { TabId } from '../types'
-import { renderHealthCards } from '../utils/health'
+import { renderBigODistribution } from '../utils/bigo'
+import { NAMING_SMELL_LABEL, SMELL_LABEL, securitySeverityColor, smellColorSeverity } from '../utils/etiquetas'
+import { healthTier, renderHealthCards } from '../utils/health'
 import { esc, toast } from '../utils/helpers'
 import type { IconName } from '../utils/icons'
 import { icon } from '../utils/icons'
-import {
-  NAMING_SMELL_LABEL,
-  renderBigODistribution,
-  SMELL_LABEL,
-  securitySeverityColor,
-  smellColorSeverity,
-} from './static'
 
 // Capacidad real del engine por lenguaje (tree-sitter instalado o no, etc.)
 // — cambia solo con el deploy, no por proyecto, así que se pide una vez y
@@ -44,8 +50,63 @@ let _engineLanguages: StaticLanguagesResult | null = null
 // Momento del último análisis exitoso EN ESTA SESIÓN del navegador — no hay
 // persistencia server-side de corridas pasadas todavía, así que esto se
 // resetea al recargar la página; se muestra como tal, no como un historial
-// real (ver Project Health Trend, todavía sin implementar por la misma razón).
+// real. La Fase 28 (Enterprise Intelligence) cierra esa brecha para
+// snapshots GUARDADOS explícitamente (ver `_renderHistorySection` más abajo)
+// — esto (`_lastAnalyzedAt`) sigue siendo solo "cuándo fue el último análisis
+// de ESTA pestaña", no reemplazado por el historial persistente.
 let _lastAnalyzedAt: number | null = null
+
+// Fase 28 (Enterprise Intelligence, primera porción) — snapshots guardados
+// por proyecto, cacheados igual que `_engineLanguages` de arriba (se pide
+// una vez, se invalida explícitamente al guardar/borrar uno nuevo, nunca se
+// vuelve a pedir "por las dudas" en cada render).
+const _historyCache: Record<string, HistorySnapshot[]> = {}
+const _historyLoading = new Set<string>()
+
+async function _ensureHistoryLoaded(projectId: string): Promise<void> {
+  if (_historyCache[projectId] || _historyLoading.has(projectId)) return
+  _historyLoading.add(projectId)
+  try {
+    _historyCache[projectId] = await api.listSnapshots(projectId)
+  } catch {
+    _historyCache[projectId] = []
+  } finally {
+    _historyLoading.delete(projectId)
+    renderDashboard()
+  }
+}
+
+// Fase 28, segundo bullet — panorama entre proyectos. Mismo patrón de cache
+// que `_historyCache` de arriba, pero UNA sola entrada (no por proyecto:
+// esto es global por definición). Se invalida en los mismos 2 puntos que el
+// historial por proyecto — guardar y borrar un snapshot — porque son
+// exactamente los eventos que cambian lo que este panorama muestra.
+let _overviewCache: HistoryOverview | null = null
+let _overviewLoading = false
+
+const _EMPTY_OVERVIEW: HistoryOverview = {
+  projects: [],
+  aggregate: {
+    projects: 0,
+    snapshots: 0,
+    avg: { security: 0, quality: 0, complexity: 0, architecture: 0, overall: 0 },
+    totals: {},
+  },
+  note: '',
+}
+
+async function _ensureOverviewLoaded(): Promise<void> {
+  if (_overviewCache || _overviewLoading) return
+  _overviewLoading = true
+  try {
+    _overviewCache = await api.historyOverview()
+  } catch {
+    _overviewCache = _EMPTY_OVERVIEW
+  } finally {
+    _overviewLoading = false
+    renderDashboard()
+  }
+}
 
 export async function loadProjectHealth(): Promise<void> {
   if (!state.activeProjectId) {
@@ -61,6 +122,7 @@ export async function loadProjectHealth(): Promise<void> {
   state.projectAnalysisRunning = true
   const { renderFlow } = await import('../components/flow')
   renderFlow()
+  ;(await import('../components/app')).updateGlobalPill()
   try {
     const [data] = await Promise.all([
       api.staticParseProjectById(state.activeProjectId),
@@ -70,13 +132,19 @@ export async function loadProjectHealth(): Promise<void> {
     // El grid de Proyectos (panels/upload.ts) lee este cache para mostrar
     // badges de health reales sin tener que disparar su propio análisis —
     // nunca un score inventado, solo lo que ya se calculó de verdad acá.
-    if (state.activeProjectId) state.projectHealthCache[state.activeProjectId] = data.health
+    if (state.activeProjectId) {
+      state.projectHealthCache[state.activeProjectId] = data.health
+      guardarUltimoAnalisis(state.activeProjectId, data)
+    }
     _lastAnalyzedAt = Date.now()
+    state.lastAnalysisAt = _lastAnalyzedAt
   } catch (e) {
     toast('Error: ' + (e as Error).message, 'err')
   }
   state.projectAnalysisRunning = false
   renderFlow()
+  const { updateGlobalPill } = await import('../components/app')
+  updateGlobalPill()
   renderDashboard()
 }
 
@@ -144,14 +212,16 @@ function _fmtRelativeTime(ms: number): string {
   return `${Math.floor(hours / 24)}d`
 }
 
-function _renderStatsRow(data: StaticProjectResult): string {
-  const s = data.summary
+/** Toma `summary` y la fecha por separado, no el `StaticProjectResult`
+ * entero: el Dashboard también dibuja esta fila con el último análisis
+ * GUARDADO, del que solo se persisten esos dos pedazos. */
+function _renderStatsRow(s: StaticProjectResult['summary'], at: number | null): string {
   const findingsTotal = (s.security_findings ?? 0) + (s.structural_smells ?? 0) + (s.naming_smells ?? 0)
   const cells: Array<[string, string]> = [
     [String(s.total_files ?? 0), 'Files'],
     [_fmtLoc(s.total_loc ?? 0), 'LOC'],
     [String(findingsTotal), 'Findings'],
-    [_lastAnalyzedAt ? _fmtRelativeTime(_lastAnalyzedAt) : '—', 'Last Analysis'],
+    [at ? _fmtRelativeTime(at) : '—', 'Last Analysis'],
   ]
   return `
   <div class="st-summary-row">
@@ -197,9 +267,9 @@ function _renderFindingsBySeverity(rows: FindingRow[]): string {
   <div class="chart-card">
     <div class="cc-head"><span>FINDINGS BY SEVERITY</span></div>
     <div class="dash-sev-rows">
-      <div class="dash-sev-row"><span style="color:var(--err)">High</span>${bar(high, 'var(--err)')}<span>${high}</span></div>
-      <div class="dash-sev-row"><span style="color:var(--warn)">Medium</span>${bar(medium, 'var(--warn)')}<span>${medium}</span></div>
-      <div class="dash-sev-row"><span style="color:var(--muted)">Low</span>${bar(low, 'var(--muted)')}<span>${low}</span></div>
+      <div class="dash-sev-row"><span class="text-err">High</span>${bar(high, 'var(--err)')}<span>${high}</span></div>
+      <div class="dash-sev-row"><span class="text-warn">Medium</span>${bar(medium, 'var(--warn)')}<span>${medium}</span></div>
+      <div class="dash-sev-row"><span class="text-muted">Low</span>${bar(low, 'var(--muted)')}<span>${low}</span></div>
     </div>
   </div>`
 }
@@ -211,8 +281,8 @@ function _renderComplexityByFunction(data: StaticProjectResult): string {
   }
   const maxCC = Math.max(...fns.map((f) => f.complexity), 1)
   return `
-  <div class="chart-card wide" style="background:var(--s1);border:1px solid var(--b0);border-radius:var(--radius);padding:14px">
-    <div class="cc-head"><span>COMPLEXITY BY FUNCTION</span><span style="color:var(--muted);font-size:.58rem;font-family:var(--mono)">cyclomatic · Big-O</span></div>
+  <div class="chart-card wide card card-pad">
+    <div class="cc-head"><span>COMPLEXITY BY FUNCTION</span><span class="meta">cyclomatic · Big-O</span></div>
     <div class="dash-cc-fn-list">
       ${fns
         .map((f) => {
@@ -237,6 +307,8 @@ const LANG_DISPLAY_NAME: Record<string, string> = {
   c: 'C',
   cpp: 'C++',
   fortran: 'Fortran',
+  ada: 'Ada',
+  d: 'D',
 }
 
 /** Distribución real de LOC por lenguaje del proyecto activo (arriba) +
@@ -275,16 +347,271 @@ function _renderLanguages(data: StaticProjectResult): string {
     : ''
 
   return `
-  <div class="chart-card wide" style="background:var(--s1);border:1px solid var(--b0);border-radius:var(--radius);padding:14px">
+  <div class="chart-card wide card card-pad">
     <div class="cc-head"><span>LANGUAGES</span></div>
     <div style="padding:4px 0">${distRows}</div>
     ${
       support
-        ? `<div class="cc-head" style="margin-top:10px"><span>LANGUAGE SUPPORT</span><span style="color:var(--muted);font-size:.58rem;font-family:var(--mono)">capacidad real del engine</span></div>
+        ? `<div class="cc-head mt-3"><span>LANGUAGE SUPPORT</span><span class="meta">capacidad real del engine</span></div>
     <div class="dash-lang-support-grid">${support}</div>`
         : ''
     }
   </div>`
+}
+
+const _HISTORY_HEALTH_KEYS: Array<keyof HistoryComparison['health_diff']> = [
+  'security',
+  'quality',
+  'complexity',
+  'architecture',
+]
+
+function _fmtSnapshotDate(iso: string): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString()
+}
+
+/** Signo explícito en el delta (`+3`/`-3`/`0`, nunca un `3` pelado que
+ * podría leerse como "el nuevo valor" en vez de "cuánto cambió") — mismo
+ * criterio de "nunca un número sin su porqué" que `renderHealthCards` ya
+ * aplica arriba. Verde/rojo depende de si el número que sube es "mejor"
+ * (un score) o "peor" (un conteo de hallazgos) — invertido a propósito
+ * entre los dos grupos. */
+function _fmtDelta(delta: number, higherIsBetter: boolean): string {
+  const sign = delta > 0 ? '+' : ''
+  const good = higherIsBetter ? delta >= 0 : delta <= 0
+  const color = delta === 0 ? 'var(--muted)' : good ? 'var(--ok)' : 'var(--err)'
+  return `<span style="color:${color}">${sign}${delta}</span>`
+}
+
+function _renderComparisonResult(cmp: HistoryComparison): string {
+  const healthRows = _HISTORY_HEALTH_KEYS
+    .map((key) => {
+      const d = cmp.health_diff[key]
+      return `<div class="st-stat health-stat">
+      <div class="st-stat-val" style="color:${healthTier(d.to)}">${d.to}</div>
+      <div class="st-stat-lbl">${key}</div>
+      <div class="health-why">${d.from} → ${d.to} (${_fmtDelta(d.delta, true)})</div>
+    </div>`
+    })
+    .join('')
+
+  const summaryEntries = Object.entries(cmp.summary_diff).filter(([, d]) => d.delta !== 0)
+  const summaryRows = summaryEntries.length
+    ? summaryEntries
+        .map(
+          ([key, d]) =>
+            `<div class="dash-lang-support-row">
+          <span>${esc(key)}</span>
+          <span style="margin-left:auto;font-family:var(--mono)">${d.from} → ${d.to} (${_fmtDelta(d.delta, !/security|smells|dead|unused/.test(key))})</span>
+        </div>`,
+        )
+        .join('')
+    : `<div class="empty">Sin cambios en el resumen entre estos 2 snapshots</div>`
+
+  return `
+    ${_renderCapabilitiesWarning(cmp.capabilities_diff)}
+    <div class="st-summary-row health-row mt-2">${healthRows}</div>
+    <div class="cc-head mt-3"><span>CAMBIOS EN EL RESUMEN</span></div>
+    <div class="dash-lang-support-grid">${summaryRows}</div>
+  `
+}
+
+/** Se muestra ARRIBA de los scores, no debajo, y solo cuando hay algo que
+ * advertir: si el motor cambió entre las dos mediciones, leer los deltas sin
+ * saberlo lleva a la conclusión equivocada, así que la advertencia tiene que
+ * llegar antes que el número. Cuando el motor era el mismo no se dice nada —
+ * un cartel verde permanente se vuelve invisible. */
+function _renderCapabilitiesWarning(caps: HistoryComparison['capabilities_diff']): string {
+  if (caps.comparable) return ''
+  const color = caps.known ? 'var(--warn)' : 'var(--muted)'
+  const detalle = _capsList('+', caps.added)
+  const retirados = _capsList('−', caps.removed)
+  return `<div class="st-mem-note" style="border-left:2px solid ${color};padding-left:8px;margin-top:8px">
+    ${esc(caps.note)}${detalle}${retirados}
+  </div>`
+}
+
+/** Acotada a 8: comparar contra un snapshot muy viejo puede listar decenas de
+ * capacidades, y una pared de texto tapa el aviso en vez de explicarlo. Se
+ * dice cuántas quedaron afuera en vez de recortar en silencio. */
+const _CAPS_VISIBLES = 8
+
+function _capsList(signo: string, items: string[]): string {
+  if (!items.length) return ''
+  const visibles = items.slice(0, _CAPS_VISIBLES).map(esc).join(', ')
+  const resto = items.length > _CAPS_VISIBLES ? ` … y ${items.length - _CAPS_VISIBLES} más` : ''
+  return `<div style="margin-top:4px;font-family:var(--mono);font-size:.62rem;opacity:.85">${signo} ${visibles}${resto}</div>`
+}
+
+/** Historial de análisis (Fase 28, Enterprise Intelligence) — snapshots de
+ * Project Health guardados EXPLÍCITAMENTE (nunca automático en cada
+ * análisis: guardar solo, no en cada re-análisis, evita que la lista se
+ * llene de entradas idénticas por clickear "Actualizar" repetidas veces).
+ * Comparación por dropdown (desde/hasta) en vez de selección múltiple por
+ * click — más simple de cablear, y 2 snapshots son la comparación que
+ * importa, no un rango arbitrario. */
+function _renderHistorySection(projectId: string): string {
+  const snapshots = _historyCache[projectId]
+
+  const body = !snapshots
+    ? `<div class="empty">Cargando historial…</div>`
+    : snapshots.length === 0
+      ? `<div class="empty">Sin snapshots guardados todavía — "Guardar snapshot actual" para empezar a comparar</div>`
+      : `
+      <div class="dash-lang-support-grid">
+        ${snapshots
+          .map(
+            (s) => `
+          <div class="dash-lang-support-row">
+            <span>${esc(_fmtSnapshotDate(s.created_at))}</span>
+            <span style="margin-left:auto;font-family:var(--mono);color:${healthTier(s.health.security.score)}">S:${s.health.security.score}</span>
+            <span style="font-family:var(--mono);color:${healthTier(s.health.quality.score)}">Q:${s.health.quality.score}</span>
+            <span style="font-family:var(--mono);color:${healthTier(s.health.complexity.score)}">C:${s.health.complexity.score}</span>
+            <span style="font-family:var(--mono);color:${healthTier(s.health.architecture.score)}">A:${s.health.architecture.score}</span>
+            <button class="btn btn-ghost btn-sm" data-history-delete="${s.id}" title="Borrar snapshot">✕</button>
+          </div>`,
+          )
+          .join('')}
+      </div>
+      ${
+        snapshots.length >= 2
+          ? `
+      <div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">
+        <select id="dash-history-from" class="diag-sel">
+          ${snapshots.map((s, i) => `<option value="${s.id}"${i === snapshots.length - 1 ? ' selected' : ''}>${esc(_fmtSnapshotDate(s.created_at))}</option>`).join('')}
+        </select>
+        <span style="color:var(--muted);font-size:.7rem">vs</span>
+        <select id="dash-history-to" class="diag-sel">
+          ${snapshots.map((s, i) => `<option value="${s.id}"${i === 0 ? ' selected' : ''}>${esc(_fmtSnapshotDate(s.created_at))}</option>`).join('')}
+        </select>
+        <button class="btn btn-ghost btn-sm" id="dash-history-compare-btn">Comparar</button>
+      </div>
+      <div id="dash-history-compare-result"></div>`
+          : ''
+      }`
+
+  return `
+  <div class="chart-card wide card card-pad">
+    <div class="cc-head"><span>HISTORIAL DE ANÁLISIS</span><span class="cc-head-sub meta">snapshots locales, sin auth todavía (Fase 28)</span></div>
+    <button class="btn btn-ghost btn-sm mb-2" id="dash-save-snapshot">Guardar snapshot actual</button>
+    ${body}
+  </div>`
+}
+
+/** Panorama entre proyectos (Fase 28, segundo bullet) — el último snapshot
+ * guardado de CADA proyecto, ordenado por peor salud primero. Es la única
+ * vista del Dashboard que NO es del proyecto activo (ver el comentario de
+ * cabecera de este archivo): va rotulada explícitamente como tal, y separada
+ * de todo lo de arriba, para no reintroducir la ambigüedad de fuentes que ese
+ * comentario documenta.
+ *
+ * Devuelve `''` (nada, ni siquiera un card vacío) cuando todavía no hay
+ * ningún snapshot guardado: hasta que el usuario guarde el primero desde la
+ * sección de arriba, este panorama no tiene nada que decir y un card vacío
+ * sería solo ruido. */
+function _renderOverviewSection(): string {
+  const ov = _overviewCache
+  if (!ov || ov.projects.length === 0) return ''
+
+  const agg = ov.aggregate
+  const avgCards = (['security', 'quality', 'complexity', 'architecture'] as const)
+    .map(
+      (cat) => `<div class="st-stat health-stat">
+      <div class="st-stat-val" style="color:${healthTier(agg.avg[cat])}">${agg.avg[cat]}</div>
+      <div class="st-stat-lbl">${cat}</div>
+      <div class="health-why">promedio entre ${agg.projects} proyecto${agg.projects === 1 ? '' : 's'}</div>
+    </div>`,
+    )
+    .join('')
+
+  const rows = ov.projects
+    .map((p) => {
+      const label = p.project_name ?? p.project_id.slice(0, 8) + '…'
+      const scores = (['security', 'quality', 'complexity', 'architecture'] as const)
+        .map(
+          (cat) =>
+            `<span style="color:${healthTier(p.health[cat].score)}" title="${cat}">${cat[0]?.toUpperCase()}:${p.health[cat].score}</span>`,
+        )
+        .join('')
+      // Δ del `overall` contra el snapshot anterior del MISMO proyecto — no
+      // contra el promedio de los demás: la pregunta que un panorama así
+      // responde es "¿este proyecto mejoró o empeoró?", no "¿está por encima
+      // de la media?".
+      const deltaOverall = p.delta
+        ? Math.round((p.delta.security + p.delta.quality + p.delta.complexity + p.delta.architecture) / 4)
+        : null
+      return `
+      <div class="dash-ov-row${p.exists ? ' clickable' : ''}"${p.exists ? ` data-overview-project="${esc(p.project_id)}" data-overview-name="${esc(label)}" title="Activar este proyecto y analizarlo"` : ' title="El proyecto ya no está en disco — su historial se conserva"'}>
+        <span class="dash-ov-name"${p.exists ? '' : ' style="color:var(--muted);text-decoration:line-through"'}>${esc(label)}</span>
+        <span class="dash-ov-scores">${scores}</span>
+        <span class="dash-ov-meta">${deltaOverall === null ? '1er snapshot' : `Δ ${_fmtDelta(deltaOverall, true)}`}</span>
+        <span class="dash-ov-meta">${p.snapshots} snap.</span>
+        <span class="dash-ov-overall" style="color:${healthTier(p.overall)}">${p.overall}</span>
+      </div>`
+    })
+    .join('')
+
+  return `
+  <div class="chart-card wide card card-pad">
+    <div class="cc-head"><span>PANORAMA ENTRE PROYECTOS</span><span class="cc-head-sub meta">último snapshot de cada uno · ${agg.snapshots} en total</span></div>
+    <div class="st-summary-row health-row">${avgCards}</div>
+    <div class="mt-3">${rows}</div>
+    <div style="color:var(--muted);font-size:.62rem;margin-top:8px">${esc(ov.note)}</div>
+  </div>`
+}
+
+function _wireOverviewInteractivity(root: HTMLElement): void {
+  root.querySelectorAll<HTMLElement>('[data-overview-project]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const id = el.dataset['overviewProject']
+      if (!id || id === state.activeProjectId) return
+      setActiveProject(id, el.dataset['overviewName'] ?? null)
+      // El proyecto cambió: los resultados en pantalla son del anterior.
+      // `loadProjectHealth` los reemplaza y vuelve a renderizar.
+      void loadProjectHealth()
+    })
+  })
+}
+
+function _wireHistoryInteractivity(root: HTMLElement, projectId: string): void {
+  root.querySelector<HTMLElement>('#dash-save-snapshot')?.addEventListener('click', async () => {
+    try {
+      await api.createSnapshot(projectId)
+      delete _historyCache[projectId]
+      _overviewCache = null // el panorama de abajo también cambió
+      toast('Snapshot guardado', 'ok')
+      void _ensureHistoryLoaded(projectId)
+    } catch (e) {
+      toast('Error: ' + (e as Error).message, 'err')
+    }
+  })
+  root.querySelectorAll<HTMLElement>('[data-history-delete]').forEach((el) => {
+    el.addEventListener('click', async () => {
+      const id = Number(el.dataset['historyDelete'])
+      try {
+        await api.deleteSnapshot(id)
+        delete _historyCache[projectId]
+        _overviewCache = null // idem: borrar un snapshot puede cambiar el panorama
+        void _ensureHistoryLoaded(projectId)
+      } catch (e) {
+        toast('Error: ' + (e as Error).message, 'err')
+      }
+    })
+  })
+  root.querySelector<HTMLElement>('#dash-history-compare-btn')?.addEventListener('click', async () => {
+    const fromEl = document.getElementById('dash-history-from') as HTMLSelectElement | null
+    const toEl = document.getElementById('dash-history-to') as HTMLSelectElement | null
+    const resultEl = document.getElementById('dash-history-compare-result')
+    if (!fromEl || !toEl || !resultEl) return
+    resultEl.innerHTML = `<div class="empty">Comparando…</div>`
+    try {
+      const cmp = await api.compareSnapshots(Number(fromEl.value), Number(toEl.value))
+      resultEl.innerHTML = _renderComparisonResult(cmp)
+    } catch (e) {
+      resultEl.innerHTML = `<div class="empty">Error: ${esc((e as Error).message)}</div>`
+    }
+  })
 }
 
 function _wireInteractivity(root: HTMLElement): void {
@@ -332,12 +659,12 @@ function _renderAdHocSummary(): string {
     <div class="dash-project-head">
       <span class="dash-project-lbl">Archivos sueltos</span>
       <span class="dash-project-name">sin proyecto activo</span>
-      <button class="btn btn-ghost btn-sm" id="dash-goto-projects-adhoc" style="margin-left:auto">Proyectos</button>
+      <button class="btn btn-ghost btn-sm ml-auto" id="dash-goto-projects-adhoc">Proyectos</button>
     </div>
     <div class="st-summary-row">
       ${cells.map(([val, lbl]) => `<div class="stat-card"><div class="sc-lbl">${lbl}</div><div class="sc-val">${esc(val)}</div></div>`).join('')}
     </div>
-    <div class="chart-card wide" style="background:var(--s1);border:1px solid var(--b0);border-radius:var(--radius);padding:14px">
+    <div class="chart-card wide card card-pad">
       <div class="cc-head"><span>ARCHIVOS</span></div>
       <div style="display:flex;flex-direction:column;margin-top:6px">
         ${files
@@ -484,6 +811,7 @@ function _renderEmptyHero(): string {
     </div>
     ${_serviceStatusLine()}
   </div>
+  ${_renderOverviewSection()}
   ${_renderExploreGrid()}`
 }
 
@@ -510,15 +838,59 @@ export function renderDashboard(): void {
       }
       root.innerHTML = _renderEmptyHero()
       _wireEmptyHero()
+      // El panorama entre proyectos (Fase 28) también se muestra acá, no
+      // solo con un proyecto ya analizado: sin proyecto activo es
+      // justamente cuando "¿cómo están todos mis proyectos?" es la pregunta
+      // más útil, y clickear una fila activa ese proyecto directamente.
+      void _ensureOverviewLoaded()
+      _wireOverviewInteractivity(root)
     } else {
+      // Hay proyecto abierto pero nadie lo analizó EN ESTA SESIÓN. Dos casos
+      // muy distintos, y antes los dos mostraban lo mismo:
+      //
+      //   - Ya se analizó antes: hay `health`/`summary` guardados, así que se
+      //     muestran con su fecha. Abrir un proyecto y ver sus números al
+      //     instante es la diferencia entre un centro de control y una
+      //     pantalla que pide permiso para mostrar algo.
+      //   - Nunca se analizó: ahí sí no hay nada que mostrar, y la única
+      //     acción posible queda como botón principal.
+      //
+      // Lo guardado va SIEMPRE con su fecha y un aviso de que puede haber
+      // quedado viejo: nada acá sabe si los archivos cambiaron desde la
+      // medición, así que presentarlo como el estado actual sería mentir.
+      const guardado = state.activeProjectId ? leerUltimoAnalisis(state.activeProjectId) : null
       root.innerHTML = `
-      <div class="empty">
-Proyecto activo, todavía sin analizar
-        <button class="btn btn-ghost btn-sm" id="dash-health-run">Analizar salud del proyecto</button>
+      <div class="dash-project-head">
+        <span class="dash-project-lbl">Project</span>
+        <span class="dash-project-name">${esc(_projectLabel())}</span>
+        <button class="btn btn-ghost btn-sm ml-auto" id="dash-goto-projects-unrun">Cambiar</button>
+      </div>
+      ${
+        guardado
+          ? `
+      <div class="dash-stale">
+        <span class="dash-stale-txt">Último análisis guardado, ${esc(_fmtRelativeTime(guardado.at))} — puede no reflejar cambios posteriores en los archivos.</span>
+        <button class="btn btn-run btn-sm" id="dash-health-run">Analizar de nuevo</button>
+      </div>
+      ${_renderStatsRow(guardado.summary, guardado.at)}
+      <div class="chart-card wide card card-pad">
+        <div class="cc-head">PROJECT HEALTH <span class="cc-head-sub meta">security · quality · complexity · architecture</span></div>
+        ${renderHealthCards(guardado.health)}
       </div>`
+          : `
+      <div class="dash-unrun">
+        <div class="dash-unrun-title">Todavía sin analizar</div>
+        <p class="dash-unrun-desc">El análisis calcula seguridad, calidad, complejidad y arquitectura del proyecto. Hasta que corra, no hay métricas que mostrar acá.</p>
+        <button class="btn btn-run" id="dash-health-run">Analizar proyecto</button>
+      </div>`
+      }
+      ${_renderOverviewSection()}`
       document.getElementById('dash-health-run')?.addEventListener('click', () => {
         loadProjectHealth()
       })
+      document.getElementById('dash-goto-projects-unrun')?.addEventListener('click', () => _goto('upload'))
+      void _ensureOverviewLoaded()
+      _wireOverviewInteractivity(root)
     }
     return
   }
@@ -529,28 +901,41 @@ Proyecto activo, todavía sin analizar
     <div class="dash-project-head">
       <span class="dash-project-lbl">Project</span>
       <span class="dash-project-name">${esc(_projectLabel())}</span>
-      <button class="btn btn-ghost btn-sm" id="dash-health-refresh" style="margin-left:auto">↻ Actualizar</button>
+      <button class="btn btn-ghost btn-sm ml-auto" id="dash-health-refresh">↻ Actualizar</button>
       <button class="btn btn-ghost btn-sm" id="dash-goto-projects">Cambiar</button>
     </div>
 
-    ${_renderStatsRow(data)}
+    ${_renderStatsRow(data.summary, _lastAnalyzedAt)}
 
-    <div class="chart-card wide" style="background:var(--s1);border:1px solid var(--b0);border-radius:var(--radius);padding:14px">
-      <div class="cc-head">PROJECT HEALTH <span class="cc-head-sub" style="color:var(--muted);font-size:.58rem;font-family:var(--mono)">security · quality · complexity · architecture</span></div>
+    <div class="chart-card wide card card-pad">
+      <div class="cc-head">PROJECT HEALTH <span class="cc-head-sub meta">security · quality · complexity · architecture</span></div>
       ${renderHealthCards(data.health, { clickable: true })}
     </div>
 
-    <div class="charts-row">
-      ${_renderRecentFindings(findings)}
-      ${_renderFindingsBySeverity(findings)}
+    ${state.activeProjectId ? _renderHistorySection(state.activeProjectId) : ''}
+
+    <!-- Grid asimetrico: lo que se mira primero ocupa 2/3, el contexto 1/3.
+         Antes eran seis bloques a ancho completo, uno debajo del otro. -->
+    <div class="dash-grid">
+      <div class="span-2">${_renderRecentFindings(findings)}</div>
+      <div>${_renderFindingsBySeverity(findings)}</div>
     </div>
 
-    ${renderBigODistribution(data.summary.big_o_distribution ?? {}, 'Complexity Distribution (Big-O)')}
-
-    ${_renderComplexityByFunction(data)}
+    <div class="dash-grid">
+      <div class="span-2">${_renderComplexityByFunction(data)}</div>
+      <div>${renderBigODistribution(data.summary.big_o_distribution ?? {}, 'Big-O')}</div>
+    </div>
 
     ${_renderLanguages(data)}
+
+    ${_renderOverviewSection()}
   `
+  if (state.activeProjectId) {
+    void _ensureHistoryLoaded(state.activeProjectId)
+    _wireHistoryInteractivity(root, state.activeProjectId)
+  }
+  void _ensureOverviewLoaded()
+  _wireOverviewInteractivity(root)
   document.getElementById('dash-health-refresh')?.addEventListener('click', () => loadProjectHealth())
   document.getElementById('dash-goto-projects')?.addEventListener('click', () => _goto('upload'))
   _wireInteractivity(root)

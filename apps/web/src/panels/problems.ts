@@ -17,9 +17,9 @@
 import type { NamingSmell, SecurityFinding, StructuralSmell } from '../api/client'
 import { getApiBase } from '../store/state'
 import type { CodeFile, Issue } from '../types'
+import { NAMING_SMELL_LABEL, SMELL_LABEL, securitySeverityColor } from '../utils/etiquetas'
 import { esc } from '../utils/helpers'
 import { icon, languageBadge } from '../utils/icons'
-import { NAMING_SMELL_LABEL, SMELL_LABEL, securitySeverityColor } from './static'
 
 // ─── Estado ───────────────────────────────────────────────────────────────────
 
@@ -89,7 +89,7 @@ function _ensureMetricsBar(): void {
     <span class="lm-item lm-parse" id="lm-parse" title="Parse time">—ms</span>
     <span class="lm-sep">·</span>
     <span class="lm-item lm-lang" id="lm-lang">—</span>
-    <span class="lm-safe" id="lm-safe" style="display:none" title="Safe mode: AST failed, using regex fallback">${icon('warning', 11)} safe</span>
+    <span class="lm-safe hidden" id="lm-safe" title="Safe mode: AST failed, using regex fallback">${icon('warning', 11)} safe</span>
   `
 
   // Insertar ANTES del panel de editor
@@ -208,7 +208,7 @@ export function updateProblems(file: CodeFile, liveMetrics?: LiveMetricsData): v
         ${warnings.length ? `<span class="pb-count pb-warn">△ ${warnings.length} warn</span>` : ''}
         ${infos.length ? `<span class="pb-count pb-info">ℹ ${infos.length} info</span>` : ''}
         ${!file.issues.length && file.analyzed ? `<span class="pb-count pb-ok">✓ Sin problemas</span>` : ''}
-        ${!file.analyzed ? `<span class="pb-count" style="color:var(--muted)">Sin analizar todavía</span>` : ''}
+        ${!file.analyzed ? `<span class="pb-count text-muted">Sin analizar todavía</span>` : ''}
       </div>
     </div>
   `

@@ -76,7 +76,11 @@ htmlcov/
 # excluye en silencio de cualquier `git add -A` — exactamente el bug real
 # que rompió el build de CI (validate_sum_squares_driver.c/
 # validate_mergesort_driver.c nunca llegaron al repo).
-!services/complexity/src/kernels/*.c
+# La ruta cambio el 2026-10-16 con la reestructuracion del motor: los
+# kernels pasaron a vivir con el grupo que los usa. Actualizar esta linea
+# es parte del movimiento, no un detalle — con la ruta vieja los dos
+# drivers volvian a quedar fuera del repo y CI se rompia igual que antes.
+!services/complexity/src/bench/kernels/*.c
 
 # mypy / pyright
 .mypy_cache/
@@ -93,6 +97,11 @@ uploads/
 # (raíz del repo en dev, apps/api/ cuando pytest levanta el sidecar) — nunca
 # se sube al repo, mismo criterio que uploads/ arriba.
 logs/
+
+# ── History DB (Fase 28, services/history_store.py) ──────
+# SQLite local con snapshots de Project Health por usuario — mismo criterio
+# que uploads/: datos locales del usuario, nunca se suben al repo.
+data/
 
 # ── Docker ───────────────────────────────────────────────
 # Los volúmenes locales de Docker no se suben

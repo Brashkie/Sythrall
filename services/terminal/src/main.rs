@@ -15,7 +15,7 @@ use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::mpsc;
 
-use complexity_core::logstore::{self, LogEntry};
+use complexity_core::servicio::logstore::{self, LogEntry};
 use pty_session::PtySession;
 
 fn log_dir() -> std::path::PathBuf {

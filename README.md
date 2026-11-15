@@ -23,7 +23,17 @@
 
 </div>
 
-> **⚠ Notice — this repository is no longer updated.** As of **v4.12.0**, Sythrall is transitioning to a private SaaS product. This GitHub repository stops receiving public updates from this version forward; development continues, but privately. What's published here remains available under its existing license, as a snapshot of the project up to this point.
+> **Sythrall is open source again, under GPL-3.0.** *(2026-11-14)*
+>
+> **The full history, because it changed twice and that is worth stating rather than leaving to be inferred:**
+>
+> 1. **Open source from the start.** Sythrall was born public in this repository, under **GPL-3.0**, and stayed that way through **v4.12.0**.
+> 2. **Private as of v4.12.0** *(2026-08-31)*. That release was titled *"last public update before moving to private SaaS"*: the repository stopped receiving updates and development continued privately as a SaaS product. What had already been published stayed available under its licence, as a snapshot of the project up to that point.
+> 3. **And now it is open source again, under GPL-3.0 once more.** This is the author changing his mind, not a consequence of anything: the work done in private comes back to the public repository and development continues in the open.
+>
+> **Why GPL-3.0 and not a permissive licence.** The GPL is *copyleft*: anyone may use, study, modify and redistribute Sythrall, and whoever distributes a modified version **must publish their source under the same licence**. A permissive licence (MIT, Apache) would let a closed version be built on top without giving anything back. GPL-3.0 keeps whatever is built from here on open.
+>
+> **And a correction about the licence file.** Until this change, this repository's `LICENSE` was a **summary with a link to the full text**, not the text. The GPL itself asks that the program be accompanied by *a copy* of the licence, and a link is not a copy. `LICENSE` now carries **the complete text of the GNU GPL version 3** (674 lines), which is what the licence requires in order to distribute.
 
 ---
 
@@ -552,3 +562,22 @@ See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 ## License
 
 GPL-3.0 — see [LICENSE](LICENSE)
+
+### Engine layout (`services/complexity/src`)
+
+81 modules in 8 groups, in pipeline order. They were flat until 2026-10-16;
+the grouping comes from what each module does, not from its name.
+
+| Group | Modules | What it is |
+|---|---|---|
+| `lenguajes/` | 11 | The front end: one module per language. Where text becomes a tree. |
+| `ast/` | 6 | Shared tree infrastructure, knowing nothing about any language. |
+| `costo/` | 13 | Big-O, cyclomatic complexity, space, amortized cost, cost to compile. |
+| `flujo/` | 8 | CFG, SSA, dominators, call graph, and what walking them yields. |
+| `hallazgos/` | 16 | The rules that claim something about the user's code. |
+| `teoria/` | 8 | Applied formal CS: automata, logic, combinatorics, decidability. |
+| `servicio/` | 8 | The sidecar's service layer: scanning, manifests, shape, health. |
+| `bench/` | 11 | Kernels Sythrall compiles and runs to validate itself against reality. |
+
+Only `lib.rs` (entry point and re-exports) and `main.rs` (the HTTP server)
+remain at the root.

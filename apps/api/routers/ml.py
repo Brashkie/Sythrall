@@ -256,15 +256,20 @@ def _analyze_ml_sync(filename: str, content: str, detection: dict | None) -> dic
 async def analyze_ml(req: AnalyzeMLRequest):
     """Equivalente a POST /analyze/ml del Flask original.
 
-    Gate local de sintaxis antes de gastar una llamada de red al sidecar
-    (mismo criterio que `diagram.py`): si `req.content` no es Python válido,
-    `detection` se queda en `None` y `_analyze_ml_sync` termina
-    re-validando y reportando el mismo `SyntaxError` de siempre por su
-    cuenta — un solo lugar arma ese shape, no dos copias del mismo dict.
-    """
+    Gate local de sintaxis antes de gastar una llamada de red al sidecar: si
+    `req.content` no es Python válido, `detection` se queda en `None` y
+    `_analyze_ml_sync` termina re-validando y reportando el mismo
+    `SyntaxError` de siempre por su cuenta — un solo lugar arma ese shape,
+    no dos copias del mismo dict. El propio `ast.parse` del gate corre en
+    threadpool (a diferencia de una versión previa de este handler, que lo
+    llamaba directo en el event loop): es la misma clase de bug ya
+    encontrada y arreglada en otros handlers de este proyecto (I/O o CPU
+    síncrono bloqueando el único hilo del event loop, congelando la app
+    entera mientras corre) — un archivo grande puede tardar lo suficiente
+    en parsearse como para importar."""
     detection = None
     try:
-        ast.parse(req.content)
+        await run_in_threadpool(ast.parse, req.content)
         detection = await detect_ml_rust(req.content)
     except SyntaxError:
         pass

@@ -50,6 +50,7 @@ class TestProjectHealth:
         "    cursor.execute(query)\n"
     )
     LONG_FN_FILE = "def big(a, b, c, d, e, f):\n" + "    x = 1\n" * 55 + "    return x\n"
+    UNMATCHED_ALLOC_FILE = "void f() {\n    int *p = malloc(sizeof(int));\n}\n"
 
     def _parse_project(self, files: list[dict]) -> dict:
         r = client.post("/static/parse-project", json={"files": files})
@@ -84,10 +85,50 @@ class TestProjectHealth:
         assert data["health"]["security"]["score"] == 85  # 100 - 15
         assert data["summary"]["security_findings"] == 1
 
+    def test_modernization_candidates_aggregated_with_file_and_rollup(self):
+        """Fase 25 — rollup por archivo (2026-09-01): agrega los candidatos de
+        `modernization.rs` que ya viajan por archivo, sin inventar ningún
+        veredicto nuevo (ni Rust ni Python calculan Keep/Refactor/Replace/
+        Rewrite/Migrate — ver el comentario en el router)."""
+        data = self._parse_project(
+            [
+                {"filename": "leak.c", "content": self.UNMATCHED_ALLOC_FILE},
+                {"filename": "clean.py", "content": "def add(a, b):\n    return a + b\n"},
+            ]
+        )
+        candidates = data["modernization_candidates"]
+        assert len(candidates) == 1
+        assert candidates[0]["file"] == "leak.c"
+        assert candidates[0]["pattern"] == "unmatched_allocation"
+        by_file = data["modernization_by_file"]
+        assert len(by_file) == 1
+        assert by_file[0] == {
+            "file": "leak.c",
+            "total": 1,
+            "high": 1,
+            "medium": 0,
+            "patterns": {"unmatched_allocation": 1},
+        }
+        assert data["summary"]["modernization_candidates"] == 1
+
+    def test_modernization_by_file_vacio_sin_candidatos(self):
+        data = self._parse_project([{"filename": "clean.py", "content": "def add(a, b):\n    return a + b\n"}])
+        assert data["modernization_candidates"] == []
+        assert data["modernization_by_file"] == []
+        assert data["summary"]["modernization_candidates"] == 0
+
     def test_structural_smells_aggregated_with_file(self):
         data = self._parse_project([{"filename": "long.py", "content": self.LONG_FN_FILE}])
         smells = data["structural_smells"]
-        assert {s["kind"] for s in smells} == {"long_function", "excessive_parameters"}
+        # `overwritten_store` (Fase 32, SSA): el fixture es `x = 1` repetido 55
+        # veces y despues `return x`, asi que 54 de esas escrituras se pisan
+        # antes de leerse. El hallazgo es correcto sobre este archivo; se
+        # reporta una sola vez, en la primera linea, como hace `dead_store`.
+        assert {s["kind"] for s in smells} == {
+            "long_function",
+            "excessive_parameters",
+            "overwritten_store",
+        }
         assert all(s["file"] == "long.py" for s in smells)
         assert data["health"]["quality"]["smells"] == len(smells)
         assert data["health"]["quality"]["score"] < 100

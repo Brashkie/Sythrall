@@ -23,7 +23,17 @@
 
 </div>
 
-> **⚠ Aviso — este repositorio deja de recibir actualizaciones.** A partir de la **v4.12.0**, Sythrall pasa a ser un producto SaaS privado. Este repositorio de GitHub deja de recibir actualizaciones públicas desde esta versión en adelante; el desarrollo continúa, pero de forma privada. Lo publicado acá sigue disponible bajo su licencia vigente, como una foto del proyecto hasta este punto.
+> **Sythrall vuelve a ser open source, bajo GPL-3.0.** *(2026-11-14)*
+>
+> **La historia completa, porque cambió dos veces y conviene que esté dicha y no inferida:**
+>
+> 1. **Open source desde el principio.** Sythrall nació público en este repositorio, bajo **GPL-3.0**, y así se mantuvo hasta la **v4.12.0**.
+> 2. **Privado desde la v4.12.0** *(2026-08-31)*. Ese release llevó el título *"last public update before moving to private SaaS"*: el repositorio dejó de recibir actualizaciones y el desarrollo siguió en privado como producto SaaS. Lo que había quedado publicado siguió disponible bajo su licencia, como una foto del proyecto hasta ese punto.
+> 3. **Y ahora vuelve a ser open source, otra vez bajo GPL-3.0.** Es un cambio de idea del autor, no una consecuencia de nada: el trabajo hecho en privado vuelve al repositorio público y el desarrollo continúa a la vista.
+>
+> **Por qué GPL-3.0 y no una licencia permisiva.** La GPL es *copyleft*: cualquiera puede usar, estudiar, modificar y redistribuir Sythrall, y quien distribuya una versión modificada **tiene que publicar su código fuente bajo la misma licencia**. Una licencia permisiva (MIT, Apache) dejaría que una versión cerrada se construya encima sin devolver nada. GPL-3.0 mantiene abierto lo que se construya a partir de acá.
+>
+> **Y una corrección sobre el archivo de licencia.** Hasta este cambio, el `LICENSE` de este repositorio era un **resumen con un enlace al texto completo**, no el texto. La propia GPL pide que el programa venga acompañado de *una copia* de la licencia, y un enlace no es una copia. Ahora `LICENSE` trae **el texto íntegro de la GNU GPL versión 3** (674 líneas), que es lo que la licencia exige para distribuir.
 
 ---
 
@@ -572,3 +582,22 @@ Ver [CHANGELOG.md](CHANGELOG.md) para el historial completo de versiones.
 ## Licencia
 
 GPL-3.0 — ver [LICENSE](LICENSE)
+
+### Estructura del motor (`services/complexity/src`)
+
+81 módulos en 8 grupos, en el orden del pipeline. Estuvieron planos hasta el
+2026-10-16; el agrupamiento sale de lo que cada módulo hace, no de su nombre.
+
+| Grupo | Módulos | Qué es |
+|---|---|---|
+| `lenguajes/` | 11 | El front-end: un módulo por lenguaje. Donde el texto se vuelve árbol. |
+| `ast/` | 6 | Infraestructura de árbol compartida, sin saber de ningún lenguaje. |
+| `costo/` | 13 | Big-O, ciclomática, espacio, costo amortizado y costo de compilar. |
+| `flujo/` | 8 | CFG, SSA, dominadores, grafo de llamadas, y lo que se deduce de recorrerlos. |
+| `hallazgos/` | 16 | Las reglas que afirman algo sobre el código del usuario. |
+| `teoria/` | 8 | CS formal aplicada: autómatas, lógica, combinatoria, decidibilidad. |
+| `servicio/` | 8 | La capa de servicio del sidecar: escaneo, manifests, shape, salud. |
+| `bench/` | 11 | Kernels que Sythrall compila y corre para validarse contra la realidad. |
+
+En la raíz quedan sólo `lib.rs` (punto de entrada y re-exportaciones) y
+`main.rs` (el servidor HTTP).

@@ -53,7 +53,7 @@ class TestExtensionMapWithManifests:
 
 class TestExtensionMapFallback:
     """Con `_MANIFESTS` vacío (sidecar no respondió al arranque), todo debe
-    seguir funcionando vía `_FALLBACK_MANIFESTS` — mismas 6 extensiones que
+    seguir funcionando vía `_FALLBACK_MANIFESTS` — mismas extensiones que
     el sidecar reportaría, congeladas acá como piso mínimo."""
 
     def test_falls_back_when_manifests_empty(self, monkeypatch):
@@ -62,11 +62,43 @@ class TestExtensionMapFallback:
         assert ext_map[".py"] == "python"
         assert ext_map[".f90"] == "fortran"
         assert ext_map[".cpp"] == "cpp"
+        assert ext_map[".ipynb"] == "notebook"
+        assert ext_map[".css"] == "css"
+        assert ext_map[".html"] == "html"
+        # Fase 34, Línea B: `.rs` dejó de ser solo un archivo que el
+        # explorador sabía pintar y pasó a resolver a un analizador.
+        assert ext_map[".rs"] == "rust"
 
-    def test_fallback_covers_all_seven_languages(self, monkeypatch):
+    def test_fallback_covers_all_thirteen_languages_plus_the_format_plugin(self, monkeypatch):
         monkeypatch.setattr(plugin_registry, "_MANIFESTS", [])
         ids = {m["id"] for m in plugin_registry.manifests()}
-        assert ids == {"python", "c", "cpp", "javascript", "typescript", "fortran", "assembly"}
+        assert ids == {
+            "python",
+            "c",
+            "cpp",
+            "javascript",
+            "typescript",
+            "fortran",
+            "ada",
+            "d",
+            "assembly",
+            "rust",
+            "notebook",
+            "css",
+            "html",
+            "manifest",
+        }
+
+    def test_filename_map_resuelve_manifests_por_nombre_exacto(self, monkeypatch):
+        """`package.json` es un `.json` como cualquier otro: si se resolviera
+        por extensión, todo JSON del proyecto iría al analizador de
+        manifests. El despacho por nombre es lo que lo evita."""
+        monkeypatch.setattr(plugin_registry, "_MANIFESTS", [])
+        names = plugin_registry.filename_map()
+        assert names["package.json"] == "manifest"
+        assert names["requirements.txt"] == "manifest"
+        # Y ningún plugin de lenguaje reclama `.json` por extensión.
+        assert ".json" not in plugin_registry.extension_map()
 
     def test_fallback_manifest_by_id(self, monkeypatch):
         monkeypatch.setattr(plugin_registry, "_MANIFESTS", [])

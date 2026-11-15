@@ -71,7 +71,7 @@ async def analyze_code(req: AnalyzeCodeRequest):
     tmp_path = None
     try:
         if ext == ".py" and "ast" in tools:
-            result["issues"].extend(_run_ast(content, filename))
+            result["issues"].extend(await run_in_threadpool(_run_ast, content, filename))
             result["tools_used"].append("ast")
 
         if ext == ".py":
@@ -145,7 +145,7 @@ async def analyze_project(req: AnalyzeProjectRequest) -> dict[str, Any]:
     """
     if req.project_id:
         project_dir = UPLOADS_DIR / req.project_id
-        files = read_project_files(project_dir) if project_dir.exists() else []
+        files = await run_in_threadpool(read_project_files, project_dir) if project_dir.exists() else []
     else:
         files = req.files
 
@@ -167,9 +167,9 @@ async def analyze_project(req: AnalyzeProjectRequest) -> dict[str, Any]:
     }
 
     if "ast" in req.tools:
-        for f in py_files:
-            fname = f.get("filename", "unknown")
-            results[fname]["issues"].extend(_run_ast(f.get("content", ""), fname))
+        ast_by_filename = await run_in_threadpool(_run_ast_batch, py_files)
+        for fname, issues in ast_by_filename.items():
+            results[fname]["issues"].extend(issues)
             results[fname]["tools_used"].append("ast")
 
     if "complexity" in req.tools:
@@ -213,6 +213,19 @@ async def analyze_project(req: AnalyzeProjectRequest) -> dict[str, Any]:
 
 
 # ── Funciones internas de análisis (idénticas al Flask original) ──────────────
+
+
+def _run_ast_batch(py_files: list[dict]) -> dict[str, list[dict]]:
+    """Versión batch de `_run_ast` para `analyze_project` — un solo
+    `run_in_threadpool` para todos los archivos en vez de correr `ast.parse`/
+    `ast.walk` directo en el event loop por cada uno (mismo bug ya arreglado
+    para `flake8`/`pylint_batch` en este mismo endpoint: con miles de
+    archivos, ese trabajo síncrono bloquea la app entera)."""
+    out: dict[str, list[dict]] = {}
+    for f in py_files:
+        fname = f.get("filename", "unknown")
+        out[fname] = _run_ast(f.get("content", ""), fname)
+    return out
 
 
 def _run_ast(content: str, filename: str) -> list[dict]:

@@ -25,15 +25,41 @@
 /* ─── Summary cards ───────────────────────── */
 .st-summary-row {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-  gap: 8px;
+  /* `auto-fit` y no `auto-fill`: con `auto-fill` el navegador reserva
+     columnas vacias y las 6 metricas de Static entraban 5 + 1, dejando la
+     ultima huerfana en su propia fila. `auto-fit` colapsa lo sobrante y
+     estira lo que hay, asi que las 6 quedan en una fila y usan el ancho.
+     104px porque las 6 metricas de Static tienen que entrar en UNA fila: con
+     el ancho util del panel (~715px) y 10px de hueco, 6 columnas dan ~111px
+     cada una, asi que un minimo de 112 dejaba la sexta afuera por 1px. */
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 10px;
 }
+/* Mismo criterio que `.stat-card`: etiqueta arriba, numero abajo, todo a la
+   izquierda. Se reordena por CSS y no tocando el DOM, porque el HTML lo
+   genera `static.ts` en 30 lugares.
+
+   **`order` explicito y no `column-reverse`.** La primera version usaba
+   `column-reverse`, que anda con DOS hijos (valor, etiqueta) pero da vuelta
+   los TRES de la tarjeta de Project Health (valor, etiqueta, porque) y los
+   dejaba como porque -> etiqueta -> valor: el dato mas importante ultimo.
+   Solo se vio al mirar un proyecto ya analizado, que es un estado que no
+   habia capturado. */
 .st-stat {
   background: var(--s1); border: 1px solid var(--b0);
-  border-radius: 8px; padding: 10px 8px; text-align: center;
+  border-radius: 8px; padding: 11px 13px; text-align: left;
+  display: flex; flex-direction: column; gap: 5px;
 }
-.st-stat-val  { font-family: var(--mono); font-size: 1.3rem; font-weight: 600; color: var(--info); line-height: 1; }
-.st-stat-lbl  { font-size: .77rem; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: .04em; }
+.st-stat-lbl { order: 1; }
+.st-stat-val { order: 2; }
+.health-why  { order: 3; }
+.st-stat-val  { font-size: 1.32rem; font-weight: 600; color: var(--txt); line-height: 1.1; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+/* `overflow-wrap` + `hyphens`: una etiqueta mas larga que su tarjeta se
+   CORTABA (se veia "ESPECIALIZACION" por "ESPECIALIZACIONES"), lo que es
+   peor que partirla — un numero con una etiqueta truncada se puede leer
+   como otra metrica. Vale para cualquier etiqueta larga, no solo la que lo
+   destapo. */
+.st-stat-lbl  { font-size: .69rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; overflow-wrap: anywhere; hyphens: auto; }
 
 /* ─── Project Health cards ────────────────── */
 .health-row     { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); margin-bottom: 4px; }
@@ -170,8 +196,8 @@
 
 /* ─── Funciones ───────────────────────────── */
 .st-fn-item, .st-class-item, .st-wasm-item {
-  background: var(--s2); border: 1px solid var(--b0);
-  border-radius: 7px; padding: 8px 10px; margin-bottom: 6px;
+  background: var(--s1); border: 1px solid var(--b0);
+  border-radius: 7px; padding: 10px 12px; margin-bottom: 7px;
 }
 .st-fn-item:last-child, .st-class-item:last-child, .st-wasm-item:last-child {
   margin-bottom: 0;
@@ -245,12 +271,20 @@
   font-size: .87rem; color: var(--muted); padding: 2px 0;
 }
 .st-wasm-reasons li::before { content: '• '; color: var(--warn); }
+/* **El cuerpo de un hallazgo es PROSA, no codigo.** Estaba en monoespaciada
+   verde sobre fondo verde: es el bloque que mas pantalla ocupa del producto
+   y era el menos legible de todos. Va en la sans del resto, con color de
+   texto normal y una interlinea de lectura; el color pasa a la barra
+   izquierda, que es donde puede significar algo sin gritar. */
 .st-wasm-rec {
-  font-size: .85rem; color: var(--ok);
-  background: rgba(0,245,160,.05); border-left: 2px solid var(--ok);
-  padding: 5px 8px; border-radius: 0 4px 4px 0; margin-top: 5px;
-  white-space: pre-line; font-family: var(--mono);
+  font-size: .87rem; line-height: 1.55; color: var(--txt);
+  background: var(--ghost-tint); border-left: 2px solid var(--b2);
+  padding: 8px 11px; border-radius: 0 4px 4px 0; margin-top: 7px;
+  white-space: pre-line;
 }
+/* El codigo INLINE dentro de la prosa sigue en monoespaciada: es la
+   distincion que justifica tener dos fuentes. */
+.st-wasm-rec code { font-family: var(--mono); font-size: .93em; }
 
 /* ─── Memory layout (Fase 23) ─────────────── */
 .st-mem-note {
@@ -275,6 +309,15 @@
 .st-mem-var-type  { color: var(--muted); }
 .st-mem-var-scope { color: var(--info); font-size: .77rem; }
 
+/* ─── Analizador de ejecutables (Fase 19) ─── */
+/* Un binario real puede tener cientos de secciones/imports/símbolos —
+ * scrollea en vez de estirar el panel entero (mismo criterio que
+ * `.log-stream`/`.terminal-panel` para listas potencialmente largas). */
+.st-exe-scroll {
+  max-height: 220px; overflow-y: auto; border: 1px solid var(--b1);
+  border-radius: var(--radius); padding: 4px;
+}
+
 /* ─── Responsive ──────────────────────────── */
 @media (max-width: 680px) {
   .st-summary-row { grid-template-columns: repeat(3, 1fr); gap: 6px; }
@@ -293,3 +336,192 @@
   .bigo-table     { font-size: .83rem; }
   .bigo-table th, .bigo-table td { padding: 4px 5px; }
 }
+
+/* ─── Costo de compilación medido (Fase 34, Línea A) ─── */
+.st-tpl-cost { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.st-tpl-cost th {
+  text-align: left; padding: 6px 10px; font-weight: 600;
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); border-bottom: 1px solid var(--b0);
+}
+.st-tpl-cost td { padding: 6px 10px; border-bottom: 1px solid var(--b0); }
+.st-tpl-cost tr:last-child td { border-bottom: none; }
+
+/* ── Código máquina (Fase 19) ────────────────────────────────────────────
+   La vista es una COMPARACIÓN entre niveles de optimización, no un volcado
+   de ensamblador: por eso la tabla manda y el texto está detrás de un
+   botón. Un conteo de instrucciones suelto no dice nada; "19 contra 13,
+   con 9 movimientos de datos contra 3" dice qué hizo el optimizador. */
+.mc-explica {
+  color: var(--txt-2);
+  font-size: .82rem;
+  line-height: 1.55;
+  margin-bottom: 10px;
+  max-width: 68ch;
+}
+
+.mc-controles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.mc-grupo { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.mc-label {
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: 2px;
+}
+
+/* Los chips son filtros, no acciones: alternan sin disparar nada. Compilar
+   de verdad tarda, así que elegir tiene que ser gratis. */
+.mc-chip {
+  padding: 3px 9px;
+  border: 1px solid var(--b1);
+  border-radius: 999px;
+  background: var(--s1);
+  color: var(--txt-2);
+  font: .74rem var(--mono);
+  cursor: pointer;
+  transition: border-color .12s, background .12s, color .12s;
+}
+.mc-chip:hover { border-color: var(--b2); color: var(--txt); }
+.mc-chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.mc-table-wrap { overflow-x: auto; }
+.mc-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.mc-table th {
+  text-align: right;
+  padding: 6px 9px;
+  border-bottom: 1px solid var(--b1);
+  color: var(--muted);
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.mc-table th:first-child, .mc-table td:first-child { text-align: left; }
+.mc-table th:last-child, .mc-table td:last-child,
+.mc-table th:nth-last-child(2), .mc-table td:nth-last-child(2) { text-align: left; }
+.mc-table td {
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--b0);
+  color: var(--txt-2);
+  text-align: right;
+  white-space: nowrap;
+}
+.mc-table td.num { font-family: var(--mono); color: var(--txt); }
+/* La columna de SIMD lleva hasta cinco badges: si no envuelve, se sale del
+   panel y hay que scrollear para leer justo lo que más interesa. */
+.mc-table td:nth-last-child(2) { white-space: normal; min-width: 180px; line-height: 1.9; }
+.mc-table tbody tr:hover { background: var(--s2); }
+.mc-err { color: var(--err); white-space: pre-wrap; text-align: left; font-family: var(--mono); font-size: .74rem; }
+
+.mc-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  margin-right: 3px;
+  border: 1px solid var(--b1);
+  border-radius: 999px;
+  background: var(--s2);
+  color: var(--txt-2);
+  font: .68rem var(--mono);
+  white-space: nowrap;
+}
+/* **Vectorizado y escalar se ven distinto a propósito**: son la misma familia
+   de instrucciones y significan cosas opuestas. */
+.mc-badge-ok { background: var(--fill-ok); border-color: var(--ok); color: var(--ok); }
+.mc-badge-off { background: transparent; color: var(--muted); }
+.mc-badge-warn { background: var(--fill-warn); border-color: var(--warn); color: var(--warn); }
+
+.mc-wait { display: flex; align-items: center; gap: 8px; color: var(--txt-2); font-size: .84rem; padding: 10px 0; }
+
+.mc-asm { margin-top: 12px; border: 1px solid var(--b1); border-radius: 8px; overflow: hidden; }
+.mc-asm-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--s2);
+  border-bottom: 1px solid var(--b1);
+  font-size: .74rem;
+  color: var(--txt-2);
+}
+.mc-asm-body {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 420px;
+  overflow: auto;
+  background: var(--s0);
+  color: var(--txt-2);
+  font: .74rem/1.5 var(--mono);
+  white-space: pre;
+}
+
+@media (max-width: 760px) {
+  .mc-controles { gap: 10px; }
+  .mc-explica { max-width: none; }
+}
+
+/* Frente de Pareto: las filas no dominadas tienen que saltar a la vista —
+   son la respuesta, el resto es el descarte que la justifica. */
+.mc-pareto-frente td { background: color-mix(in srgb, var(--ok) 8%, transparent); }
+.mc-pareto-err td { color: var(--err); font-family: var(--mono); font-size: .74rem; text-align: left; }
+.mc-pareto-resumen {
+  margin-top: 10px;
+  padding: 8px 11px;
+  border-left: 2px solid var(--ok);
+  background: var(--s1);
+  color: var(--txt-2);
+  font-size: .82rem;
+}
+.mc-pareto-resumen code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--s2);
+  color: var(--txt);
+  font: .76rem var(--mono);
+}
+/* **El aviso va junto al número, no en un tooltip.** "Menos instrucciones" se
+   lee como "más rápido" si nadie dice lo contrario, y no es lo que mide. */
+.mc-aviso {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: .76rem;
+  line-height: 1.55;
+  max-width: 78ch;
+}
+
+/* Atomic CSS: la lista de los átomos más reusados es la que explica de dónde
+   sale la compresión — sin ella el ratio es un número sin causa. */
+.ca-atomos { display: flex; flex-direction: column; gap: 3px; margin-top: 10px; }
+.ca-atomo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: var(--s1);
+  border: 1px solid var(--b0);
+  font-size: .78rem;
+  flex-wrap: wrap;
+}
+.ca-atomo .mono { color: var(--accent); }
+.ca-hoja { margin-top: 12px; }
+.ca-hoja summary {
+  cursor: pointer;
+  color: var(--txt-2);
+  font-size: .8rem;
+  padding: 6px 0;
+}
+.ca-hoja summary:hover { color: var(--txt); }
+.ca-hoja .mc-asm-body { margin-top: 6px; border: 1px solid var(--b1); border-radius: 8px; }

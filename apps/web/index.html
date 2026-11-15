@@ -23,63 +23,92 @@
         <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9.5" y1="4" x2="9.5" y2="20"/></svg>
       </button>
     </div>
-    <div class="nav-rail-project" id="nav-rail-project" data-tab="upload" title="Cambiar proyecto activo">
+    <div class="nav-rail-project" id="nav-rail-project" data-tab="upload" title="Cambiar proyecto activo" role="button" tabindex="0">
       <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
       <span class="nav-rail-project-name" id="nav-rail-project-name">Sin proyecto</span>
     </div>
 
     <div class="nav-section-label">Overview</div>
-    <div class="tab active" id="t-dashboard" data-tab="dashboard" title="Dashboard">
+    <div class="tab active" id="t-dashboard" data-tab="dashboard" title="Dashboard" role="tab" tabindex="0">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
       <span class="tab-label">Dashboard</span>
     </div>
 
     <div class="nav-section-label">Proyecto</div>
-    <div class="tab" id="t-upload" data-tab="upload" title="Proyectos">
+    <div class="tab" id="t-upload" data-tab="upload" title="Proyectos" role="tab" tabindex="0">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
       <span class="tab-label">Proyectos</span>
     </div>
-    <div class="tab" id="t-diff" data-tab="diff" title="Diff">
+    <div class="tab" id="t-diff" data-tab="diff" title="Diff" role="tab" tabindex="0">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg>
       <span class="tab-label">Diff</span>
     </div>
 
     <div class="nav-section-label">Análisis</div>
-    <div class="tab" id="t-static" data-tab="static" title="Static Analysis">
+    <div class="tab" id="t-static" data-tab="static" title="Static Analysis" role="tab" tabindex="0">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="M14.5 14.5 20 20"/></svg>
       <span class="tab-label">Static</span>
     </div>
-    <div class="tab" id="t-metrics" data-tab="metrics" title="Métricas">
+    <div class="tab" id="t-metrics" data-tab="metrics" title="Métricas" role="tab" tabindex="0">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
       <span class="tab-label">Métricas</span>
     </div>
-    <div class="tab" id="t-diagram" data-tab="diagram" title="Arquitectura">
+    <div class="tab" id="t-diagram" data-tab="diagram" title="Arquitectura" role="tab" tabindex="0">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M8.6 7.6 15.4 10.4M8.6 16.4 15.4 13.6"/></svg>
       <span class="tab-label">Arquitectura</span>
       <span class="tbadge tbadge-ok" id="tb-diagram" style="display:none">✓</span>
     </div>
-    <div class="tab" id="t-issues" data-tab="issues" title="Hallazgos">
+    <div class="tab" id="t-issues" data-tab="issues" title="Hallazgos" role="tab" tabindex="0">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v5M12 16h.01"/></svg>
       <span class="tab-label">Hallazgos</span>
       <span class="tbadge tbadge-err" id="tb-issues" style="display:none">0</span>
     </div>
 
     <div class="nav-section-label">Servicios</div>
-    <div class="tab" id="t-apis" data-tab="apis" title="APIs">
+    <div class="tab" id="t-apis" data-tab="apis" title="APIs" role="tab" tabindex="0">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 14 0M2 9.5a15 15 0 0 1 20 0"/></svg>
       <span class="tab-label">APIs</span>
       <span class="tbadge tbadge-err" id="tb-apis" style="display:none">!</span>
     </div>
-    <div class="tab" id="t-logs" data-tab="logs" title="Logs">
+    <div class="tab" id="t-logs" data-tab="logs" title="Logs" role="tab" tabindex="0">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
       <span class="tab-label">Logs</span>
     </div>
 
     <div class="nav-section-label">Inteligencia</div>
-    <div class="tab" id="t-ml" data-tab="ml" title="ML/DL">
+    <div class="tab" id="t-ml" data-tab="ml" title="ML/DL" role="tab" tabindex="0">
       <svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2 2M17.1 17.1l2 2M4.9 19.1l2-2M17.1 6.9l2-2"/></svg>
       <span class="tab-label">ML/DL</span>
       <span class="tbadge tbadge-ok" id="tb-ml" style="display:none">✓</span>
+    </div>
+
+    <div class="nav-rail-spacer"></div>
+
+    <!-- ══ USUARIO (footer del nav-rail) ══ -->
+    <div class="nav-user" id="nav-user">
+      <button class="nav-user-btn" id="nav-user-btn" title="Cuenta" aria-haspopup="menu" aria-expanded="false" aria-controls="nav-user-menu">
+        <span class="nav-user-avatar" id="nav-user-avatar">B</span>
+        <span class="nav-user-info">
+          <span class="nav-user-name" id="nav-user-name">Brashkie</span>
+          <span class="nav-user-plan">Local</span>
+        </span>
+        <svg class="icon nav-user-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="nav-user-menu" id="nav-user-menu" role="menu" aria-label="Cuenta">
+        <button class="nav-user-menu-item" role="menuitem" data-user-action="settings">
+          <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82A1.65 1.65 0 0 0 3 13.09H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V2a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V8a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>Configuración</span>
+        </button>
+        <button class="nav-user-menu-item" role="menuitem" data-user-action="help">
+          <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 3.5"/><path d="M12 17h.01"/></svg>
+          <span>Obtener ayuda</span>
+        </button>
+        <div class="nav-user-menu-sep"></div>
+        <button class="nav-user-menu-item nav-user-menu-item-danger" role="menuitem" data-user-action="logout">
+          <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+          <span>Cerrar sesión</span>
+        </button>
+      </div>
     </div>
   </nav>
 
@@ -98,20 +127,20 @@
     <button class="btn btn-ghost btn-sm" id="theme-toggle-btn" title="Cambiar tema">
       <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>
     </button>
-    <div class="url-bar">
-      <span class="url-bar-method">GET</span>
-      <input id="url-main" placeholder="https://api.com/health" />
-      <button class="btn btn-ghost btn-sm" id="btn-add-url">
-        <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-      </button>
-    </div>
-    <div class="quick-urls">
-      <button class="btn btn-ghost btn-sm" data-quick-url="http://localhost:8420">:8420</button>
-      <button class="btn btn-ghost btn-sm" data-quick-url="http://localhost:3000">:3000</button>
-      <button class="btn btn-ghost btn-sm" data-quick-url="http://localhost:5173">:5173</button>
-    </div>
+    <!-- Disparador de la paleta. **Un atajo que no se ve no existe**: el que
+         abre la app por primera vez no adivina Ctrl+K, asi que el atajo va
+         escrito en el propio boton. Parece un campo de busqueda y no un
+         boton porque eso es lo que hace: buscar cualquier cosa de la app. -->
+    <button class="cp-trigger" id="cp-trigger" title="Buscar paneles, acciones y archivos">
+      <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <span class="cp-trigger-txt">Buscar</span>
+      <span class="cp-trigger-kbd"><kbd>Ctrl</kbd><kbd>K</kbd></span>
+    </button>
     <div class="topbar-spacer"></div>
-    <div id="global-pill" class="pill pill-idle"><span class="dot dot-idle"></span><span>SIN ANÁLISIS</span></div>
+    <!-- El texto real lo pone updateGlobalPill() en cuanto arranca la app; acá
+         va el caso inicial honesto (todavía no hay proyecto) en vez de un
+         "SIN ANÁLISIS" que tapaba dos situaciones distintas. -->
+    <div id="global-pill" class="pill pill-idle"><span class="dot dot-idle"></span><span>SIN PROYECTO</span></div>
     <button class="btn btn-ghost btn-sm" id="auto-btn">
       <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
       <span>Auto</span>
@@ -146,7 +175,7 @@
             <button class="btn btn-ghost btn-sm" id="btn-add-folder" title="Explorar una carpeta, estilo VSCode">+ Carpeta</button>
           </span>
         </div>
-        <input type="file" id="fi-code" multiple accept=".py,.js,.ts,.json,.yaml,.yml,.env,.sh,.txt,.html,.css,.java,.go" />
+        <input type="file" id="fi-code" multiple accept=".py,.js,.ts,.jsx,.tsx,.c,.cpp,.cc,.cxx,.h,.hpp,.f,.f90,.f95,.f03,.f08,.for,.s,.asm,.ipynb,.json,.yaml,.yml,.env,.sh,.txt,.html,.css,.java,.go" />
         <input type="file" id="fi-log"  multiple accept=".log,.txt" />
         <input type="file" id="fi-folder" webkitdirectory mozdirectory multiple />
         <div class="dropzone" id="dz">
@@ -207,8 +236,28 @@
       </div>
 
       <!-- APIs -->
+      <!-- El probador de endpoints y los atajos a puertos locales vivían en
+           el topbar, donde hacían que la app pareciera una consola de
+           desarrollo: un usuario que abre Sythrall no tiene por qué ver
+           `:8420 :3000 :5173` ni una barra `GET https://api.com/health`
+           antes que nada. Acá siguen sirviendo para lo mismo, pero dentro
+           de Servicios, que es de lo que hablan. -->
       <div class="tab-panel" id="panel-apis">
-        <div style="padding:9px 14px;border-bottom:1px solid var(--b0);display:flex;gap:8px;background:var(--s0);flex-shrink:0;flex-wrap:wrap">
+        <div class="api-toolbar">
+          <div class="url-bar">
+            <span class="url-bar-method">GET</span>
+            <input id="url-main" placeholder="https://api.com/health" />
+            <button class="btn btn-ghost btn-sm" id="btn-add-url" title="Agregar endpoint">
+              <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+          </div>
+          <div class="quick-urls">
+            <span class="quick-urls-lbl">Local</span>
+            <button class="btn btn-ghost btn-sm" data-quick-url="http://localhost:8420">:8420</button>
+            <button class="btn btn-ghost btn-sm" data-quick-url="http://localhost:3000">:3000</button>
+            <button class="btn btn-ghost btn-sm" data-quick-url="http://localhost:5173">:5173</button>
+          </div>
+          <div style="flex:1"></div>
           <input class="search-input" id="api-search" placeholder="Filtrar...">
           <button class="btn btn-ghost btn-sm" id="btn-recheck-all">▶ Re-verificar</button>
         </div>
@@ -334,7 +383,7 @@
           <div style="flex:1"></div>
           <button class="btn btn-ghost btn-sm" id="btn-fetch-logs">↺ Backend</button>
           <button class="btn btn-ghost btn-sm" id="btn-clear-log">Limpiar</button>
-          <label style="display:flex;align-items:center;gap:4px;font-size:.68rem;color:var(--muted);cursor:pointer">
+          <label class="log-autoscroll" title="Seguir el final del log automáticamente">
             <input type="checkbox" id="autoscroll" checked /> Scroll
           </label>
         </div>
@@ -510,6 +559,30 @@
     <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
     Logs
   </button>
+</div>
+
+<!-- ══ MODAL DE CONFIGURACIÓN ══ -->
+<div class="settings-modal-overlay" id="settings-modal-overlay">
+  <div class="settings-modal" role="dialog" aria-modal="true" aria-label="Configuración">
+    <div class="settings-modal-sidebar">
+      <div class="settings-modal-title">Configuración</div>
+      <div class="settings-modal-nav-group">
+        <button class="settings-modal-nav-item active" data-settings-section="general">General</button>
+        <button class="settings-modal-nav-item" data-settings-section="apariencia">Apariencia</button>
+        <button class="settings-modal-nav-item" data-settings-section="desarrollador">Desarrollador</button>
+      </div>
+      <div class="settings-modal-nav-label">Personalizar</div>
+      <div class="settings-modal-nav-group">
+        <button class="settings-modal-nav-item" data-settings-section="plugins">Plugins</button>
+        <button class="settings-modal-nav-item" data-settings-section="conectores">Conectores</button>
+        <button class="settings-modal-nav-item" data-settings-section="habilidades">Habilidades</button>
+      </div>
+    </div>
+    <div class="settings-modal-content" id="settings-modal-content"></div>
+    <button class="settings-modal-close" id="settings-modal-close" title="Cerrar" aria-label="Cerrar">
+      <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
 </div>
 
 <script type="module" src="/src/main.ts"></script>

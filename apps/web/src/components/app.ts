@@ -12,9 +12,28 @@ import type { DirTreeNode } from '../panels/graph'
 import { generateCodeGraph, generateProjectGraph, renderDirTree, renderForceGraph } from '../panels/graph'
 import { clientMLAnalysis, renderMLResults } from '../panels/ml'
 import { clearSession, restoreSession, saveSession } from '../panels/problems'
-import { loadPersistedActiveProject, setActiveProject, state, updateTerminalAvailability } from '../store/state'
+import {
+  leerUltimoAnalisis,
+  loadPersistedActiveProject,
+  setActiveProject,
+  state,
+  updateTerminalAvailability,
+} from '../store/state'
 import type { TabId } from '../types'
-import { appendLog, delay, esc, fmtBytes, getExt, nowStr, setProgress, toast, uniqueId } from '../utils/helpers'
+import { askChoices, askConfirm, askText } from '../utils/dialog'
+import {
+  appendLog,
+  delay,
+  esc,
+  fileOptionsHtml,
+  fmtBytes,
+  getExt,
+  haceCuanto,
+  nowStr,
+  setProgress,
+  toast,
+  uniqueId,
+} from '../utils/helpers'
 import { icon } from '../utils/icons'
 import { renderProjectContextBanner, wireProjectContextBanner } from '../utils/projectHeader'
 import { createCollapseToggle, createResizer } from '../utils/resizer'
@@ -70,7 +89,7 @@ const TAB_LAYOUT: Record<TabId, TabLayout> = {
  * aportan nada, en vez de ser siempre los mismos 3 paneles sin importar
  * el tab activo. `.center` ya es flex:1, así que ocultarlos alcanza para
  * que el centro se expanda solo (ver `.tab-hidden` en main.css). */
-export function applyTabLayout(tab: TabId): void {
+function applyTabLayout(tab: TabId): void {
   const { files, flow } = TAB_LAYOUT[tab]
   document.getElementById('sidebar')?.classList.toggle('tab-hidden', !files)
   document.getElementById('right-panel')?.classList.toggle('tab-hidden', !flow)
@@ -156,18 +175,69 @@ export function rpTab(name: 'flow' | 'analysis' | 'server' | 'problems'): void {
   document.getElementById('rpp-' + name)?.classList.add('active')
 }
 
-// ── Global pill
-function updateGlobalPill(): void {
-  const pill = document.getElementById('global-pill')!
-  const st = overallStatus()
-  const map = {
-    ok: { cls: 'pill-ok', dot: 'dot-ok', lbl: 'TODO OK' },
-    warning: { cls: 'pill-warn', dot: 'dot-warn', lbl: 'ADVERTENCIAS' },
-    down: { cls: 'pill-err', dot: 'dot-err', lbl: 'ERRORES' },
+// ── Estado del análisis (topbar)
+/** Antes decía siempre TODO OK / ADVERTENCIAS / ERRORES, que es la salud de
+ * los hallazgos — y arrancaba en un "SIN ANÁLISIS" fijo puesto en el HTML.
+ * El problema es que "SIN ANÁLISIS" tapaba dos situaciones muy distintas: no
+ * hay proyecto todavía, y hay proyecto pero nadie lo analizó. La primera se
+ * resuelve abriendo un proyecto y la segunda apretando Analizar, así que
+ * mostrarlas iguales no le dice al usuario qué hacer.
+ *
+ * Ahora el texto es el ESTADO (sin proyecto / no analizado / analizando /
+ * analizado + cuándo) y el color sigue siendo la SALUD, que es la
+ * información que ya había y no conviene perder: un análisis con errores
+ * sigue saliendo en rojo. */
+export function updateGlobalPill(): void {
+  const pill = document.getElementById('global-pill')
+  if (!pill) return
+  const poner = (cls: string, dot: string, lbl: string, title: string) => {
+    pill.className = `pill ${cls}`
+    pill.title = title
+    pill.innerHTML = `<span class="dot ${dot}"></span><span>${lbl}</span>`
   }
-  const m = map[st]
-  pill.className = `pill ${m.cls}`
-  pill.innerHTML = `<span class="dot ${m.dot}"></span><span>${m.lbl}</span>`
+
+  if (state.running || state.projectAnalysisRunning) {
+    poner('pill-warn', 'dot-warn', 'ANALIZANDO…', 'Hay un análisis en curso')
+    return
+  }
+
+  const analizado = !!state.results.projectDashboard || state.files.some((f) => f.analyzed)
+  if (!analizado) {
+    // Un proyecto analizado en una sesión anterior NO es "no analizado": el
+    // Dashboard muestra sus números guardados justo debajo, y decir lo
+    // contrario acá se lee como una contradicción. Va con el punto neutro
+    // porque la salud de ese análisis no está cargada en esta sesión — se
+    // afirma cuándo se midió, no cómo salió.
+    const guardado = state.activeProjectId ? leerUltimoAnalisis(state.activeProjectId) : null
+    if (guardado) {
+      const cuandoGuardado = haceCuanto(guardado.at)
+      poner(
+        'pill-idle',
+        'dot-idle',
+        cuandoGuardado ? `ANALIZADO · ${cuandoGuardado}` : 'ANALIZADO',
+        'Resultado guardado de un análisis anterior — volvé a analizar para tenerlo fresco',
+      )
+      return
+    }
+    const hayAlgoQueAnalizar = !!state.activeProjectId || state.files.length > 0
+    poner(
+      'pill-idle',
+      'dot-idle',
+      hayAlgoQueAnalizar ? 'NO ANALIZADO' : 'SIN PROYECTO',
+      hayAlgoQueAnalizar
+        ? 'Hay un proyecto abierto, pero todavía no se analizó — usá ▶ Analizar'
+        : 'Todavía no hay ningún proyecto abierto',
+    )
+    return
+  }
+
+  const salud = {
+    ok: { cls: 'pill-ok', dot: 'dot-ok', title: 'Sin errores ni advertencias' },
+    warning: { cls: 'pill-warn', dot: 'dot-warn', title: 'El análisis encontró advertencias' },
+    down: { cls: 'pill-err', dot: 'dot-err', title: 'El análisis encontró errores' },
+  }[overallStatus()]
+  const cuando = haceCuanto(state.lastAnalysisAt)
+  poner(salud.cls, salud.dot, cuando ? `ANALIZADO · ${cuando}` : 'ANALIZADO', salud.title)
 }
 
 function overallStatus(): 'ok' | 'warning' | 'down' {
@@ -226,14 +296,13 @@ export async function checkBackend(): Promise<void> {
       <div class="metric-section">
         <div class="ms-title">Servidor</div>
         ${mr('Python', d.python?.toString().split(' ')[0])}
-        ${cap('flake8', d.flake8)}
-        ${cap('pylint', d.pylint)}
-        ${cap('complexity', d.complexity)}
-        ${cap('PyTorch', d.torch)}
-        ${cap('TensorFlow', d.tensorflow)}
-        ${cap('Polars', d.polars)}
-        ${cap('LightGBM', d.lightgbm)}
-        ${cap('spaCy', d.spacy)}
+        ${cap('flake8', d.HAS_FLAKE8)}
+        ${cap('pylint', d.HAS_PYLINT)}
+        ${cap('PyTorch', d.HAS_TORCH)}
+        ${cap('TensorFlow', d.HAS_TF)}
+        ${cap('Polars', d.HAS_POLARS)}
+        ${cap('LightGBM', d.HAS_LGB)}
+        ${cap('spaCy', d.HAS_SPACY)}
       </div>`
     appendLog('ok', 'Backend OK — ' + d.server, 'be')
   } catch (e) {
@@ -345,7 +414,12 @@ export async function persistFilesToProject(files: File[], mode: 'files' | 'fold
       appendLog('ok', `${files.length} archivo(s) guardado(s) en el proyecto activo`, 'be')
       return
     }
-    const name = window.prompt('Nombre del proyecto nuevo (cancelar = no guardar, solo en esta sesión):', '')
+    const name = await askText({
+      title: 'Nuevo proyecto',
+      message: 'Los archivos se guardan en un proyecto nuevo. Si cancelás, quedan solo en esta sesión del navegador.',
+      placeholder: 'mi-proyecto',
+      confirmLabel: 'Crear proyecto',
+    })
     if (name === null) return
     const result = await upload(files, name)
     setActiveProject(result.project_id, result.project_name)
@@ -374,9 +448,7 @@ export function handleLogFiles(files: FileList | null): void {
 }
 
 export function updateSelectors(): void {
-  const opts =
-    '<option value="">— Selecciona —</option>' +
-    state.files.map((f) => `<option value="${f.id}">${f.name}</option>`).join('')
+  const opts = fileOptionsHtml(state.files, '— Selecciona —')
   ;['file-sel', 'diff-a', 'diff-b', 'diag-file-sel', 'ml-file-sel'].forEach((id) => {
     const el = document.getElementById(id) as HTMLSelectElement | null
     if (el) el.innerHTML = opts
@@ -455,26 +527,145 @@ function renderURLList(): void {
 // ══════════════════════════════════════════
 //  MAIN ANALYSIS
 // ══════════════════════════════════════════
+/** Las etapas que ▶ Analizar puede correr. Cada una es independiente y ya
+ * existía por separado; lo que faltaba era decidirlas juntas.
+ *
+ * **`project` es nueva en el botón del topbar, y arregla un hueco real.**
+ * Hasta ahora ▶ Analizar corría chequeo de endpoints, lint y logs — pero NO
+ * el análisis de proyecto, que es el que produce Quality/Security/Complexity/
+ * Architecture del Dashboard. Con un proyecto abierto, apretar el botón
+ * principal de la app no producía ninguna de las métricas que la app muestra
+ * como su resultado principal; había que ir al Dashboard o a Static y apretar
+ * otro botón. Dos acciones llamadas "analizar" que hacían cosas distintas. */
+const ETAPAS = [
+  {
+    id: 'project',
+    label: 'Análisis del proyecto',
+    desc: 'Seguridad, calidad, complejidad y arquitectura — lo que alimenta el Dashboard.',
+    motivoSinProyecto: 'Necesita un proyecto abierto',
+  },
+  {
+    id: 'issues',
+    label: 'Problemas de código',
+    desc: 'Lint y errores por archivo (flake8, pylint, AST).',
+    motivoSinProyecto: 'Necesita un proyecto abierto o archivos en el Editor',
+  },
+  {
+    id: 'apis',
+    label: 'Endpoints',
+    desc: 'Verifica los endpoints cargados en Servicios → APIs.',
+    motivoSinProyecto: 'Sin endpoints cargados',
+  },
+  {
+    id: 'logs',
+    label: 'Logs',
+    desc: 'Errores y advertencias en los archivos de log cargados.',
+    motivoSinProyecto: 'Sin archivos de log cargados',
+  },
+] as const
+
+type EtapaId = (typeof ETAPAS)[number]['id']
+
+const ETAPAS_KEY = 'sythrall:etapas-analisis'
+
+function _etapaDisponible(id: EtapaId): boolean {
+  switch (id) {
+    case 'project':
+      return !!state.activeProjectId && state.backendOk
+    case 'issues':
+      return state.files.length > 0 || (!!state.activeProjectId && state.backendOk)
+    case 'apis':
+      return state.urls.length > 0
+    case 'logs':
+      return state.logFiles.length > 0
+  }
+}
+
+function _etapasRecordadas(): Set<string> {
+  try {
+    const crudo = localStorage.getItem(ETAPAS_KEY)
+    if (crudo) return new Set(JSON.parse(crudo) as string[])
+  } catch {
+    /* localStorage puede fallar (modo privado); el default cubre el caso */
+  }
+  return new Set(ETAPAS.map((e) => e.id))
+}
+
+/** Pregunta qué correr. `null` = el usuario canceló. */
+async function _elegirEtapas(): Promise<Set<EtapaId> | null> {
+  const disponibles = ETAPAS.filter((e) => _etapaDisponible(e.id))
+  if (!disponibles.length) {
+    toast('Abrí un proyecto o cargá archivos para poder analizar', 'warn')
+    return null
+  }
+  const recordadas = _etapasRecordadas()
+  const elegidas = await askChoices({
+    title: 'Analizar',
+    message: 'Elegí qué correr. Lo que no aplica queda apagado con el motivo.',
+    confirmLabel: 'Analizar',
+    options: ETAPAS.map((e) => {
+      const ok = _etapaDisponible(e.id)
+      return {
+        id: e.id,
+        label: e.label,
+        desc: e.desc,
+        checked: ok && recordadas.has(e.id),
+        disabled: !ok,
+        disabledReason: e.motivoSinProyecto,
+      }
+    }),
+  })
+  if (elegidas === null) return null
+  if (!elegidas.length) {
+    toast('No elegiste ninguna etapa', 'warn')
+    return null
+  }
+  try {
+    localStorage.setItem(ETAPAS_KEY, JSON.stringify(elegidas))
+  } catch {
+    /* no poder recordar la elección no es motivo para no analizar */
+  }
+  return new Set(elegidas as EtapaId[])
+}
+
 export async function runAll(): Promise<void> {
   if (state.running) return
+  const etapas = await _elegirEtapas()
+  if (!etapas) return
+
   state.running = true
   document.getElementById('run-btn')!.setAttribute('disabled', '')
-  state.results.issues = []
+  if (etapas.has('issues')) state.results.issues = []
   renderFlow()
-  setProgress(5)
+  updateGlobalPill()
   const t0 = Date.now()
   appendLog('info', '━━━━━━━━━━━━━━━━━', 'fe')
-  appendLog('info', '▶ Análisis iniciado', 'fe')
+  appendLog('info', `▶ Análisis iniciado — ${[...etapas].join(', ')}`, 'fe')
 
-  await runAPIChecks()
-  setProgress(20)
+  // El progreso se reparte entre las etapas ELEGIDAS: con una sola marcada,
+  // una barra que se planta en 20% y salta a 100% miente sobre lo que falta.
+  let hechas = 0
+  const avanzar = () => setProgress(Math.round((++hechas / etapas.size) * 95) + 5)
+  setProgress(5)
 
-  await analyzeAllFiles()
-  renderFlow()
-  setProgress(65)
-
-  await analyzeAllLogs()
-  setProgress(85)
+  if (etapas.has('apis')) {
+    await runAPIChecks()
+    avanzar()
+  }
+  if (etapas.has('issues')) {
+    await analyzeAllFiles()
+    renderFlow()
+    avanzar()
+  }
+  if (etapas.has('logs')) {
+    await analyzeAllLogs()
+    avanzar()
+  }
+  if (etapas.has('project')) {
+    const { loadProjectHealth } = await import('../panels/dashboard')
+    await loadProjectHealth()
+    avanzar()
+  }
 
   await delay(100)
   renderAllResults()
@@ -489,11 +680,16 @@ export async function runAll(): Promise<void> {
     ms,
   }
   state.history.push(entry)
+  state.lastAnalysisAt = Date.now()
+  // `running` se baja ANTES de repintar: el estado del topbar ahora depende
+  // de ese flag para mostrar "ANALIZANDO…", así que pintarlo con la corrida
+  // todavía marcada como viva dejaba el pill clavado en ese texto al
+  // terminar. Antes daba igual porque el pill solo miraba los hallazgos.
+  state.running = false
   updateRunMeta(entry)
   updateGlobalPill()
   updateBadges()
   appendLog('info', `✔ Completo en ${ms}ms — ${overallStatus().toUpperCase()}`, 'fe')
-  state.running = false
   renderFlow()
   document.getElementById('run-btn')!.removeAttribute('disabled')
   toast(`Listo — ${state.results.issues.length} problemas`, state.results.issues.length ? 'warn' : 'ok')
@@ -695,8 +891,15 @@ export function toggleAuto(): void {
   }
 }
 
-export function clearAll(): void {
-  if (!confirm('¿Limpiar todo?')) return
+export async function clearAll(): Promise<void> {
+  const ok = await askConfirm({
+    title: '¿Limpiar todo?',
+    message:
+      'Se descartan los archivos cargados, los logs, las URLs y los resultados de esta sesión. Los proyectos guardados no se tocan.',
+    confirmLabel: 'Limpiar',
+    danger: true,
+  })
+  if (!ok) return
   state.files = []
   state.logFiles = []
   state.urls = []
@@ -742,7 +945,7 @@ export async function runMLAnalysis(): Promise<void> {
     toast(`ML — score ${sc}/100`, sc >= 60 ? 'ok' : 'warn')
     appendLog('ok', `ML: ${f.name} — score ${sc}`, 'be')
   } catch (e) {
-    el.innerHTML = `<div class="empty" style="color:var(--err)">${icon('warning', 14)} Error: ${(e as Error).message}</div>`
+    el.innerHTML = `<div class="empty text-err">${icon('warning', 14)} Error: ${(e as Error).message}</div>`
     toast('Error ML: ' + (e as Error).message, 'err')
   }
 }
@@ -799,7 +1002,7 @@ export async function generateDiagram(): Promise<void> {
     document.getElementById('tb-diagram')!.style.display = ''
     toast('Diagrama generado', 'ok')
   } catch (e) {
-    outEl.innerHTML = `<div class="empty" style="color:var(--err)">${icon('warning', 14)} Error: ${(e as Error).message}</div>`
+    outEl.innerHTML = `<div class="empty text-err">${icon('warning', 14)} Error: ${(e as Error).message}</div>`
     statusEl.textContent = 'Error'
     statusEl.style.color = 'var(--err)'
   }
@@ -982,11 +1185,11 @@ export async function runDiff(): Promise<void> {
           return `<span style="background:rgba(0,245,160,.08);border-left:2px solid var(--ok);padding-left:6px">${esc(l)}</span>`
         if (l.startsWith('-'))
           return `<span style="background:rgba(255,51,102,.08);border-left:2px solid var(--err);padding-left:6px">${esc(l)}</span>`
-        if (l.startsWith('@@')) return `<span style="color:var(--purple)">${esc(l)}</span>`
-        return `<span style="color:var(--muted)">${esc(l)}</span>`
+        if (l.startsWith('@@')) return `<span class="text-purple">${esc(l)}</span>`
+        return `<span class="text-muted">${esc(l)}</span>`
       })
       .join('\n')
-    document.getElementById('diff-out')!.innerHTML = html || '<span style="color:var(--ok)">Archivos idénticos</span>'
+    document.getElementById('diff-out')!.innerHTML = html || '<span class="text-ok">Archivos idénticos</span>'
   } catch (err) {
     toast('Error generando el diff: ' + (err instanceof Error ? err.message : ''), 'err')
     appendLog('warn', `runDiff: ${err instanceof Error ? err.message : err}`, 'fe')
@@ -1022,14 +1225,14 @@ export async function exportZip(): Promise<void> {
     a.href = URL.createObjectURL(blob)
     a.download = `sythrall-${Date.now()}.zip`
     a.click()
-    toast('⬇ ZIP exportado', 'ok')
+    toast('ZIP exportado', 'ok')
   } catch {
     const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
     a.download = `sythrall-${Date.now()}.json`
     a.click()
-    toast('⬇ JSON exportado', 'ok')
+    toast('JSON exportado', 'ok')
   }
 }
 
@@ -1099,7 +1302,12 @@ export function initApp(): void {
 
   appendLog('info', 'Sythrall listo', 'fe')
   checkBackend().then(() => void tryRestoreSession())
+  updateGlobalPill()
   setInterval(() => {
     if (state.backendOk && !state.running) checkBackend()
+    // El "hace 12 min" del estado se vuelve mentira solo con que pase el
+    // tiempo, así que se repinta con el mismo latido que ya existía en vez
+    // de agregar un timer nuevo para esto.
+    updateGlobalPill()
   }, 60000)
 }

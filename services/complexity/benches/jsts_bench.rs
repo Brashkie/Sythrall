@@ -15,11 +15,11 @@ fn synthetic_source(n: usize) -> String {
 }
 
 fn bench_parse_js_ts(c: &mut Criterion) {
-    let mut group = c.benchmark_group("complexity_core::jsts::parse_js_ts");
+    let mut group = c.benchmark_group("complexity_core::lenguajes::jsts::parse_js_ts");
     for &n in &[10usize, 100, 1000] {
         let source = synthetic_source(n);
         group.bench_with_input(BenchmarkId::from_parameter(n), &source, |b, src| {
-            b.iter(|| complexity_core::jsts::parse_js_ts(black_box(src), black_box(false)));
+            b.iter(|| complexity_core::lenguajes::jsts::parse_js_ts(black_box(src), black_box(false)));
         });
     }
     group.finish();

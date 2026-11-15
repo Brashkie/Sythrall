@@ -240,9 +240,63 @@ export interface StructuralSmell {
     | 'god_object'
     | 'quadratic_list_membership'
     | 'de_morgan_simplifiable'
+    | 'unreachable_code'
+    | 'condition_always_true'
+    | 'condition_always_false'
+    | 'division_by_zero'
+    | 'possible_division_by_zero'
+    | 'index_out_of_range'
+    | 'possible_index_out_of_range'
+    | 'none_dereference'
+    | 'possible_none_dereference'
+    | 'redundant_condition'
+    | 'contradictory_condition'
+    | 'tautological_condition'
+    | 'duplicated_condition'
+    | 'absorbable_condition'
+    | 'unbounded_queue'
+    | 'unbounded_cache'
+    | 'unbounded_task_spawn'
+    | 'unbounded_convergence_loop'
+    | 'catastrophic_cancellation_step'
+    | 'float_equality_comparison'
+    | 'undefined_state_transition'
+    | 'unreachable_state'
+    | 'unhandled_state'
+    | 'recursive_template_no_base_case'
+    | 'deep_template_recursion'
+    | 'linear_op_in_loop'
+    | 'unwrap_in_fallible_fn'
+    | 'ts_ignore_instead_of_expect_error'
+    | 'double_type_assertion'
+    | 'bare_type_ignore'
+    | 'dead_store'
+    | 'overwritten_store'
+    | 'potential_false_sharing'
+    | 'sfinae_instead_of_concepts'
+    | 'signed_unsigned_comparison'
+    | 'implicit_precision_loss'
+    | 'int_pointer_cast'
+    | 'missing_implicit_none'
+    | 'single_precision_literal_in_double'
+    | 'integer_division_to_real'
+    | 'char_signedness_assumption'
+    | 'factorial_brute_force'
+    | 'undefined_grammar_rule'
+    | 'unreferenced_grammar_rule'
+    | 'unsafe_block_without_safety_comment'
+    | 'unsafe_fn_without_safety_doc'
+    | 'mutable_default_argument'
   name: string
   line: number
   message: string
+  /** El motor lo deriva de `kind` al serializar — ningun emisor lo escribe,
+   * asi que esta siempre presente. `unclassified` es un kind que todavia no
+   * entro en la tabla de `decidibilidad.rs`, y se dice en vez de callarse. */
+  decidability?: 'decidable' | 'approximate' | 'unclassified'
+  /** Por que ese lado. Ausente cuando el kind no esta clasificado: no se
+   * inventa una explicacion para algo que nadie decidio. */
+  decidability_reason?: string
   /** Solo presente a nivel de proyecto, ver SecurityFinding.file. */
   file?: string
 }
@@ -280,24 +334,290 @@ export interface ProjectHealth {
   architecture: ProjectHealthMetric & { cycles: number; smells: number }
 }
 
+// Fase 28 (Enterprise Intelligence) — snapshot local de Project Health por
+// proyecto (`services/history_store.py`, SQLite, sin auth todavía). `health`
+// es el mismo `ProjectHealth` de arriba; `summary` es un subconjunto de
+// `StaticProjectResult['summary']` (sin `big_o_distribution`, que no tiene
+// un delta aritmético con sentido — ver `routers/history.py`).
+export interface HistorySnapshot {
+  id: number
+  project_id: string
+  created_at: string
+  health: ProjectHealth
+  summary: Record<string, number>
+}
+
+export interface HistoryDiffEntry {
+  from: number
+  to: number
+  delta: number
+}
+
+export interface HistoryComparison {
+  from: HistorySnapshot
+  to: HistorySnapshot
+  health_diff: Record<keyof ProjectHealth, HistoryDiffEntry>
+  summary_diff: Record<string, HistoryDiffEntry>
+  /** Qué cambió en el ANALIZADOR entre las dos mediciones (Fase 28,
+   * 2026-09-05). Es la diferencia entre "tu código empeoró" y "Sythrall
+   * aprendió a ver algo que antes no veía": cuando un lenguaje pasa de
+   * devolver `[]` fijo a emitir hallazgos reales, el score baja sin que se
+   * haya tocado una línea. `known: false` = uno de los snapshots es
+   * anterior a que esto se guardara, así que no se puede distinguir. */
+  capabilities_diff: {
+    known: boolean
+    comparable: boolean
+    added: string[]
+    removed: string[]
+    note: string
+  }
+}
+
+// Panorama entre proyectos (Fase 28, segundo bullet) — el último snapshot
+// guardado de CADA proyecto, más su delta contra el anterior. `project_name`
+// es `null` y `exists` es `false` cuando el proyecto ya se borró del disco
+// pero su historial sigue en la base (la UI lo muestra como tal, no lo
+// esconde). `delta` es `null` cuando el proyecto tiene un solo snapshot —
+// todavía no hay contra qué comparar.
+export interface HistoryOverviewProject {
+  project_id: string
+  project_name: string | null
+  exists: boolean
+  snapshots: number
+  created_at: string
+  health: ProjectHealth
+  summary: Record<string, number>
+  overall: number
+  delta: Record<keyof ProjectHealth, number> | null
+}
+
+export interface HistoryOverview {
+  projects: HistoryOverviewProject[]
+  aggregate: {
+    projects: number
+    snapshots: number
+    avg: Record<keyof ProjectHealth, number> & { overall: number }
+    totals: Record<string, number>
+  }
+  note: string
+}
+
+/** Reporte de referencias cruzadas CSS. `unreferenced` NO significa "sin
+ * usar": ver `note`, que trae el hedge completo del motor. */
+export interface CssUsageReport {
+  available: boolean
+  reason?: string
+  css_files?: number
+  scanned_files?: number
+  defined_classes?: number
+  referenced_classes?: number
+  unreferenced?: Array<{ name: string; file: string; line: number }>
+  dynamic_sites?: Array<{ file: string; line: number; snippet: string }>
+  note?: string
+}
+
+/** Fase 19 — uso de SIMD de un procedimiento de ensamblador.
+ *
+ * `vectorized` mira SOLO las instrucciones packed: usar un registro vectorial
+ * no alcanza. `addss` opera sobre un elemento con un registro de 128 bits y es
+ * lo que emite cualquier compilador para un `float`; llamar a eso
+ * "vectorizado" daría un sí para casi todo programa. */
+export interface SimdInfo {
+  isa: 'sse' | 'avx' | 'avx2' | 'avx512'
+  max_width_bits: number
+  packed_instructions: number
+  scalar_simd_instructions: number
+  vector_registers: string[]
+  vectorized: boolean
+}
+
+export interface AsmInstruction {
+  line: number
+  mnemonic: string
+  operands: string[]
+  category: string
+  explanation: string
+}
+
+export interface AsmProcedure {
+  name: string
+  line: number
+  loc: number
+  big_o: string
+  big_o_reason: string
+  instructions: AsmInstruction[]
+  registers_used: string[]
+  calls: string[]
+  simd: SimdInfo | null
+}
+
+/** Una compilación a ensamblador, por nivel de optimización. */
+export interface CompilacionAsm {
+  available: boolean
+  language: string
+  toolchain: string
+  toolchain_version: string
+  opt_level: string
+  features: string[]
+  assembly: string
+  assembly_lines: number
+  assembly_truncated: boolean
+  analysis: { syntax: string; procedures: AsmProcedure[] } | null
+  error: string | null
+}
+
+export interface CompileAsmResponse {
+  available: boolean
+  results: CompilacionAsm[]
+  error: string | null
+}
+
+/** Un punto de la búsqueda de configuración. `dominated_by` vacío = está en
+ *  el frente. */
+export interface PuntoPareto {
+  label: string
+  config: { opt_level: string; features: string[] }
+  instructions: number
+  packed: number
+  assembly_lines: number
+  vectorized: boolean
+  dominated_by: string[]
+  error: string | null
+}
+
+export interface BusquedaPareto {
+  language: string
+  toolchain: string
+  toolchain_version: string
+  points: PuntoPareto[]
+  front: string[]
+  note: string
+  error: string | null
+}
+
+export interface ParetoResponse {
+  available: boolean
+  result: BusquedaPareto | null
+  error: string | null
+}
+
+/** Fase 34, Línea C — la curva de costo de metaprogramación en D. Mismo
+ *  shape que `TemplateCostResult`, a propósito: comparar dos curvas con
+ *  formas distintas no compararía nada. */
+export interface DCostResult {
+  available: boolean
+  compiler: string | null
+  points: Array<{ depth: number; compile_ms: number; object_bytes: number; symbols: number }>
+  symbols_per_level: number | null
+  bytes_per_level: number | null
+  note: string
+}
+
+export interface ComparacionMetaprogramacion {
+  cpp: TemplateCostResult
+  d: DCostResult
+  comparable: boolean
+  cpp_symbols_per_level: number | null
+  d_symbols_per_level: number | null
+  ambas_lineales: boolean | null
+  note: string
+}
+
+export interface AtomoCss {
+  class: string
+  property: string
+  value: string
+  important: boolean
+  at_context: string | null
+  uses: number
+  selectors: string[]
+}
+
+export interface AtomizacionResult {
+  atoms: AtomoCss[]
+  stylesheet: string
+  mapping: Array<{ selector: string; at_context: string | null; classes: string[] }>
+  summary: {
+    declarations_before: number
+    atoms_after: number
+    bytes_before: number
+    bytes_after: number
+    reuse_ratio: number
+    single_use_atoms: number
+    top_atom: string | null
+    top_atom_uses: number
+  }
+  note: string
+}
+
+export interface AtomizacionResponse {
+  available: boolean
+  result: AtomizacionResult | null
+  error: string | null
+}
+
 export interface StaticParseResult {
   filename: string
   language: string
   functions: StaticFunction[]
   classes: StaticClass[]
   imports: StaticImport[]
-  exports: Array<{ name: string; line: number }>
+  /** JS/TS traen `{ name, line }`; Ada agrega `kind` (declaracion o entry)
+   * y `params`. Opcionales porque los otros lenguajes no los mandan. */
+  exports: Array<{ name: string; line: number; kind?: string; params?: number }>
   interfaces?: Array<{ name: string; line: number }>
   types?: Array<{ name: string; line: number }>
   dead_code: Array<{ type: string; name?: string; module: string; line: number }>
   call_graph: Array<{ from: string; to: string }>
   wasm_hints: WasmHint[]
   memory_layout?: MemoryLayoutResult
+  /** Fase 34, Línea A — métricas de FORMA de la metaprogramación de C++
+   * (`plantillas.rs`). Ausente o en cero para todo lo que no sea C++.
+   *
+   * **`instantiation_sites` y `distinct_instantiations` se equivocan en
+   * direcciones opuestas, y por eso están los dos**: el primero cuenta usos
+   * escritos (`vector<int>` 50 veces son 50 sitios y UNA instanciación real,
+   * sobrecuenta) y el segundo deduplica por texto (`Factorial<N - 1>` es un
+   * texto y N instanciaciones reales, subcuenta). Ninguno es una predicción
+   * del trabajo del compilador: saber eso exige compilar. */
+  template_complexity?: TemplateComplexity
   security_findings: SecurityFinding[]
   structural_smells: StructuralSmell[]
   naming_smells: NamingSmell[]
   summary: Record<string, number | string>
   error?: string
+}
+
+export interface TemplateComplexity {
+  templates: number
+  specializations: number
+  instantiation_sites: number
+  distinct_instantiations: number
+  constexpr_branches: number
+  static_asserts: number
+  /** Fase 32 — cómo se restringen las plantillas de este archivo.
+   * Opcionales: un resultado viejo en caché no los trae. Ver `sfinae.rs`. */
+  concepts_defined?: number
+  requires_clauses?: number
+  enable_if_sites?: number
+  decltype_returns?: number
+  recursive_templates: string[]
+}
+
+/** Fase 34, Línea A — la mitad MEDIDA del costo de la metaprogramación.
+ * `object_bytes` es determinístico y crece linealmente con la profundidad;
+ * `compile_ms` a estas profundidades está dominado por el arranque del
+ * compilador, así que es contexto, no la medición de los templates. */
+export interface TemplateCostResult {
+  available: boolean
+  compiler: string | null
+  points: Array<{ depth: number; compile_ms: number; object_bytes: number; symbols: number }>
+  /** Símbolos que emite cada nivel más de instanciación. Medido, no
+   * estimado — es el número que el ROADMAP dejó escrito como NO
+   * calculable estáticamente. */
+  symbols_per_level: number | null
+  bytes_per_level: number | null
+  note: string
 }
 
 export interface StaticProjectResult {
@@ -313,6 +633,7 @@ export interface StaticProjectResult {
     security_findings: number
     structural_smells: number
     naming_smells: number
+    modernization_candidates: number
     /** Incluye las entradas de circular_dependency — a diferencia de
      * health.architecture.smells, que las excluye para no penalizar el
      * score dos veces (ver comentario en el backend). */
@@ -323,6 +644,28 @@ export interface StaticProjectResult {
   security_findings: SecurityFinding[]
   structural_smells: StructuralSmell[]
   naming_smells: NamingSmell[]
+  /** Fase 25 — rollup por archivo (2026-09-01), deliberadamente NO un
+   * veredicto Keep/Refactor/Replace/Rewrite/Migrate: agrupa los candidatos
+   * de `modernization.rs` por archivo con conteos por confianza/patrón,
+   * sin inventar ninguna categoría que la evidencia no sostenga — ver el
+   * comentario en `routers/static_analysis.py`. */
+  modernization_candidates: Array<{
+    variable: string
+    pattern: string
+    line: number
+    current: string
+    suggested_target: string
+    reasoning: string
+    confidence: 'medium' | 'high'
+    file: string
+  }>
+  modernization_by_file: Array<{
+    file: string
+    total: number
+    high: number
+    medium: number
+    patterns: Record<string, number>
+  }>
   architecture_smells: ArchitectureSmell[]
   top_complex_functions: Array<{ file: string; name: string; line: number; complexity: number; big_o: string }>
   language_distribution: Record<string, { files: number; loc: number; functions: number }>
@@ -364,6 +707,62 @@ export interface MatmulVsNumpyResult {
     note: string
   }
   comparison_note: string
+}
+
+/** Fase 26 — segunda pieza de "migrar de numpy/pandas/scikit-learn": compara
+ * el kernel Zig de agregación por categoría YA validado contra pandas real
+ * (`groupby().agg()`), mismos tamaños/datos, side by side. A diferencia de
+ * `MatmulVsNumpyResult` (donde numpy gana), acá gana el kernel nativo — el
+ * `comparison_note` incluye la salvedad de que asume categorías fijas.
+ * `pandas.available` es `false` cuando pandas no está instalado en el
+ * entorno del backend, degrada con gracia igual que el resto. */
+export interface AggregationVsPandasResult {
+  zig: EmpiricalValidationResult
+  pandas: {
+    available: boolean
+    measurements: Array<{ n: number; seconds: number }>
+    note: string
+  }
+  comparison_note: string
+}
+
+/** Fase 19 (Machine Intelligence) — segundo bullet, cierra la fase: un
+ * ejecutable/librería ya compilado (`.exe`/`.dll`/`.so`/`.dylib`/`.o`), NO
+ * código fuente — formato/arquitectura/punto de entrada, secciones,
+ * símbolos, imports/exports, vía el crate `object` en el sidecar Rust
+ * (`binparse.rs`). `truncated` avisa si alguna lista se cortó en 500
+ * elementos (un binario real puede tener muchísimos más). `available:
+ * false` cuando el archivo no es un binario reconocido, pesa más de 64MB, o
+ * el sidecar no está disponible — degrada con gracia igual que el resto. */
+/** Fase 26 — tercera y última pieza de "migrar de numpy/pandas/scikit-learn":
+ * compara el kernel Fortran de regresión lineal YA validado contra
+ * scikit-learn real (`LinearRegression.fit()`), mismos tamaños/datos, side
+ * by side. Igual que `AggregationVsPandasResult`, gana el kernel nativo —
+ * el `comparison_note` incluye la salvedad de que asume una sola variable
+ * predictora. `sklearn.available` es `false` cuando scikit-learn no está
+ * instalado en el entorno del backend, degrada con gracia igual que el resto. */
+export interface LinregVsSklearnResult {
+  fortran: EmpiricalValidationResult
+  sklearn: {
+    available: boolean
+    measurements: Array<{ n: number; seconds: number }>
+    note: string
+  }
+  comparison_note: string
+}
+
+export interface ExecutableParseResult {
+  available: boolean
+  format: string
+  architecture: string
+  is_64_bit: boolean
+  entry_point: number
+  sections: Array<{ name: string; address: number; size: number; kind: string }>
+  symbols: Array<{ name: string; address: number; kind: string; is_undefined: boolean; is_global: boolean }>
+  imports: Array<{ library: string; name: string }>
+  exports: Array<{ name: string; address: number }>
+  truncated: boolean
+  note: string
 }
 
 // ─── Tipos Code Graph ─────────────────────────────────────────────────────────
@@ -440,6 +839,29 @@ export interface ProjectGraphResult extends GraphResult {
 }
 
 // ─── API pública ──────────────────────────────────────────────────────────────
+
+/** **SPARK: la tercera categoria de evidencia.**
+ *
+ * Lo que viene como `spark_proved` NO lo probo Sythrall leyendo el codigo: lo
+ * cerro un probador externo (Alt-Ergo, Z3) resolviendo una formula. Y lo que
+ * viene como `spark_unproved` tampoco es un hallazgo: es una obligacion que
+ * el prover no pudo cerrar con el tiempo y los axiomas que tenia. */
+export interface SparkObligation {
+  kind: 'spark_proved' | 'spark_unproved'
+  rule: string
+  file: string
+  line: number
+  message: string
+}
+
+export interface SparkResult {
+  available: boolean
+  prover?: string | null
+  proved: number
+  unproved: number
+  obligations: SparkObligation[]
+  note: string
+}
 
 export const api = {
   // ── Sistema
@@ -613,12 +1035,56 @@ export const api = {
     post<StaticProjectResult>('/static/parse-project', { files }),
 
   /** Igual que staticParseProject, pero para un proyecto ya subido (Proyectos). */
+  /** Sythrall CSS Engine — referencias cruzadas CSS ↔ marcado/scripts del
+   * proyecto. `available: false` cuando el sidecar Rust no responde. */
+  cssUsage: (projectId: string) => post<CssUsageReport>('/static/css-usage', { project_id: projectId }),
+
   staticParseProjectById: (projectId: string) =>
     post<StaticProjectResult>('/static/parse-project', { project_id: projectId }),
+
+  // ── History (Fase 28 — Enterprise Intelligence, primera porción):
+  // snapshots locales de Project Health por proyecto, sin auth todavía.
+  createSnapshot: (projectId: string) => post<HistorySnapshot>(`/history/${projectId}/snapshot`, {}),
+
+  listSnapshots: (projectId: string) => get<HistorySnapshot[]>(`/history/${projectId}`),
+
+  compareSnapshots: (fromId: number, toId: number) => get<HistoryComparison>(`/history/compare/${fromId}/${toId}`),
+
+  deleteSnapshot: (snapshotId: number) =>
+    fetch(getApiBase() + `/history/snapshot/${snapshotId}`, { method: 'DELETE' }).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      return r.json()
+    }),
+
+  /** Panorama entre proyectos (último snapshot de cada uno + agregados). */
+  historyOverview: () => get<HistoryOverview>('/history/overview'),
 
   /** Capacidad real del motor por lenguaje (no una lista estática hardcodeada
    * en el frontend) — para el widget "Languages" del Dashboard. */
   staticLanguages: () => get<StaticLanguagesResult>('/static/languages'),
+
+  /** Fase 19 — compila el fuente a ensamblador y lo analiza. `optLevels` es
+   * una lista porque lo útil es la COMPARACIÓN; `features` pide extensiones
+   * de CPU (sin `avx2` el compilador no vectoriza y la pregunta no se puede
+   * responder). */
+  /** Fase 32 — frente de Pareto sobre la configuración de compilación. El
+   *  fuente no se toca: solo cambian las opciones, así que no hay nada que
+   *  probar sobre equivalencia. */
+  /** Fase 31 — Atomic CSS: la hoja atómica y la medición del canje. No
+   *  reescribe nada. */
+  cssAtomic: (filename: string, content: string) =>
+    post<AtomizacionResponse>('/static/css-atomic', { filename, content }),
+
+  compilePareto: (language: string, content: string) =>
+    post<ParetoResponse>('/static/compile-pareto', { language, content, configs: [] }),
+
+  compileAsm: (language: string, content: string, optLevels: string[], features: string[]) =>
+    post<CompileAsmResponse>('/static/compile-asm', {
+      language,
+      content,
+      opt_levels: optLevels,
+      features,
+    }),
 
   // ── Execution Intelligence (Fase 23) ──────────────────────────────────────
 
@@ -627,6 +1093,17 @@ export const api = {
    * (compila + corre 4 tamaños), a diferencia de todo lo demás en este
    * cliente que es análisis estático instantáneo. */
   validateMatmulBigO: () => post<EmpiricalValidationResult>('/execution/validate-matmul', {}),
+  /** Fase 34, Línea A — mide el costo de compilación de la recursión de
+   * templates con una sonda propia; ver `tplcost.rs`. */
+  validateTemplateCost: () => post<TemplateCostResult>('/execution/validate-template-cost', {}),
+
+  /** Fase 34, Línea C — mide la misma curva en C++ y en D y las compara. */
+  compareMetaprogramming: () => post<ComparacionMetaprogramacion>('/execution/metaprogramming-cost', {}),
+
+  /** Fase 34, Linea E, paso 3 — corre GNATprove sobre un fuente Ada. Tarda
+   * mucho mas que cualquier otro analisis: un probador resolviendo formulas
+   * no es un parser. */
+  verifySpark: (content: string) => post<SparkResult>('/execution/spark-verify', { content }),
 
   /** Fase 26 — mismo patrón que `validateMatmulBigO`, generalizado a un
    * segundo kernel Sythrall-autor: bubble sort real en Zig, valida O(n²). */
@@ -657,4 +1134,49 @@ export const api = {
    * corre el kernel Fortran de matmul Y numpy real, mismos tamaños/datos,
    * y devuelve ambos lado a lado con una nota de comparación honesta. */
   compareMatmulVsNumpy: () => post<MatmulVsNumpyResult>('/execution/validate-matmul-vs-numpy', {}),
+
+  /** Fase 26 — séptimo kernel, tercera vez en Zig: agregación por categoría
+   * (suma/promedio, la forma detrás de un `groupby().agg()`), valida O(n). */
+  validateAggregationBigO: () => post<EmpiricalValidationResult>('/execution/validate-aggregation', {}),
+
+  /** Fase 26 — segunda pieza de "migrar de numpy/pandas/scikit-learn":
+   * corre el kernel Zig de agregación Y pandas real, mismos tamaños/datos,
+   * y devuelve ambos lado a lado — acá gana el kernel nativo, a diferencia
+   * de la pieza 1, con la salvedad de categorías fijas incluida en la nota. */
+  compareAggregationVsPandas: () => post<AggregationVsPandasResult>('/execution/validate-aggregation-vs-pandas', {}),
+
+  /** Fase 26 — octavo kernel, segunda vez en Fortran: regresión lineal
+   * univariada por mínimos cuadrados (forma cerrada), valida O(n). */
+  validateLinregBigO: () => post<EmpiricalValidationResult>('/execution/validate-linreg', {}),
+
+  /** Fase 26 — tercera y última pieza de "migrar de numpy/pandas/scikit-learn":
+   * corre el kernel Fortran de regresión lineal Y scikit-learn real, mismos
+   * tamaños/datos, y devuelve ambos lado a lado — gana el kernel nativo,
+   * mismo tipo de salvedad que la pieza 2 (pandas). */
+  compareLinregVsSklearn: () => post<LinregVsSklearnResult>('/execution/validate-linreg-vs-sklearn', {}),
+
+  /** Fase 26 — noveno kernel, cuarta vez en Zig y la primera en demostrar
+   * recursión: quicksort recursivo (partición de Lomuto), valida la misma
+   * forma O(n log n) que mergesort pero por una técnica genuinamente
+   * distinta (divide y vencerás recursivo, no fusión iterativa). */
+  validateQuicksortBigO: () => post<EmpiricalValidationResult>('/execution/validate-quicksort', {}),
+
+  /** Fase 26 — décimo kernel, tercera vez en Assembly y la primera en
+   * validar una forma SUB-LINEAL: búsqueda binaria iterativa. A diferencia
+   * de todos los demás, `estimated_exponent` acá se ajusta contra
+   * log2(tamaño del arreglo), no el tamaño en sí — un exponente ≈1.0
+   * significa que el tiempo escala linealmente con log2(n), la firma real
+   * de O(log n). Ver `binsearch_bench.rs` para la razón estadística. */
+  validateBinarySearchBigO: () => post<EmpiricalValidationResult>('/execution/validate-binary-search', {}),
+
+  /** Fase 19 (Machine Intelligence) — segundo bullet, cierra la fase: sube
+   * un ejecutable/librería compilado (sin filtro de extensión, el formato
+   * se detecta por firma binaria del lado Rust) y devuelve su estructura
+   * real. `xhrPost` en vez de `post()` porque el body es `multipart/form-data`
+   * (un archivo binario), no JSON — mismo mecanismo que `uploadZip`. */
+  parseExecutable: (file: File) => {
+    const form = new FormData()
+    form.append('file', file, file.name)
+    return xhrPost<ExecutableParseResult>('/binary/parse', form)
+  },
 }

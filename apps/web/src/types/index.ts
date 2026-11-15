@@ -197,6 +197,12 @@ export interface AppState {
     projectDashboard: StaticProjectResult | null
   }
   running: boolean
+  /** Momento (epoch ms) en que terminó el último análisis, sea de
+   * proyecto o del pipeline suelto. Existe para que el estado del
+   * topbar pueda decir "hace 12 min" en vez de solo "analizado": sin
+   * una marca de tiempo, un análisis de ayer y uno de recién se ven
+   * exactamente igual. `null` cuando todavía no corrió ninguno. */
+  lastAnalysisAt: number | null
   /** Un análisis de PROYECTO (parse-project, disparado desde Static o el
    * Dashboard) está en curso — distinto de `running` (el pipeline ad-hoc de
    * "▶ Analizar" del topbar) para no acoplar el guard de ese botón a un
@@ -243,26 +249,45 @@ export interface LogError {
   line: string
 }
 
+/** Respuesta de `/capabilities`.
+ *
+ * **Los nombres son los que el backend manda de verdad (`HAS_*`), no los que
+ * uno esperaría.** Este tipo declaraba `flake8`/`pylint`/`complexity`/`torch`
+ * en minúscula — campos que ese endpoint nunca devolvió. Compilaba igual por
+ * el index signature de abajo, y el resultado era que el panel "Servidor" del
+ * lado derecho mostraba TODO como no disponible, siempre, aunque flake8 y
+ * pylint estuvieran instalados. Un tipo que miente no falla: hace que la UI
+ * mienta en silencio.
+ *
+ * `HAS_COMPLEXITY_ENGINE` merece una nota aparte: es un chequeo hecho UNA
+ * sola vez cuando arranca la API (`check_complexity_engine_sync`, timeout de
+ * 0.5s) y nunca se reevalúa en esa corrida del proceso. En desarrollo la API
+ * y el sidecar Rust arrancan a la vez y el sidecar tarda mucho más en
+ * compilar, así que este flag suele quedar en `false` aunque el motor después
+ * funcione perfecto. Por eso quien lo muestre tiene que decir que es del
+ * arranque, no del momento. */
 export interface Capabilities {
   python: string
   server: string
   ts: string
-  flake8: boolean
-  pylint: boolean
-  complexity: boolean
-  numpy: boolean
-  pandas: boolean
-  polars: boolean
-  sklearn: boolean
-  lightgbm: boolean
-  torch: boolean
-  tensorflow: boolean
-  scipy: boolean
-  opencv: boolean
-  plotly: boolean
-  spacy: boolean
-  icecream: boolean
-  cython: boolean
+  HAS_FLAKE8: boolean
+  HAS_PYLINT: boolean
+  HAS_COMPLEXITY_ENGINE: boolean
+  HAS_NUMPY: boolean
+  HAS_PANDAS: boolean
+  HAS_SKLEARN: boolean
+  HAS_TORCH: boolean
+  HAS_TF: boolean
+  HAS_SCIPY: boolean
+  HAS_CV2: boolean
+  HAS_PLOTLY: boolean
+  HAS_POLARS: boolean
+  HAS_LGB: boolean
+  HAS_SPACY: boolean
+  HAS_ICECREAM: boolean
+  HAS_CYTHON: boolean
+  flake8_version?: string
+  pylint_version?: string
   cython_version?: string
   [key: string]: unknown
 }

@@ -87,8 +87,12 @@ CODE_EXTENSIONS = {
     ".f03",
     ".f08",
     ".for",
+    ".adb",
+    ".d",
+    ".ads",
     ".s",
     ".asm",
+    ".ipynb",
 }
 
 
@@ -221,8 +225,15 @@ PARSEABLE_EXTENSIONS = {
     ".f03",
     ".f08",
     ".for",
+    ".adb",
+    ".d",
+    ".ads",
     ".s",
     ".asm",
+    ".rs",
+    ".ipynb",
+    ".css",
+    ".html",
 }
 
 

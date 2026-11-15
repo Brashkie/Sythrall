@@ -19,7 +19,7 @@ import { MAX_RENDERED_CHILDREN, openProjectFile } from '../panels/upload'
 import { state } from '../store/state'
 import type { CodeFile } from '../types'
 import { buildMergedTree, type FolderTreeNode } from '../utils/file-tree'
-import { appendLog, debounce, fmtBytes, getExt, toast, uniqueId } from '../utils/helpers'
+import { appendLog, debounce, esc, fmtBytes, getExt, toast, uniqueId } from '../utils/helpers'
 import { icon, languageBadge } from '../utils/icons'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -148,12 +148,12 @@ function _renderTreeNode(node: FolderTreeNode, depth: number): string {
 
     return `
       <div class="tree-dir">
-        <div class="tree-row dir-row" style="padding-left:${pad + 6}px" data-tree-toggle="${_esc(node.path)}">
+        <div class="tree-row dir-row" style="padding-left:${pad + 6}px" data-tree-toggle="${esc(node.path)}">
           <span class="tree-expand">${isOpen ? '▾' : '▸'}</span>
-          <span class="tree-name">${_esc(node.name)}</span>
+          <span class="tree-name">${esc(node.name)}</span>
           ${node.children?.length ? `<span class="tree-count">${node.children.length}</span>` : ''}
         </div>
-        <div class="tree-children" ${isOpen ? '' : 'style="display:none"'}>
+        <div class="tree-children hidden" ${isOpen ? '' : ''}>
           ${childrenHtml}
           ${isOpen && hiddenCount > 0 ? `<div class="tree-truncated" style="padding-left:${(depth + 1) * 14 + 20}px">… +${hiddenCount} más (carpeta muy grande, no se muestran todos)</div>` : ''}
         </div>
@@ -168,11 +168,11 @@ function _renderTreeNode(node: FolderTreeNode, depth: number): string {
   return `
     <div class="tree-row file-row ${isActive ? 'active' : ''}"
       style="padding-left:${pad + 20}px"
-      data-tree-file="${_esc(node.path)}"
+      data-tree-file="${esc(node.path)}"
       ${cf ? `data-file-id="${cf.id}"` : ''}
-      title="${_esc(node.path)}">
+      title="${esc(node.path)}">
       <span>${extIcon(ext)}</span>
-      <span class="tree-name">${_esc(node.name)}</span>
+      <span class="tree-name">${esc(node.name)}</span>
       ${badge}
       ${cf ? `<button class="exp-file-close" data-remove-id="${cf.id}" title="Cerrar">✕</button>` : ''}
     </div>`
@@ -368,7 +368,7 @@ function _renderFileTabs(): void {
       (tab) => `
     <div class="exp-tab ${tab.id === _activeTabId ? 'exp-tab-active' : ''}" data-tab-id="${tab.id}">
       <span class="exp-tab-icon">${extIcon(_getExt(tab.name))}</span>
-      <span class="exp-tab-name">${tab.name}</span>
+      <span class="exp-tab-name">${esc(tab.name)}</span>
       ${tab.modified ? '<span class="exp-tab-dot">●</span>' : ''}
       <button class="exp-tab-close" data-close-tab="${tab.id}" title="Cerrar">✕</button>
     </div>
@@ -499,7 +499,7 @@ function _runSearch(): void {
       ? new RegExp(q, matchCase ? 'g' : 'gi')
       : new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), matchCase ? 'g' : 'gi')
   } catch {
-    results.innerHTML = '<div class="exp-search-empty" style="color:var(--err)">Regex inválido</div>'
+    results.innerHTML = '<div class="exp-search-empty text-err">Regex inválido</div>'
     return
   }
 
@@ -515,7 +515,7 @@ function _runSearch(): void {
       if (pattern.test(lineText)) {
         // Resaltar match
         pattern.lastIndex = 0
-        const highlighted = lineText.replace(pattern, (m) => `<mark class="exp-search-mark">${_esc(m)}</mark>`)
+        const highlighted = lineText.replace(pattern, (m) => `<mark class="exp-search-mark">${esc(m)}</mark>`)
         fileMatches.push({ line: i + 1, text: lineText.trim(), highlighted })
         totalMatches++
       }
@@ -527,7 +527,7 @@ function _runSearch(): void {
       <div class="exp-search-file">
         <div class="exp-search-file-head">
           <span>${extIcon(f.ext)}</span>
-          <span class="exp-search-file-name">${f.name}</span>
+          <span class="exp-search-file-name">${esc(f.name)}</span>
           <span class="exp-search-file-count">${fileMatches.length}</span>
         </div>
         ${fileMatches
@@ -559,7 +559,7 @@ export function toggleSearch(): void {
   _searchOpen ? closeSearch() : openSearch()
 }
 
-export function openSearch(): void {
+function openSearch(): void {
   _searchOpen = true
   const overlay = document.getElementById('exp-search-overlay')
   if (overlay) overlay.classList.add('exp-search-visible')
@@ -589,7 +589,7 @@ function renderOutline(file: CodeFile): void {
   if (!items.length) {
     container.innerHTML = `
       <div class="exp-outline-empty">
-        <div>${file.name}</div>
+        <div>${esc(file.name)}</div>
         <div style="color:var(--muted);font-size:.68rem;margin-top:4px">Sin símbolos detectados</div>
       </div>
     `
@@ -622,7 +622,7 @@ function renderOutline(file: CodeFile): void {
   let html = `
     <div class="exp-outline-header">
       <span>${extIcon(file.ext)}</span>
-      <span class="exp-outline-filename">${file.name}</span>
+      <span class="exp-outline-filename">${esc(file.name)}</span>
     </div>
   `
 
@@ -805,8 +805,4 @@ function _wireGlobalShortcuts(): void {
 function _getExt(filename: string): string {
   const m = filename.match(/\.[^.]+$/)
   return m ? m[0] : ''
-}
-
-function _esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }

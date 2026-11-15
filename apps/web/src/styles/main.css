@@ -2,34 +2,67 @@
    Sythrall — Main Styles
    ══════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Outfit:wght@300;500;700;800&display=swap');
+/* **Sin webfont.** Outfit es una geométrica con personalidad: linda, pero
+   lee "producto de diseño", no "herramienta de trabajo". `system-ui` hace
+   que la app se vea NATIVA del sistema operativo del usuario, que es lo que
+   hace toda herramienta enterprise — y de paso saca una petición de red
+   bloqueante del arranque. */
 @import './upload.css';
 @import './static-addon.css';
 @import './problems.css';
 @import './explorer.css';
 
 /* ── Variables ── */
+/* ── Sistema de color ──
+   **Neutro, denso, enterprise: el color se reserva para estado y para UN
+   acento.** Antes cada neutro tenía azul adentro (`#060810`, `#c8d4f0`,
+   `#1e2545`), y seis colores decorativos competían al mismo peso. Un gris
+   teñido lee "tema de editor"; un gris neutro lee "herramienta".
+
+   Los neutros van SÓLIDOS y no en alfa a propósito: `--b0`/`--b1`/`--b2` se
+   usan en 14 lugares como FONDO (separadores, barras de progreso, badges),
+   y con alfa esos se volverían translúcidos. Los valores son los que el
+   borde en alfa resuelve sobre la superficie, así que se ve igual sin el
+   riesgo. */
 :root {
-  --bg:     #060810;
-  --s0:     #0a0d1a;
-  --s1:     #0e1225;
-  --s2:     #141830;
-  --b0:     #1e2545;
-  --b1:     #242c55;
-  --b2:     #2d3768;
-  --ok:     #00f5a0;
-  --warn:   #ffb627;
-  --err:    #ff3366;
-  --info:   #3d9eff;
-  --purple: #b87dff;
-  /* Severidad "Alto"/Medium — entre --warn y --err. Ya se usaba como hex
-     literal repetido en 8+ lugares (static.ts, problems.ts, graph.ts) antes
-     de tener token propio — promovido acá para que dejen de duplicarlo. */
-  --orange: #ff8a00;
-  --txt:    #c8d4f0;
-  --muted:  #4a5880;
-  --mono: 'DM Mono', monospace;
-  --sans: 'Outfit', sans-serif;
+  --bg:     #0d0d0d;
+  --s0:     #151514;
+  --s1:     #1a1a19;
+  --s2:     #222221;
+  --b0:     #2a2a28;
+  --b1:     #343431;
+  --b2:     #45443f;
+  /* Estados. El valor de cada token es el que se puede usar como TEXTO;
+     para rellenos hay `--fill-*`, que es una tinta del mismo color. Tener
+     los dos separados es lo que hace que una pastilla se lea en los dos
+     temas — con un solo valor, o el texto no contrasta en claro o el
+     relleno quema en oscuro. */
+  --ok:     #34b834;
+  --warn:   #fab219;
+  --err:    #e66767;
+  --info:   #3987e5;
+  --purple: #a78bfa;
+  /* Severidad "Alto"/Medium — entre --warn y --err. */
+  --orange: #ec835a;
+  --txt:    #ffffff;
+  /* Nivel intermedio de texto, que no existía: todo lo que no era `--txt`
+     caía en `--muted`, así que un subtítulo y un pie de tabla se veían
+     igual de apagados. */
+  --txt-2:  #c3c2b7;
+  --muted:  #898781;
+  /* El acento ÚNICO. `--info` queda como alias por los ~80 usos que ya
+     existen; lo nuevo usa `--accent`. */
+  --accent:      #3987e5;
+  --accent-soft: rgba(57,135,229,.16);
+  --fill-ok:   rgba(52,184,52,.14);
+  --fill-warn: rgba(250,178,25,.16);
+  --fill-err:  rgba(230,103,103,.14);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-md: 0 4px 16px rgba(0,0,0,.45);
+  --shadow-lg: 0 16px 48px rgba(0,0,0,.6);
+  --focus: 0 0 0 3px rgba(57,135,229,.35);
+  --mono: ui-monospace, 'Cascadia Code', 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   --radius: 9px;
   --sidebar-w:   260px;
   --rightpanel-w: 320px;
@@ -64,21 +97,33 @@
    Oscuro sigue siendo el default (:root); este bloque solo pisa lo necesario
    cuando <html data-theme="light">. */
 [data-theme='light'] {
-  --bg:     #f4f6fb;
+  --bg:     #f9f9f7;
   --s0:     #ffffff;
-  --s1:     #eef1f8;
-  --s2:     #e4e8f3;
-  --b0:     #d7dced;
-  --b1:     #c5cbe3;
-  --b2:     #b3bad6;
-  --ok:     #00a877;
-  --warn:   #b8790a;
-  --err:    #d61a4a;
-  --info:   #1a6fd4;
-  --purple: #8b4fd6;
-  --orange: #c1560a;
-  --txt:    #1a2036;
-  --muted:  #6b7494;
+  --s1:     #fcfcfb;
+  --s2:     #f3f2ef;
+  --b0:     #e5e3dd;
+  --b1:     #d5d3cb;
+  --b2:     #c3c2b7;
+  /* En claro los estados son las variantes OSCURAS: el mismo verde que se
+     lee bien sobre negro es ilegible sobre blanco. */
+  --ok:     #006300;
+  --warn:   #8a5a00;
+  --err:    #b42323;
+  --info:   #1c5cab;
+  --purple: #6d4bb8;
+  --orange: #b8531f;
+  --txt:    #0b0b0b;
+  --txt-2:  #52514e;
+  --muted:  #898781;
+  --accent:      #2a78d6;
+  --accent-soft: rgba(42,120,214,.10);
+  --fill-ok:   rgba(12,163,12,.12);
+  --fill-warn: rgba(250,178,25,.20);
+  --fill-err:  rgba(208,59,59,.12);
+  --shadow-sm: 0 1px 2px rgba(11,11,11,.05);
+  --shadow-md: 0 4px 16px rgba(11,11,11,.08), 0 1px 3px rgba(11,11,11,.06);
+  --shadow-lg: 0 16px 48px rgba(11,11,11,.16), 0 2px 8px rgba(11,11,11,.08);
+  --focus: 0 0 0 3px rgba(42,120,214,.28);
   --glass-bg:        rgba(255,255,255,.92);
   --glass-bg-soft:   rgba(255,255,255,.85);
   --ghost-tint:       rgba(10,20,50,.04);
@@ -91,9 +136,28 @@
 html, body {
   height: 100%; overflow: hidden;
   background: var(--bg); color: var(--txt);
-  font-family: var(--sans); font-size: 15px;
+  /* 14px, no 15: una herramienta enterprise muestra MÁS datos por pantalla.
+     Con `system-ui` el mismo 14px se lee más grande que el 15 de Outfit,
+     porque las métricas de la fuente del sistema son distintas. */
+  font-family: var(--sans); font-size: 14px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
+
+/* **El foco tiene que verse, y no estaba definido en ningún lado.** Un
+   producto que se opera con teclado sin anillo de foco visible no es
+   navegable — y es lo primero que mira una auditoría de accesibilidad. */
+:focus-visible { outline: none; box-shadow: var(--focus); }
+::selection { background: var(--accent-soft); }
+* { scrollbar-width: thin; scrollbar-color: var(--b2) transparent; }
+
+/* Los numeros de metrica se leen en COLUMNA, uno debajo del otro, asi que
+   tienen que ser de ancho fijo — si no, `1` y `7` mueven la coma y la
+   columna baila. `tabular-nums` lo da sin obligar a monoespaciada, que para
+   un KPI se lee como salida de terminal en vez de como un dato. */
+.num { font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
 
 /* ── Iconos (SVG inline, ver utils/icons.ts) ── */
 .icon { flex-shrink: 0; vertical-align: -3px; }
@@ -119,7 +183,10 @@ html, body {
 .lang-java   { background: #f06529; }
 .lang-cpp    { background: #659ad2; }
 .lang-fortran{ background: #734f96; }
+.lang-ada    { background: #0c5a27; }
+.lang-d      { background: #b03931; }
 .lang-asm    { background: #6e4c13; }
+.lang-notebook{ background: #f37626; }
 .lang-shell  { background: #4a5880; color: var(--txt); }
 .lang-ruby   { background: #cc342d; }
 .lang-php    { background: #787cb5; }
@@ -181,11 +248,15 @@ html, body {
 .be-err     { border-color: rgba(255,51,102,.3); background: rgba(255,51,102,.07); color: var(--err);  }
 .be-loading { border-color: rgba(255,182,39,.3); background: rgba(255,182,39,.07); color: var(--warn); }
 
+/* Vive en el panel de APIs (Servicios), no en el topbar — ver el comentario
+   en index.html. Por eso no tiene reglas responsive que la escondan: en su
+   panel tiene todo el ancho, y esconder el campo principal de la pantalla que
+   uno abrió a propósito no tendría sentido. */
 .url-bar {
   display: flex; align-items: center;
   background: var(--s1); border: 1px solid var(--b0);
   border-radius: 8px; padding: 0 10px; gap: 7px;
-  flex: 1; min-width: 160px; max-width: 360px;
+  flex: 1; min-width: 180px; max-width: 420px;
   transition: border-color .2s;
 }
 .url-bar:focus-within { border-color: var(--info); }
@@ -197,7 +268,83 @@ html, body {
 .url-bar input::placeholder { color: var(--muted); }
 .url-bar-method { color: var(--muted); font-size: .8rem; font-family: var(--mono); }
 
-.quick-urls { display: flex; gap: 4px; }
+/* Atajos a la infraestructura local de Sythrall (`:8420`, `:3000`, `:5173`).
+   Ocultos salvo en modo desarrollador — ver utils/devMode.ts: el probador de
+   endpoints de al lado SÍ es del producto, esto no. */
+.quick-urls { display: none; align-items: center; gap: 4px; }
+:root[data-devmode='on'] .quick-urls { display: flex; }
+.quick-urls-lbl {
+  font-size: .62rem; letter-spacing: .8px; text-transform: uppercase;
+  color: var(--muted); font-family: var(--mono); margin-right: 2px;
+}
+/* Aviso de "esto es lo último guardado". No es un error ni una advertencia
+   de que algo esté mal — es una precisión sobre CUÁNDO se midió — así que va
+   en el tono informativo, no en rojo ni naranja. */
+.settings-runtime {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--b0); border-radius: var(--radius); overflow: hidden;
+}
+.settings-runtime-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; font-size: .78rem;
+  border-bottom: 1px solid var(--b0);
+}
+.settings-runtime-row:last-child { border-bottom: none; }
+.settings-runtime-k { color: var(--muted); min-width: 140px; }
+.settings-runtime-v {
+  flex: 1; color: var(--txt); font-family: var(--mono); font-size: .74rem;
+  overflow-wrap: anywhere;
+}
+.settings-runtime-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+.dash-stale {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 14px; margin-bottom: 12px;
+  background: var(--s1); border: 1px solid var(--b0);
+  border-left: 3px solid var(--info); border-radius: var(--radius);
+}
+.dash-stale-txt { flex: 1; min-width: 220px; font-size: .78rem; color: var(--muted); line-height: 1.5; }
+
+.app-dialog-choices { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 6px; }
+.app-dialog-choice {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 8px 9px; border-radius: 7px; cursor: pointer;
+  transition: background .15s;
+}
+.app-dialog-choice:hover { background: var(--s2); }
+.app-dialog-choice input { margin-top: 2px; flex-shrink: 0; accent-color: var(--info); }
+.app-dialog-choice-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.app-dialog-choice-label { font-size: .84rem; color: var(--txt); }
+.app-dialog-choice-desc  { font-size: .72rem; color: var(--muted); line-height: 1.45; }
+/* El motivo por el que una etapa no aplica es información, no un error: va en
+   el mismo lugar que la descripción, no en rojo. */
+.app-dialog-choice-why   { font-size: .72rem; color: var(--muted); font-style: italic; }
+.app-dialog-choice.is-disabled { cursor: not-allowed; opacity: .5; }
+.app-dialog-choice.is-disabled:hover { background: none; }
+
+.dash-unrun {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  text-align: center; padding: 46px 20px;
+  background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius);
+  margin-bottom: 14px;
+}
+.dash-unrun-title { font-size: 1.05rem; font-weight: 600; color: var(--txt); }
+.dash-unrun-desc {
+  font-size: .82rem; color: var(--muted); line-height: 1.6;
+  max-width: 460px; margin: 0;
+}
+
+.flow-idle { padding: 14px 2px 4px; }
+.flow-idle-title {
+  font-size: .78rem; font-weight: 600; color: var(--txt); margin-bottom: 4px;
+}
+.flow-idle-desc { font-size: .72rem; color: var(--muted); line-height: 1.5; }
+
+.api-toolbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 9px 14px; border-bottom: 1px solid var(--b0);
+  background: var(--s0); flex-shrink: 0;
+}
 .topbar-spacer { flex: 1; }
 
 /* ── Mobile toggle / FAB / Bottom nav — ocultos por defecto, JS los muestra
@@ -222,9 +369,19 @@ html, body {
  * Terminal (deshabilitado sin proyecto activo, ver updateTerminalAvailability
  * en store/state.ts) usa .btn-ghost, sin ningún estilo :disabled hasta ahora. */
 .btn:disabled { opacity: .4; cursor: not-allowed; }
-.btn-run     { background: linear-gradient(135deg, var(--info), var(--purple)); color: #fff; padding: 7px 16px; }
-.btn-run:hover { opacity: .88; transform: translateY(-1px); }
-.btn-run:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+/* Toda la app tenía cero reglas `:focus-visible` — navegar por teclado no
+ * mostraba ningún indicador de foco en botones/tabs/nav del menú de
+ * settings. `:focus-visible` (no `:focus`) para no mostrar el anillo en
+ * clicks de mouse, solo en navegación real por teclado. */
+.btn:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+/* **El boton principal deja el degrade.** Un degradé azul→violeta es el
+   sello de un producto de consumo; una herramienta de trabajo usa su color
+   de acento, plano, y se distingue por CONTRASTE y no por efecto. El
+   `translateY` del hover tambien se va: mover el boton bajo el cursor es
+   una animacion de landing page, no de una app que se usa ocho horas. */
+.btn-run     { background: var(--accent); color: #fff; padding: 7px 16px; box-shadow: var(--shadow-sm); }
+.btn-run:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
+.btn-run:disabled { opacity: .35; cursor: not-allowed; }
 .btn-ghost   { background: var(--ghost-tint); color: var(--txt); border: 1px solid var(--b1); }
 .btn-ghost:hover { background: var(--ghost-tint-hover); }
 .btn-sm      { padding: 4px 9px; font-size: .82rem; }
@@ -319,6 +476,7 @@ html, body {
   transition: all .2s; user-select: none; flex-shrink: 0;
 }
 .nav-rail .tab:hover  { color: var(--txt); background: var(--ghost-tint); }
+.nav-rail .tab:focus-visible { outline: 2px solid var(--info); outline-offset: -2px; }
 .nav-rail .tab.active { color: var(--info); background: rgba(61,158,255,.1); }
 .nav-rail .tab-label  { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tbadge {
@@ -330,7 +488,6 @@ html, body {
 }
 .tbadge-err  { background: var(--err);  color: #fff; }
 .tbadge-ok   { background: var(--ok);   color: #000; }
-.tbadge-warn { background: var(--warn); color: #000; }
 
 .nav-rail-collapse-btn {
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
@@ -338,6 +495,163 @@ html, body {
   background: transparent; border: none; color: var(--muted); cursor: pointer;
 }
 .nav-rail-collapse-btn:hover { color: var(--txt); background: var(--ghost-tint); }
+
+/* ── Usuario (footer del nav-rail) — pedido explícito del usuario, con el
+ * footer de cuenta de claude.ai como referencia: avatar + nombre al fondo
+ * de la sidebar, click abre un menú, "Configuración" del menú abre un
+ * modal de settings aparte (ver más abajo). .nav-rail-spacer empuja este
+ * bloque al fondo sin necesitar position:absolute. */
+.nav-rail-spacer { flex: 1; min-height: var(--space-2); }
+
+.nav-user {
+  flex-shrink: 0; position: relative;
+  margin: var(--space-2) var(--space-2) 0; padding-top: var(--space-2);
+  border-top: 1px solid var(--b0);
+}
+.nav-user-btn {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 7px 8px; border-radius: var(--radius);
+  background: transparent; border: none; cursor: pointer; text-align: left;
+}
+.nav-user-btn:hover { background: var(--ghost-tint); }
+.nav-user-btn:focus-visible { outline: 2px solid var(--info); outline-offset: -2px; }
+.nav-user-avatar {
+  flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--info); color: #fff;
+  font-family: var(--sans); font-size: .8rem; font-weight: 700;
+}
+.nav-user-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.nav-user-name {
+  font-family: var(--sans); font-size: .85rem; font-weight: 600; color: var(--txt);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.nav-user-plan { font-size: .72rem; color: var(--muted); }
+.nav-user-chevron { flex-shrink: 0; color: var(--muted); }
+
+/* Colapsado: solo el avatar, centrado — mismo criterio que el resto del
+ * nav-rail colapsado (logo/proyecto/tabs ya ocultan su texto arriba). */
+.nav-rail.collapsed .nav-user-btn { justify-content: center; padding: 7px 0; }
+.nav-rail.collapsed .nav-user-info,
+.nav-rail.collapsed .nav-user-chevron { display: none; }
+
+/* Menú desplegable — flota arriba del botón (no abajo, no hay espacio
+ * debajo al ser el último elemento del rail), mismo popup-shape que el
+ * resto de la app (fondo --s1, borde --b0, sombra). */
+.nav-user-menu {
+  display: none;
+  position: absolute; left: var(--space-2); right: var(--space-2); bottom: calc(100% + 6px);
+  background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  padding: 6px; z-index: 20;
+}
+.nav-user-menu.open { display: block; }
+.nav-user-menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 9px; border-radius: calc(var(--radius) - 2px);
+  background: transparent; border: none; cursor: pointer; text-align: left;
+  font-family: var(--sans); font-size: .85rem; color: var(--txt);
+}
+.nav-user-menu-item:hover { background: var(--ghost-tint); }
+.nav-user-menu-item:focus-visible { outline: 2px solid var(--info); outline-offset: -2px; }
+.nav-user-menu-item-danger { color: var(--err); }
+.nav-user-menu-sep { height: 1px; background: var(--b0); margin: 5px 2px; }
+
+/* ── Diálogos de la app (utils/dialog.ts) ──
+   Reemplazan a `window.prompt`/`window.confirm`, que bloqueaban el hilo
+   principal e ignoraban el tema por ser chrome del navegador. */
+.app-dialog-overlay {
+  display: none;
+  position: fixed; inset: 0; z-index: 10001;
+  background: rgba(0,0,0,.5); backdrop-filter: blur(2px);
+  align-items: center; justify-content: center;
+  padding: 16px;
+}
+.app-dialog-overlay.open { display: flex; }
+.app-dialog {
+  width: min(420px, 100%);
+  background: var(--s0); border: 1px solid var(--b0); border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.4);
+  padding: 20px;
+}
+.app-dialog-title { font-size: 1rem; font-weight: 700; color: var(--txt); margin-bottom: 6px; }
+.app-dialog-msg   { font-size: .87rem; color: var(--muted); line-height: 1.5; }
+/* Comparte `.input`; solo conserva lo que es propio del dialogo. */
+.app-dialog-input { width: 100%; margin-top: 14px; }
+.app-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+/* ── Modal de Configuración ── */
+.settings-modal-overlay {
+  display: none;
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(0,0,0,.5); backdrop-filter: blur(2px);
+  align-items: center; justify-content: center;
+}
+.settings-modal-overlay.open { display: flex; }
+.settings-modal {
+  position: relative;
+  width: min(760px, 92vw); height: min(560px, 86vh);
+  background: var(--s0); border: 1px solid var(--b0); border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.4);
+  display: flex; overflow: hidden;
+}
+.settings-modal-close {
+  position: absolute; top: var(--space-2); right: var(--space-2);
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: transparent; border: none; color: var(--muted); cursor: pointer;
+}
+.settings-modal-close:hover { color: var(--txt); background: var(--ghost-tint); }
+
+.settings-modal-sidebar {
+  flex-shrink: 0; width: 200px; padding: var(--space-3) var(--space-2);
+  background: var(--s1); border-right: 1px solid var(--b0);
+  display: flex; flex-direction: column; gap: 2px; overflow-y: auto;
+}
+.settings-modal-title {
+  font-family: var(--sans); font-size: 1rem; font-weight: 700; color: var(--txt);
+  padding: var(--space-1) var(--space-2) var(--space-2);
+}
+.settings-modal-nav-label {
+  font-size: .72rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+  color: var(--muted); padding: var(--space-2) var(--space-2) 2px;
+}
+.settings-modal-nav-group { display: flex; flex-direction: column; gap: 1px; }
+.settings-modal-nav-item {
+  display: block; width: 100%; text-align: left;
+  padding: 7px var(--space-2); border-radius: var(--radius);
+  background: transparent; border: none; cursor: pointer;
+  font-family: var(--sans); font-size: .87rem; color: var(--muted);
+}
+.settings-modal-nav-item:hover { color: var(--txt); background: var(--ghost-tint); }
+.settings-modal-nav-item.active { color: var(--info); background: rgba(61,158,255,.1); }
+.settings-modal-nav-item:focus-visible { outline: 2px solid var(--info); outline-offset: -2px; }
+
+.settings-modal-content { flex: 1; min-width: 0; overflow-y: auto; padding: var(--space-4) 28px; }
+.settings-section-title { font-family: var(--sans); font-size: 1.05rem; font-weight: 700; color: var(--txt); margin-bottom: var(--space-3); }
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  padding: var(--space-3) 0; border-bottom: 1px solid var(--b0);
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-row-label { font-family: var(--sans); font-size: .87rem; color: var(--txt); }
+.settings-row-hint { font-size: .78rem; color: var(--muted); margin-top: 2px; }
+.settings-row-input { min-width: 180px; }
+.settings-theme-options { display: flex; gap: var(--space-2); }
+.settings-theme-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 12px; border-radius: var(--radius);
+  background: var(--s1); border: 1px solid var(--b1); color: var(--muted); cursor: pointer;
+  font-family: var(--sans); font-size: .83rem;
+}
+.settings-theme-btn:hover { color: var(--txt); }
+.settings-theme-btn.active { color: var(--info); border-color: var(--info); background: rgba(61,158,255,.08); }
+.settings-empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-2); text-align: center; padding: 40px var(--space-3);
+  color: var(--muted); font-family: var(--sans); font-size: .87rem;
+}
+.settings-empty-state .icon { color: var(--muted); opacity: .6; }
 
 /* ── Colapsado: vuelve exactamente al layout compacto original (ícono
  * centrado, sin texto) — no un panel que desaparece, solo más angosto. ── */
@@ -442,7 +756,6 @@ html, body {
   border-bottom: 1px solid var(--b0);
   font-family: var(--mono); font-size: .83rem; color: var(--muted);
 }
-.terminal-panel-title { color: var(--txt); font-weight: 700; }
 .terminal-panel-main { display: flex; flex: 1; min-height: 0; }
 .terminal-panel-body { flex: 1; min-height: 0; min-width: 0; padding: 4px 8px; }
 .terminal-panel-body .xterm { height: 100%; }
@@ -656,15 +969,52 @@ html, body {
 
 /* ── Dashboard ── */
 .dash-scroll { overflow-y: auto; flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 14px; align-items: stretch; min-width: 0; min-height: 0; }
-.stat-card   { background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius); padding: 14px; transition: border-color .2s; min-height: 0; min-width: 0; overflow: hidden; }
-.stat-card:hover { border-color: var(--b2); }
-.sc-lbl { font-size: .82rem; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
-.sc-val { font-family: var(--mono); font-size: 2rem; font-weight: 500; line-height: 1; }
-.sc-sub { font-size: .93rem; color: var(--muted); margin-top: 4px; }
+/* KPI. **La etiqueta va ARRIBA y el numero abajo**, alineados a la
+   izquierda: es el orden en que se lee una tarjeta de metrica (primero que
+   mide, despues cuanto). El numero deja la monoespaciada — en un KPI se lee
+   como salida de terminal — y deja el color decorativo: el color se reserva
+   para cuando significa algo (un umbral cruzado), no para distinguir una
+   tarjeta de la de al lado. */
+.stat-card   { background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius); padding: 13px 15px; transition: border-color .15s; min-height: 0; min-width: 0; overflow: hidden; }
+.stat-card:hover { border-color: var(--b1); }
+.sc-lbl { font-size: .71rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+.sc-val { font-size: 1.7rem; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.sc-sub { font-size: .82rem; color: var(--muted); margin-top: 2px; }
 .charts-row  { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; flex-shrink: 0; min-width: 0; }
-.chart-card  { background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius); padding: 14px; min-height: 0; min-width: 0; overflow: hidden; }
-.chart-card.wide { grid-column: span 2; min-width: 0; }
-.cc-head { font-size: .72rem; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+
+/* **`.chart-card` repetia `.card` entera** (fondo, borde, radio, padding).
+   Ahora la reusa y solo agrega lo suyo: los `min-width:0` que hacen falta
+   para que una tarjeta dentro de un grid no se estire con su contenido. */
+.chart-card  {
+  background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 14px 16px; min-height: 0; min-width: 0; overflow: hidden;
+}
+.chart-card.wide { grid-column: 1 / -1; min-width: 0; }
+
+/* ── Grid del Dashboard ─────────────────────────────────────────────────
+   **Un tablero no es una pila de bloques a ancho completo — eso es un
+   informe.** Lo que separa a los dos es que el tablero tiene una columna
+   PRINCIPAL y una secundaria: el ojo entra por la grande y usa la chica de
+   contexto. Con todo al mismo ancho no hay por donde entrar, y la pagina se
+   lee de arriba a abajo como un documento.
+
+   Tres columnas, y los bloques declaran cuanto ocupan. Es la misma forma
+   que usa la referencia (`xl:grid-cols-3` con `col-span-2`). */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+.dash-grid > .span-2 { grid-column: span 2; min-width: 0; }
+.dash-grid > .span-3 { grid-column: 1 / -1; min-width: 0; }
+
+/* Mismo rotulo que `.ms-title`/`.eyebrow`. Tenia `letter-spacing: 1.3px` y
+   peso 700 —la escala vieja, mas pesada—, asi que dos titulos de seccion
+   contiguos se veian de dos familias distintas. */
+.cc-head { font-size: .72rem; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 
 /* ── Dashboard: widgets project-centric (rediseño Fase 2) ── */
 .dash-project-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -728,6 +1078,31 @@ html, body {
 .dash-lang-support-grid { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 8px; }
 .dash-lang-support-row  { display: flex; align-items: center; gap: 6px; font-family: var(--sans); font-size: .83rem; color: var(--txt); }
 
+/* ── Panorama entre proyectos (Fase 28) ──
+   Fila COMPLETA por proyecto, apiladas — a diferencia de
+   .dash-lang-support-grid de arriba, que envuelve chips de ancho variable en
+   una sola línea: acá cada fila tiene que alinear sus columnas (nombre /
+   scores / delta) con la de arriba para poder compararlas de un vistazo. */
+.dash-ov-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 8px; border: 1px solid var(--b0); border-radius: 6px;
+  background: var(--s0); font-size: .8rem; color: var(--txt);
+  transition: border-color .12s ease, background .12s ease;
+}
+.dash-ov-row + .dash-ov-row { margin-top: 6px; }
+.dash-ov-row.clickable { cursor: pointer; }
+.dash-ov-row.clickable:hover { border-color: var(--info); background: var(--s2); }
+.dash-ov-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-ov-scores { display: flex; gap: 8px; font-family: var(--mono); font-size: .72rem; }
+.dash-ov-overall { font-family: var(--mono); font-weight: 600; min-width: 2.4em; text-align: right; }
+.dash-ov-meta { color: var(--muted); font-family: var(--mono); font-size: .68rem; white-space: nowrap; }
+/* Debajo de ~560px las 4 columnas no entran en una línea legible — el bloque
+   de scores baja a su propia fila en vez de comprimir el nombre a 3 letras. */
+@media (max-width: 560px) {
+  .dash-ov-row { flex-wrap: wrap; }
+  .dash-ov-name { flex-basis: 100%; }
+}
+
 /* ── Editor ── */
 .editor-bar { padding: 7px 14px; background: var(--s0); border-bottom: 1px solid var(--b0); display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
 #editor-container { flex: 1; min-height: 0; min-width: 0; }
@@ -740,6 +1115,14 @@ html, body {
 }
 .issues-toolbar { gap: 7px; }
 .log-toolbar    { padding: 7px 14px; }
+/* `white-space:nowrap` + `flex-shrink:0`: sin esto, en anchos chicos el flex
+   comprimía la etiqueta y "Scroll" quedaba cortada contra el borde derecho
+   (visible en una captura a 1400px, no hace falta un móvil para reproducirlo).
+   Vive acá y no como estilo inline en index.html, como estaba. */
+.log-autoscroll {
+  display: flex; align-items: center; gap: 4px; flex-shrink: 0; white-space: nowrap;
+  font-size: .68rem; color: var(--muted); cursor: pointer;
+}
 
 /* ── Issues ── */
 .issues-scroll  { overflow-y: auto; flex: 1; padding: 12px; }
@@ -778,8 +1161,8 @@ html, body {
 .acm-v { font-family: var(--mono); font-size: 1.03rem; font-weight: 500; }
 
 /* ── Diagram ── */
-.diag-sel { background: var(--s2); border: 1px solid var(--b1); border-radius: 6px; padding: 5px 9px; color: var(--txt); font-family: var(--sans); font-size: .83rem; outline: none; cursor: pointer; }
-.diag-sel:focus { border-color: var(--info); }
+/* `.diag-sel` es un `<select>` y ahora comparte la regla de `.input` — ver
+   la capa de componentes al final del archivo. */
 .diag-scroll { overflow-y: auto; overflow-x: auto; flex: 1; padding: 16px; }
 #mermaid-output { min-height: 200px; background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius); padding: 18px; overflow: auto; }
 .mermaid-code  { background: var(--s2); border: 1px solid var(--b0); border-radius: 7px; padding: 12px; font-family: var(--mono); font-size: .83rem; line-height: 1.7; color: var(--info); overflow-x: auto; white-space: pre; margin-top: 12px; max-height: 180px; overflow-y: auto; }
@@ -789,15 +1172,24 @@ html, body {
 
 /* ── Metrics ── */
 .metrics-scroll  { overflow-y: auto; flex: 1; padding: 14px; }
-.metric-section  { background: var(--s1); border: 1px solid var(--b0); border-radius: var(--radius); padding: 12px; margin-bottom: 12px; }
-.ms-title { font-size: .83rem; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); margin-bottom: 9px; padding-bottom: 6px; border-bottom: 1px solid var(--b0); }
+/* **La seccion deja de ser una caja.** Antes era una tarjeta con fondo y
+   borde que contenia otras tarjetas con fondo y borde: dos niveles de caja
+   anidados, que es ruido. Ahora agrupa por TIPOGRAFIA y ESPACIO —un titulo
+   y una separacion— y la unica caja es la del item. */
+.metric-section  { background: transparent; border: 0; border-radius: 0; padding: 0; margin-bottom: 26px; }
+.metric-section:last-child { margin-bottom: 0; }
+.ms-title { font-size: .74rem; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--b0); }
 .metric-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--b0); font-size: .97rem; }
 .metric-row:last-child { border: none; }
 .mr-k { color: var(--muted); font-family: var(--mono); font-size: .91rem; }
 .mr-v { font-family: var(--mono); font-weight: 500; }
 .complexity-bar { height: 5px; background: var(--b0); border-radius: 3px; margin-top: 3px; overflow: hidden; }
 .cb-fill { height: 100%; border-radius: 3px; transition: width .6s; }
-.rank-A { color: var(--ok);  } .rank-B { color: #8ef5c0; }
+/* .rank-B era un verde pálido hardcodeado (#8ef5c0, el valor del tema
+ * oscuro) — en tema claro (fondo casi blanco) quedaba casi invisible, una
+ * regresión real de legibilidad. `color-mix` entre --ok/--warn se resuelve
+ * theme-aware automáticamente, sin inventar un token nuevo solo para esto. */
+.rank-A { color: var(--ok);  } .rank-B { color: color-mix(in srgb, var(--ok) 50%, var(--warn) 50%); }
 .rank-C { color: var(--warn);} .rank-D { color: var(--orange); }
 .rank-E, .rank-F { color: var(--err); }
 
@@ -965,7 +1357,6 @@ html, body {
  * ("Todavía no hay nada que mostrar acá"), no valores de código; usado en
  * muchos paneles distintos. */
 .empty       { text-align: center; padding: 24px; color: var(--muted); font-size: .9rem; font-family: var(--sans); }
-.empty-icon  { font-size: 26px; display: block; margin-bottom: 7px; }
 .empty .btn  { margin-top: 10px; pointer-events: auto; }
 .tag         { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 3px; font-family: var(--mono); font-size: .75rem; font-weight: 700; }
 .tg-ok   { background: rgba(0,245,160,.12);  color: var(--ok);   }
@@ -985,11 +1376,35 @@ input[type=file] { display: none; }
 @keyframes toast-in  { from { transform: translateY(16px); opacity: 0; } }
 @keyframes toast-out { to   { transform: translateY(16px); opacity: 0; } }
 
+/* ── Toasts ──
+   Antes vivían como un `cssText` inline en `utils/helpers.ts` con los colores
+   HARDCODEADOS en hex del tema oscuro (`#141830` de fondo, `#00f5a0` de
+   texto) — en tema claro quedaba una caja oscura con verde neón encima,
+   ilegible y fuera de lugar. Acá usan los mismos tokens que el resto de la
+   app, así que el tema claro los pisa solo. */
+#toast-container {
+  position: fixed; bottom: 20px; right: 20px; z-index: 9999;
+  display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+}
+.toast {
+  background: var(--s2); border: 1px solid var(--b1); border-left: 3px solid var(--muted);
+  border-radius: var(--radius); padding: 10px 16px;
+  font-size: 13px; font-family: var(--mono); color: var(--txt);
+  animation: toast-in .25s ease; pointer-events: auto;
+  max-width: 320px; box-shadow: 0 6px 24px rgba(0,0,0,.28);
+}
+.toast-ok   { border-left-color: var(--ok); }
+.toast-err  { border-left-color: var(--err); }
+.toast-warn { border-left-color: var(--warn); }
+.toast-info { border-left-color: var(--info); }
+.toast-leaving { animation: toast-out .25s ease forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .toast, .toast-leaving { animation: none; }
+}
+
 /* ══════════════════════════════════════════════════════════
    RESPONSIVE — Sistema completo
    ──────────────────────────────────────────────────────────
-   1650px+  Desktop grande    → topbar completo (logo, badges, url-bar, atajos)
-   1650px   Topbar compacto   → oculta atajos de puerto (no caben)
    1100px   Desktop normal    → panel derecho más angosto
     900px   Tablet landscape  → panel derecho como drawer
     680px   Tablet portrait   → sidebar drawer + topbar slim
@@ -997,16 +1412,10 @@ input[type=file] { display: none; }
     360px   Móvil pequeño     → ultra compacto
 ══════════════════════════════════════════════════════════ */
 
-/* ━━━ 1650px: Topbar compacto ━━━
-   El topbar tiene demasiados elementos con flex-shrink:0 (logo, badge,
-   url-bar, 3 atajos de puerto, pill, auto, export, run) para caber en
-   anchos "de laptop" normales — sin este breakpoint, el botón ▶ Analizar
-   queda fuera de pantalla (scroll horizontal sin scrollbar visible). */
-@media (max-width: 1650px) {
-  .topbar [data-quick-url] { display: none; }
-  .topbar [data-quick-url] + * { display: none; }
-  .url-bar                 { max-width: 320px; }
-}
+/* El breakpoint de 1650px que había acá existía por un problema que ya no
+   existe: el topbar no entraba porque cargaba la barra de URL y los 3 atajos
+   de puerto. Al mudarlos al panel de APIs, el topbar quedó con la mitad de
+   los elementos y entra sin necesidad de esconder nada. */
 
 /* ━━━ 1100px: Desktop compacto ━━━ */
 @media (max-width: 1100px) {
@@ -1015,11 +1424,6 @@ input[type=file] { display: none; }
     --sidebar-w:    220px;
   }
   .rp         { min-width: 240px; }
-  /* .url-bar ya estaba clavado en su min-width:160px con max-width:240px —
-   * reducir el max-width no achicaba nada, el piso ya era el límite real.
-   * Es chrome secundario (probador de API, ya oculto del todo a 480px) —
-   * ocultarlo acá en vez de perseguir un ancho que no lo iba a mover. */
-  .url-bar    { display: none; }
   /* Los 4 labels de .rp-tabs necesitan ~286px para no truncar (medido);
    * a 240px cada uno quedaría en 1-2 letras + "…", ilegible aunque ya no se
    * vea "roto". Solo ícono + tooltip (title=) es más legible que texto
@@ -1108,11 +1512,12 @@ input[type=file] { display: none; }
   /* Dashboard 2 columnas */
   .charts-row { grid-template-columns: minmax(0,1fr); }
   .chart-card.wide { grid-column: span 1; }
+  /* A este ancho una columna secundaria de 1/3 queda mas angosta que su
+     contenido, asi que el grid colapsa entero. */
+  .dash-grid { grid-template-columns: minmax(0, 1fr); }
+  .dash-grid > .span-2, .dash-grid > .span-3 { grid-column: span 1; }
   .dash-cc-fn-row { grid-template-columns: minmax(0,1fr) 80px 30px 70px; gap: 6px; }
 
-  /* Topbar — .url-bar no necesita regla acá: ya está display:none desde el
-     tier de 1100px de arriba, y eso se mantiene en todos los tiers más
-     angostos también (no "expira" al cruzar a un breakpoint más chico). */
   .pill       { display: none; }
 }
 
@@ -1146,8 +1551,6 @@ input[type=file] { display: none; }
   .pill                           { display: none; }
   #auto-btn                       { display: none; }
   #btn-export                     { display: none; }
-  .topbar [data-quick-url]        { display: none; }
-  .topbar [data-quick-url] + *    { display: none; }
 
   /* Mostrar botón hamburguesa */
   .mobile-toggle { display: flex !important; }
@@ -1196,7 +1599,6 @@ input[type=file] { display: none; }
     gap: 6px;
   }
   #run-btn    { padding: 5px 10px; font-size: .87rem; }
-  .topbar [data-quick-url] { display: none; }
   .be-badge   { padding: 3px 7px; font-size: .73rem; }
   /* #be-txt ya se ocultó desde el tier de 1100px de arriba — acá abajo no
    * hace falta repetirlo, sigue aplicando en cascada. */
@@ -1379,7 +1781,12 @@ input[type=file] { display: none; }
   background: var(--s2); border: 1px solid var(--b1); border-radius: 7px;
   padding: 2px; flex-shrink: 0;
 }
-.diag-view-toggle button.active { background: #3d9eff14; border-color: var(--info); color: var(--info); font-weight: 600; }
+/* El fondo era #3d9eff14 hardcodeado (--info del tema OSCURO con alpha fija)
+ * — en tema claro mostraba el azul oscuro en vez de var(--info) real
+ * (#1a6fd4), un tinte que no combinaba con el propio border-color/color de
+ * esta misma regla. `color-mix` deriva el tinte de --info sea cual sea el
+ * tema activo. */
+.diag-view-toggle button.active { background: color-mix(in srgb, var(--info) 8%, transparent); border-color: var(--info); color: var(--info); font-weight: 600; }
 
 .zoom-btn {
   width: 26px;
@@ -1500,4 +1907,379 @@ input[type=file] { display: none; }
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CAPA DE COMPONENTES
+   ══════════════════════════════════════════════════════════════════════════
+   **Sythrall no tenia una.** Habia 329 atributos `style="..."` escritos a
+   mano en los paneles, y el mas repetido —siete veces— era esto:
+
+       style="background:var(--s1);border:1px solid var(--b0);
+              border-radius:var(--radius);padding:14px"
+
+   O sea: una tarjeta, copiada siete veces. Esa es la causa de que dos
+   secciones que deberian verse iguales se vean distintas, y de que cambiar
+   el aspecto de algo obligue a buscar y reemplazar en cuatro archivos.
+
+   Lo que sigue es el vocabulario minimo para que un panel se escriba SIN
+   estilos inline: superficies, rotulos, pastillas y utilidades de layout.
+   No es un framework — son las piezas que ya se estaban repitiendo, con
+   nombre.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Superficies ────────────────────────────────────────────────────────── */
+.card {
+  background: var(--s1);
+  border: 1px solid var(--b0);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.card-pad { padding: 14px 16px; }
+.card-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 44px; padding: 9px 16px;
+  border-bottom: 1px solid var(--b0);
+}
+.card-title { font-size: .87rem; font-weight: 600; color: var(--txt); }
+.card-sub   { font-size: .8rem; color: var(--muted); margin-top: 2px; }
+
+/* ── Rotulo de seccion ──────────────────────────────────────────────────
+   El mismo estilo que `.ms-title`, disponible suelto para cuando no hay
+   una `.metric-section` alrededor. */
+.eyebrow {
+  font-size: .71rem; font-weight: 600; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--muted);
+}
+
+/* ── Pastillas ──────────────────────────────────────────────────────────
+   `--tag-color` la pinta; sin el, es neutra. El fondo es una TINTA del
+   color y el texto va en el color pleno: con un solo valor, o el texto no
+   contrasta en el tema claro o el relleno quema en el oscuro. */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 20px; padding: 0 7px; border-radius: 5px;
+  font-size: .74rem; font-weight: 500; line-height: 1; white-space: nowrap;
+  background: var(--s2); color: var(--txt-2); border: 1px solid var(--b0);
+}
+.badge-tinted {
+  color: var(--tag-color, var(--muted));
+  background: color-mix(in srgb, var(--tag-color, var(--muted)) 13%, transparent);
+  border-color: transparent;
+}
+.badge-outline {
+  color: var(--tag-color, var(--muted));
+  background: transparent;
+  border-color: color-mix(in srgb, var(--tag-color, var(--muted)) 45%, transparent);
+}
+/* Punto de estado — el patron `<span>•</span>` coloreado aparecia suelto en
+   la barra superior y en las listas de archivos. */
+.dot {
+  width: 7px; height: 7px; border-radius: 99px; flex-shrink: 0;
+  background: var(--tag-color, var(--muted));
+}
+
+/* ── Texto ──────────────────────────────────────────────────────────────
+   `color:var(--muted)` aparecia 10 veces inline y la combinacion
+   "mono + chico + apagado" otras 6. */
+.text-muted { color: var(--muted); }
+.text-2     { color: var(--txt-2); }
+.mono       { font-family: var(--mono); }
+.meta       { font-family: var(--mono); font-size: .72rem; color: var(--muted); }
+.num        { font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+
+/* ── Layout ─────────────────────────────────────────────────────────────
+   `margin-left:auto` sale 14 veces inline; los `margin-top` sueltos, 21. */
+.row      { display: flex; align-items: center; gap: var(--space-2); }
+.row-wrap { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.ml-auto  { margin-left: auto; }
+.mt-1 { margin-top: var(--space-1); }
+.mt-2 { margin-top: var(--space-2); }
+.mt-3 { margin-top: var(--space-3); }
+.mt-4 { margin-top: var(--space-4); }
+
+/* ── Controles de formulario ────────────────────────────────────────────
+   **Habia CUATRO clases haciendo el mismo trabajo** —`.diag-sel`,
+   `.up-text-input`, `.settings-row-input`, `.app-dialog-input`— con radios
+   de 6, 7 y `var(--radius)`, cuatro tamanos de fuente, cuatro paddings, y
+   dos de ellas con `::placeholder` y dos sin. Un campo de texto se veia
+   distinto segun en que panel cayera.
+
+   **Y ninguna tenia anillo de foco**: cambiaban el color del borde, que a
+   1px es casi invisible y no alcanza para navegar con teclado. */
+.input,
+.diag-sel,
+.up-text-input,
+.settings-row-input,
+.app-dialog-input {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid var(--b1);
+  background: var(--s1);
+  color: var(--txt);
+  font: .87rem var(--sans);
+  transition: border-color .12s, box-shadow .12s;
+}
+.input::placeholder,
+.up-text-input::placeholder,
+.settings-row-input::placeholder,
+.app-dialog-input::placeholder { color: var(--muted); }
+
+.input:focus,
+.diag-sel:focus,
+.up-text-input:focus,
+.settings-row-input:focus,
+.app-dialog-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus);
+}
+
+/* El texto que el usuario escribe en el dialogo es un nombre de archivo o
+   de proyecto, no codigo: va en sans como el resto. */
+textarea.input {
+  height: auto; padding: 8px 10px; resize: vertical; line-height: 1.5;
+}
+
+/* **La flecha del `<select>` dibujada por nosotros.** La nativa la pinta el
+   sistema operativo y no respeta el tema: en oscuro quedaba una flecha
+   negra sobre fondo negro en Windows. El SVG va inline en el CSS (no como
+   archivo) para que no agregue una peticion de red por cada select. */
+select.input,
+select.diag-sel,
+select.settings-row-input {
+  appearance: none;
+  cursor: pointer;
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23898781' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+/* ── Movimiento ─────────────────────────────────────────────────────────
+   Vocabulario de animacion con nombre, para que un estado de carga o la
+   entrada de un panel no se resuelvan con un `style` inline distinto cada
+   vez. `rise` usa SOLO opacidad a proposito: un `transform` aca atrapa a
+   los descendientes con `position:fixed` y rompe menus y tooltips. */
+@keyframes rise { from { opacity: 0 } to { opacity: 1 } }
+@keyframes pop  { from { opacity: 0; scale: .97 } to { opacity: 1; scale: 1 } }
+@keyframes shimmer { from { background-position: -200% 0 } to { background-position: 200% 0 } }
+@keyframes pulse-dot { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+
+.anim-rise { animation: rise .16s ease-out }
+.anim-pop  { animation: pop .14s ease-out }
+.dot-live  { animation: pulse-dot 1.8s ease-in-out infinite }
+
+/* Esqueleto de carga: hoy un panel que espera datos muestra un texto
+   "Cargando…". Una barra con brillo dice lo mismo sin pedir que se lea. */
+.skeleton {
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--s2) 25%, var(--b0) 50%, var(--s2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* **El movimiento se apaga si el usuario lo pidio.** `prefers-reduced-motion`
+   no es una cortesia: para alguien con trastorno vestibular una animacion
+   repetida puede marear. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* ── Utilidades ─────────────────────────────────────────────────────────
+   Salen de contar los `style="..."` ESTATICOS que se repetian en los
+   paneles. No son un framework de utilidades: es el conjunto exacto que ya
+   se estaba escribiendo a mano.
+
+   **Los estilos con interpolacion (`style="color:${x}"`) NO se migran, y no
+   son deuda**: llevan un dato de tiempo de ejecucion que una hoja de
+   estilos no puede saber. Confundir las dos cosas lleva a inventar una
+   clase por cada valor posible. */
+.hidden      { display: none; }
+.text-center { text-align: center; }
+.flex-1      { flex: 1; }
+.mb-1 { margin-bottom: var(--space-1); }
+.mb-2 { margin-bottom: var(--space-2); }
+.mb-3 { margin-bottom: var(--space-3); }
+.mb-4 { margin-bottom: var(--space-4); }
+
+/* Color SEMANTICO de texto. Que existan como clase evita el `style` inline
+   y, sobre todo, evita que alguien escriba el hex en vez del token. */
+.text-ok     { color: var(--ok); }
+.text-warn   { color: var(--warn); }
+.text-err    { color: var(--err); }
+.text-info   { color: var(--info); }
+.text-accent { color: var(--accent); }
+.text-purple { color: var(--purple); }
+.text-orange { color: var(--orange); }
+
+/* ── Paleta de comandos (Ctrl/⌘+K) ──────────────────────────────────────
+   **Hasta acá Sythrall se operaba entera con el mouse.** Once paneles, N
+   archivos y N proyectos, todos alcanzables solo apuntando y haciendo
+   click. Eso está bien para probar la herramienta una vez; no para usarla
+   todos los días.
+
+   La paleta es una capa fija sobre todo, no un panel más: por eso el
+   overlay y no un bloque en el flujo. Arranca a un 14% de la altura y no
+   centrada — centrada, la lista crece hacia arriba y hacia abajo a la vez
+   y el ojo pierde el primer resultado, que es justo el que casi siempre
+   se quiere. */
+#cp-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: none;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 14vh;
+  background: color-mix(in srgb, #000 56%, transparent);
+  backdrop-filter: blur(2px);
+}
+#cp-overlay.open { display: flex; }
+
+.cp-panel {
+  width: min(620px, calc(100vw - 32px));
+  max-height: 64vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--s1);
+  border: 1px solid var(--b1);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: pop .12s ease-out;
+}
+
+/* El campo NO usa `.input`: acá el borde y el fondo los pone el panel, y un
+   recuadro dentro de otro recuadro a 1px de distancia se ve sucio. */
+.cp-input {
+  border: 0;
+  border-bottom: 1px solid var(--b0);
+  background: transparent;
+  color: var(--txt);
+  font: 1rem var(--sans);
+  padding: 15px 18px;
+  outline: none;
+}
+.cp-input::placeholder { color: var(--muted); }
+
+.cp-list { overflow-y: auto; padding: 6px; }
+
+.cp-group {
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 9px 12px 5px;
+}
+
+.cp-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 7px;
+  cursor: pointer;
+  /* Sin esto, el primer caracter de una etiqueta larga empuja a la pista
+     fuera del panel en vez de recortarse. */
+  min-width: 0;
+}
+.cp-item:hover { background: var(--s2); }
+
+/* **El resaltado del item activo es del teclado, no del mouse.** Si `:hover`
+   y el activo se vieran igual, mover el mouse sin querer sobre la lista
+   haría dudar de cuál abre el Enter. El activo lleva el acento; el hover,
+   solo un fondo. */
+.cp-item.active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+
+.cp-label {
+  color: var(--txt);
+  font-size: .89rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cp-hint {
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--muted);
+  font-size: .74rem;
+  font-family: var(--mono);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cp-empty { padding: 26px; text-align: center; color: var(--muted); font-size: .86rem; }
+
+.cp-foot {
+  display: flex;
+  gap: 16px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--b0);
+  background: var(--s0);
+  color: var(--muted);
+  font-size: .72rem;
+}
+.cp-foot kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 5px;
+  margin-right: 3px;
+  border: 1px solid var(--b1);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--s2);
+  color: var(--txt-2);
+  font: .68rem var(--mono);
+  text-align: center;
+}
+
+/* En pantallas chicas no hay teclado físico: el pie que explica las flechas
+   sobra, y el panel se pega más arriba para dejar lugar al teclado virtual. */
+@media (max-width: 560px) {
+  #cp-overlay { padding-top: 6vh; }
+  .cp-foot { display: none; }
+}
+
+/* Disparador en la topbar. Se dibuja como un campo de texto, no como un
+   botón: comunica "acá se escribe" antes de que nadie lo apriete. */
+.cp-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  min-width: 190px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--b1);
+  border-radius: 7px;
+  background: var(--s1);
+  color: var(--muted);
+  font: .82rem var(--sans);
+  cursor: pointer;
+  transition: border-color .12s, color .12s;
+}
+.cp-trigger:hover { border-color: var(--b2); color: var(--txt-2); }
+.cp-trigger-txt { flex: 1; text-align: left; }
+.cp-trigger-kbd { display: flex; gap: 3px; }
+.cp-trigger-kbd kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--b1);
+  border-radius: 4px;
+  background: var(--s2);
+  color: var(--muted);
+  font: .66rem var(--mono);
+}
+
+/* Por debajo de ~900px la topbar ya pelea por lugar con el badge del
+   backend y los tres botones de accion: el disparador se queda solo con la
+   lupa. El atajo no se pierde —sigue funcionando—, se deja de anunciar. */
+@media (max-width: 900px) {
+  .cp-trigger { min-width: 0; padding: 0 9px; }
+  .cp-trigger-txt, .cp-trigger-kbd { display: none; }
 }
