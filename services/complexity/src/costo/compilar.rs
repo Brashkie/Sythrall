@@ -785,12 +785,32 @@ mod tests {
     const VECTORIZABLE_C: &str =
         "void escalar_por_vector(float *a, const float *b, float k, int n) {\n    for (int i = 0; i < n; i++) a[i] = b[i] * k;\n}\n";
 
-    /// **El círculo completo: fuente → compilador → ensamblador → SIMD.**
-    /// Es la pregunta que el motor no podía responder y ahora sí: *"¿esto se
-    /// vectorizó?"*. Y la respuesta depende de lo que se le pida al
-    /// compilador, que es justo el punto.
+    /// **El círculo completo: fuente → compilador → ensamblador → SIMD.** Es
+    /// la pregunta que el motor no podía responder y ahora sí: *"¿esto se
+    /// vectorizó, y con qué ancho?"*.
+    ///
+    /// **Lo que este test NO asierta, después de equivocarse dos veces.** La
+    /// versión original decía *"sin `-mavx2` no vectoriza"*, y la segunda,
+    /// corrigiendo a medias, *"sin `-mavx2` no aparecen 256 bits"*. Las dos
+    /// son creencias sobre un compilador concreto y las dos las desmintió el
+    /// runner de CI el 2026-11-14, que **sin la flag** reportó:
+    ///
+    /// ```text
+    /// SimdInfo { isa: "avx2", max_width_bits: 256,
+    ///            vector_registers: ["xmm0", "xmm2", "ymm0", "ymm1"] }
+    /// ```
+    ///
+    /// El motivo es que **el baseline de un compilador es una propiedad de
+    /// cómo lo construyeron**, no del lenguaje ni de la arquitectura: ese gcc
+    /// ya trae AVX2 encendido de fábrica, el MinGW 6.3 de la máquina de
+    /// desarrollo no emite SIMD ni a `-O3`, y los dos están bien.
+    ///
+    /// **Entonces lo único afirmable es lo que la flag FUERZA**: pedir AVX2
+    /// da vectorización de 256 bits. Lo que el compilador hace cuando nadie
+    /// le pide nada se mide y se reporta, pero no se asierta — si lo de abajo
+    /// se vuelve a romper, la que está mal es la afirmación, no el motor.
     #[test]
-    fn pedir_avx2_vectoriza_y_sin_pedirlo_no() {
+    fn pedir_avx2_da_vectorizacion_de_256_bits() {
         if !hay("gcc") {
             return;
         }
@@ -809,25 +829,10 @@ mod tests {
         assert!(s.vectorized, "no vectorizó: {s:?}");
         assert_eq!(s.max_width_bits, 256);
         assert_eq!(s.isa, "avx2");
-        // **Lo que compra AVX2 es el ANCHO, y eso es lo invariante.**
-        //
-        // Este test decía que sin `-mavx2` no hay vectorización, y eso vale
-        // para el gcc 6.3 de esta máquina pero no para los compiladores en
-        // general: en x86-64 **SSE2 es línea base**, así que un gcc moderno a
-        // `-O3` vectoriza igual, a 128 bits, sin que se le pida nada. Medido
-        // el 2026-11-14: el runner de CI reportó vectorización sin la flag y
-        // el test falló afirmando algo que no era cierto del compilador, sino
-        // de uno.
-        //
-        // Lo que sí distingue a AVX2 es que **los 256 bits sólo aparecen
-        // cuando se piden**. Eso es cierto en las dos plataformas.
-        if let Some(base) = simd_de(&sin) {
-            assert!(
-                base.max_width_bits <= 128,
-                "sin -mavx2 no deberían aparecer registros de 256 bits: {base:?}"
-            );
-            assert_ne!(base.isa, "avx2", "sin pedir avx2 no debería reportarse avx2: {base:?}");
-        }
+        // El baseline se MIDE y se reporta; no se asierta. Un gcc con AVX2
+        // de fábrica da lo mismo con flag que sin ella, y eso no es un fallo
+        // del motor ni del test: es cómo lo construyeron.
+        eprintln!("baseline sin -mavx2 en esta máquina: {:?}", simd_de(&sin));
     }
 
     /// **Una feature que no está en la tabla se ignora, no se pasa.** Es lo
