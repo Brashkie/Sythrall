@@ -2,7 +2,7 @@
 //  Sythrall — Terminal integrada
 //  Cliente WebSocket del sidecar Rust (terminal-server): PTY real vía
 //  portable-pty, protegido con un token de sesión (JWT) de vida corta que
-//  apps/api emite (GET /auth/terminal-token, solo a pedidos locales) — ver
+//  el motor emite (GET /auth/terminal-token, solo a pedidos locales) — ver
 //  services/terminal/src/auth.rs. Sin login real todavía: el token es para
 //  un usuario implícito "local", pero la cañería ya está lista para cuando
 //  lo haya.
@@ -88,7 +88,7 @@ interface StoredToken {
 }
 
 // Margen antes del vencimiento real: evita usar un token que expira a mitad
-// de la conexión (el JWT dura 1h — ver apps/api/routers/auth.py).
+// de la conexión (el JWT dura 1h — ver servicio/sistema.rs en el motor).
 const TOKEN_EXPIRY_MARGIN_MS = 30_000
 
 function getToken(): string | null {
@@ -156,7 +156,7 @@ function promptForToken(): Promise<string | null> {
 async function fetchLocalToken(): Promise<string | null> {
   try {
     const res = await fetch(getApiBase() + '/auth/terminal-token')
-    if (!res.ok) return null // 403 = pedido no-local, apps/api lo rechaza a propósito
+    if (!res.ok) return null // 403 = pedido no-local, el motor lo rechaza a propósito
     const data = await res.json()
     return typeof data.token === 'string' ? data.token : null
   } catch {

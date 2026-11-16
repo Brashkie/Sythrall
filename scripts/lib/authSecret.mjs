@@ -1,5 +1,5 @@
 // Secreto compartido para firmar/verificar los tokens de sesión (JWT) entre
-// apps/api (emisor) y services/terminal (verificador) — ninguno de los dos
+// services/complexity (emisor) y services/terminal (verificador) — ninguno
 // lo genera por su cuenta ni lee `.env` directamente (siguen el patrón que
 // ya tienen, `std::env::var`/`os.environ.get` puro); es responsabilidad de
 // esta capa de orquestación garantizar que llegue a su entorno.
@@ -34,7 +34,7 @@ export function ensureAuthSecret() {
   appendFileSync(
     ENV_PATH,
     `${prefix}\n# Secreto compartido para firmar/verificar tokens de sesión (JWT) entre\n` +
-      `# apps/api (emisor) y services/terminal (verificador) — generado acá\n` +
+      `# services/complexity (emisor) y services/terminal (verificador)\n` +
       `# porque scripts/dev-banner.mjs corre antes que todo lo demás en "npm run dev".\n` +
       `${KEY}=${secret}\n`,
   )

@@ -1,36 +1,17 @@
-# Sythrall - Setup (sin Docker)
-# Manifiestos y paquetes viven en la raiz del repo (package.json, requirements.txt, .venv/, node_modules/).
+# Instala las dependencias del proyecto.
+#
+# **Fase 35** - antes esto creaba un .venv e instalaba requirements.txt.
+# Sythrall ya no tiene backend de Python: el motor en Rust sirve el HTTP y el
+# analisis. Quedan npm (frontend) y cargo (los dos sidecars).
 $ErrorActionPreference = "Stop"
-$root = Split-Path -Parent $PSScriptRoot
+$root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+Set-Location $root
 
-Write-Host "== Sythrall - Setup ==" -ForegroundColor Cyan
+Write-Host "[1/2] Frontend (npm)..."
+npm ci
 
-Write-Host "`n[1/2] Backend (Python venv, raiz del repo)..." -ForegroundColor Yellow
-Push-Location $root
-try {
-    if (-not (Test-Path ".venv")) {
-        python -m venv .venv
-    }
-    & ".venv\Scripts\python.exe" -m pip install --upgrade pip -q
-    & ".venv\Scripts\python.exe" -m pip install -q -r requirements.txt -r requirements-dev.txt
-} finally {
-    Pop-Location
-}
+Write-Host "[2/2] Sidecars de Rust (cargo)..."
+cargo build --release
 
-Write-Host "`n[2/3] Frontend (npm, raiz del repo)..." -ForegroundColor Yellow
-Push-Location $root
-try {
-    npm install
-} finally {
-    Pop-Location
-}
-
-Write-Host "`n[3/3] Terminal sidecar (Rust)..." -ForegroundColor Yellow
-if (Get-Command cargo -ErrorAction SilentlyContinue) {
-    Write-Host "cargo $(cargo --version) encontrado." -ForegroundColor Green
-} else {
-    Write-Host "AVISO: no se encontro 'cargo'. La terminal integrada (npm run dev) no va a" -ForegroundColor Red
-    Write-Host "funcionar hasta instalar el toolchain de Rust: https://rustup.rs" -ForegroundColor Red
-}
-
-Write-Host "`nListo. Usa scripts\dev.ps1 para iniciar el entorno de desarrollo." -ForegroundColor Green
+Write-Host ""
+Write-Host "Listo. 'npm run dev' levanta el frontend y los dos sidecars."

@@ -1,22 +1,13 @@
 #!/usr/bin/env bash
-# Sythrall — Format
-# Biome --write (frontend) + Ruff format (backend). Escribe cambios en disco.
-set -e
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
-echo "== Sythrall — Format =="
-
-echo ""
-echo "[1/2] Frontend (biome format --write)..."
+# Formatea todo: biome (frontend) + rustfmt (Rust).
+#
+# **Fase 35** — ya no hay `ruff format apps/api`: no hay Python.
+set -euo pipefail
+root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
+
+echo "[1/2] Frontend (biome)..."
 npm run format
 
-VENV_RUFF="$root/.venv/bin/ruff"
-[ -f "$VENV_RUFF" ] || VENV_RUFF="$root/.venv/Scripts/ruff.exe"
-echo ""
-echo "[2/2] Backend (ruff format)..."
-cd "$root"
-if [ -f "$VENV_RUFF" ]; then "$VENV_RUFF" format apps/api; else ruff format apps/api; fi
-
-echo ""
-echo "Formato aplicado."
+echo "[2/2] Rust (rustfmt)..."
+cargo fmt

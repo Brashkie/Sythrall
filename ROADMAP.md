@@ -1710,7 +1710,7 @@ Came out of a conversation about whether to add D to the ecosystem. The conclusi
 
 - [ ] **D as an implementation language: no reason today, and no need to decide.** Rust already holds the core and gives performance without a GC; Zig already holds low-level tooling and is better at C interop (it compiles C). There is no Sythrall workload where D beats both. If one appears, apply the procedure above: benchmark D/Rust/Zig and decide on data. **And the cost is not theoretical**: of 1040 Rust tests the only intermittent ones are the toolchain benchmarks (Zig, Fortran), and the repo's most recent commit is a cross-platform ABI fix in hand-written Assembly kernels that was breaking CI. Every added toolchain is another "is it installed?" branch and another source of fragility — D would bring `dmd`/`ldc`/`gdc`, three compilers with different behaviours.
 
-### 🔴 Phase 35 — Sythrall without Python *(the full programme the user asked for on 2026-11-14, with the surface measured before promising anything)*
+### ✅ Phase 35 — Sythrall without Python *(the full programme the user asked for on 2026-11-14, with the surface measured before promising anything)*
 
 **This is not another phase: it is the largest structural change in the project.** The mandate was one line — *"remove Python completely"* — and the eight things that came with it are the rest of the same move. What follows is written from what was measured the day it opened, not from an estimate.
 
@@ -1727,7 +1727,7 @@ Came out of a conversation about whether to add D to the ecosystem. The conclusi
 
 **The honest split of the 9,507 lines to move:**
 - **~2,300 of pure relay** (`complexity_client.py` and the routers that only forward): these are not ported, they **disappear**. Once Rust serves the HTTP, the middleman does not exist.
-- **~4,300 of real logic** (`intelligence.py` 1,445, `ml.py` 742, `analysis.py` 646, `metrics_live.py` 462, `diagram.py` 444, `upload.py` 447, `history.py` 275): this does get ported.
+- **~4,300 of real logic** (`intelligence.py` 1,445, `ml.py` 742, `analysis.py` 646, ~~`metrics_live.py` 462~~ **done**, ~~`diagram.py` 444~~ **done**, ~~`upload.py` 447~~ **done**, ~~`history.py` 275~~ **done**): this does get ported.
 - **The rest** is `main.py`, `shared.py`, auth and startup, replaced by the axum startup the sidecar already has.
 
 **The order, and why that one.** Least to most risk, each step verifiable on its own:
@@ -1737,7 +1737,42 @@ Came out of a conversation about whether to add D to the ecosystem. The conclusi
 4. **`analysis.py` and `intelligence.py`** — the two largest and the ones with the most rules of their own.
 5. **`ml.py`** — the model/framework catalogue is a data table, not code; it moves almost as-is.
 6. **Startup, auth and `/health`** — last: while Python exists, this is what holds it up.
-7. **Delete `apps/api`, `pyproject.toml`, `requirements*.txt`, `pytest.ini` and the `.venv`** from the execution path. **Until that happens the phase is not done**, however well everything else works.
+7. ~~**Delete `apps/api`, `pyproject.toml`, `requirements*.txt`, `pytest.ini` and the `.venv`** from the execution path~~ — **done 2026-11-16**. All that remains of the `.venv` is the directory on disk, which nothing uses any more: no script, no CI gate and no Dockerfile names it.
+
+**CLOSED on 2026-11-16.** Python opened the phase at **14,080 lines / 55 files** and is at **zero**: `apps/api` does not exist. Neither do `pyproject.toml`, `pytest.ini`, `requirements.txt`, `requirements-dev.txt`, `docker/api.Dockerfile` or `scripts/run-backend.mjs`. Vite's proxy sends **12 prefixes to the engine and none to Python**; the remaining one is `/terminal`, which was always the Rust sidecar's. **CI gates went from nine to six**: `tsc`, `biome`, `vite build`, `cargo build --release`, `clippy -D warnings`, `cargo test`.
+
+| prefix | served by | status |
+|---|---|---|
+| `/binary` | engine | ✅ relay deleted, not ported |
+| `/graph` · `/analyze/graph` | engine | ✅ the 3 payloads ported; the 6 builders were already in Rust |
+| `/static` | engine | ✅ all 9 endpoints; `parse-project` was orchestration |
+| `/execution` | engine | ✅ |
+| `/logs` | engine | ✅ it forwarded to the engine's own `/log`: one hop fewer |
+| `/history` | engine | ✅ 5 endpoints + persistence, CBOR instead of SQLite |
+| `/api/upload` | engine | ✅ 9 endpoints, own ZIP reader, constant RAM |
+| `/metrics` | engine | ✅ 3 endpoints; duplicated analysis replaced, 9x faster |
+| `/analyze` | engine | ✅ diagrams, logs, code, project, external APIs and ML |
+| `/intel` | engine | ✅ all 7 editor endpoints; fallbacks deleted |
+| `/capabilities` · `/health` · `/auth` | engine | ✅ step 6; `/capabilities` changed meaning |
+
+**What the `/metrics` step added, and it lands squarely on `intelligence.py` and `ml.py`.**
+- **Duplicated analysis is not ported: it is replaced, and the numbers change.** The router carried its own per-language Big-O alongside the engine's real parsers, and it was not equivalent but **worse**: it counted total loops instead of nested ones, so three sequential loops reported `O(n³)` instead of `O(n)`. The two remaining routers carry heuristics of the same kind. **When a replacement changes a number the user sees, it goes in the CHANGELOG** — even when the new number is the correct one.
+- **Using the analysis source of truth can be the wrong call, and the criterion is the endpoint's budget.** The first version called `analyze_rich`: one implementation, no new code, which is why it looked obviously right. Measured in **release**: **16.3 ms** against a **5 ms** budget on the endpoint that runs on every keystroke. The lightweight path — the same public functions, without the stages the bar does not show — measures **1.74 ms**. **Before picking the analysis engine, know how many times per second it will be called.**
+- **And performance measurements go in release, not debug.** The first number I got was 87 ms and it made me believe parsing was the problem; in release that same parse is 1.68 ms. Debug inflates each stage differently, so **it is not even usable for comparing proportions**.
+- **Do not claim an improvement without measuring it, not even when the old code is plainly worse.** I wrote that the engine "distinguishes the shape of the recursion" because the router returned `O(2^n)` for every recursive function. That was false: the engine does the same, and `factorial(n-1)` still comes out exponential in both. **The overestimate is shared**, and it now has a test pinning it rather than a comment celebrating it.
+- **A fallback is judged by what it covers, not by being a fallback.** `diagram.py`'s covered "the sidecar is not answering" (impossible inside the engine) and was deleted; `/metrics/live`'s covers "the user's code does not compile yet", which while someone types is half the time, and was ported. **Same structure, opposite decisions.**
+
+**What the `/analyze/diagram` step added, and it applies to the routers still pending.**
+- **A fallback against the sidecar being down is dead code once the code lives IN the sidecar.** `diagram.py` carried two implementations of every builder — one over the engine's analysis, one with its own `ast.walk` — and its docstring defended keeping the second because *"deleting them would be a real regression"*. It was, while the engine was a separate process that could fail to answer; **inside the engine that branch is an impossible state**, because you don't lose the connection to yourself. That was 190 of 444 lines that were not ported: they were deleted. **`intelligence.py` and `static_parser.py` have the same pattern** (`rich` first, Python heuristic if no sidecar), so both will shrink more than their line counts suggest.
+- **Deduplicating and ordering are two separate fixes, and fixing one can break the other.** The call graph's nodes came from a Python set: it deduplicated but had no defined order. Replacing it with a list sorted by line fixed the order and **lost the deduplication**, so an overridden method declared the same node twice. The tests did not catch it: asking for a real diagram did. **When one structure does two things at once, the replacement has to cover both explicitly.**
+- **Ask whether a value is used as identity or as text.** The same function name appears as node id and as label on the same Mermaid line: the label tolerates almost anything, the id does not. Python used the raw name for both, and that worked only because Python identifiers are `[A-Za-z0-9_]`.
+- **And text truncation goes by characters, not bytes.** Cutting a docstring at 40 bytes splits an accented character in half and leaves invalid UTF-8, which Mermaid will not render.
+
+**What the `/api/upload` step added to that list.**
+- **Two lists of the same thing is a divergence waiting to happen.** There were two sets of ignored directories — one in the uploads, one in the analysis — and they did not match: uploading a Rust project's folder wrote all of `target/` to disk, because only the analysis side ignored it. **When porting, the first thing to check is whether the constant being moved has a twin.** And one of those rules (`"*.egg-info"`, inside a set consulted by exact equality) had never matched anything: dead code shaped like a rule.
+- **A framework difference can be an improvement, not an obstacle.** FastAPI parsed the whole multipart before the handler; axum streams it, so `project_id` can arrive after the files. Instead of replicating the buffering, files go to a staging area and get moved at the end: **RAM stays constant at one file at a time** instead of proportional to the body. The real case that motivated the `node_modules` filter was 27,614 files and 513 MB.
+- **Tests of a departing router don't get repointed: ask what they needed.** Three tests created their project by uploading a ZIP so another endpoint could read it off disk. What they needed was *a project on disk*; now they write it directly. Exercising a whole upload on the way was coupling, not coverage.
+- **And the lesson that cost real data: a manual verification against the production directory is destructive here.** The test suite wrote to the real `uploads/` and retention (`MAX_PROJECTS = 20`) deleted 20 of the user's projects; that was fixed by pointing the tests at a temp dir. Then **the same mistake repeated by hand**: verifying the new endpoints against the real directory deleted 10 more. **Every manual verification of `/api/upload` runs with the engine started under `SYTHRALL_UPLOADS_DIR` pointing at a temp dir** — the very variable this step unified between Python and Rust.
 
 **The rule the user set, and it governs the whole phase: *"benchmark who wins, and what does not win gets deleted without mercy"*.** Nothing is ported blind. Every piece that moves is measured against the one it replaces — time and **RAM**, which was asked for explicitly — and if the new version does not win, **it does not get to stay just because it was written**. That applies to the Python-to-Rust ports and to what already exists.
 
@@ -1759,9 +1794,12 @@ Came out of a conversation about whether to add D to the ecosystem. The conclusi
 
 **The rest of the mandate, each with its done-criterion:**
 - [ ] **Many files at once.** Today scanning is sequential per file. Measure first: how many files, how much RAM and how long the largest project we can assemble takes, and only then decide on parallelism. **Without that measurement nothing is touched**, because "it is faster" without a number is an opinion.
+  - **Half a step taken, and only half**: the *upload* no longer needs RAM proportional to the body. The `/api/upload` port writes each file to a staging area as it arrives, so the peak is **one file at a time** instead of the whole multipart in memory — the real case of 27,614 files and 513 MB no longer has to fit. **Scanning and analysis are still sequential and still unmeasured**, which is what this item actually asks for: the upload was the entry path, not the bottleneck.
 - [ ] **Performance and RAM.** Same criterion: measure first, and whatever does not win gets deleted.
-- [ ] **Deep cleanup.** Dead code, dead CSS, exports with no consumers (one already turned up), duplicates. `panels/static.ts` is still **3,559 lines** and the largest file in the frontend: really splitting it means moving the empirical-validation block with its ~30 module-level state variables.
+  - **First measured result, from the `/metrics` step**: the most-called endpoint in the app went from **16.3 ms** to **1.74 ms** per call (release, 443-line file with 40 functions) by stopping asking `analyze_rich` for a full analysis to display seven numbers. **What did not win was deleted**: the `analyze_rich` implementation was not kept as an option, and a budget test with a 10 ms ceiling catches anyone plugging it back in.
+- [x] **Deep cleanup** — *ongoing, with this phase's share done*. Dead code, dead CSS, exports with no consumers (one already turned up), duplicates. `panels/static.ts` is still **3,585 lines** and the largest file in the frontend: really splitting it means moving the empirical-validation block with its ~30 module-level state variables.
 - [ ] **UI/UX.** Continuous, not a step with an end.
+  - **Gap recorded during this step**: the flowchart for non-Python languages detects JS/TS functions with a pattern and, for any other extension, shows only the filename and its line count — even though the engine already parses **13 languages properly**. It was ported as-is on purpose: widening it is a product change, not part of a migration. When it happens, the parsers are already there.
 - [ ] **Desktop app.** Declared future by the user, no date. It enters once the product is Python-free: a desktop app embedding a Python interpreter would be starting backwards.
 - [x] **Licence and return to open source** — *done 2026-11-14*. See the notice at the top of the READMEs: the project was born public under GPL-3.0, went private at v4.12.0, and returns to public under GPL-3.0. **And a real defect was fixed**: `LICENSE` was a summary with a link, and the GPL requires the program be accompanied by *a copy* of the licence. It now carries the complete text (674 lines).
 

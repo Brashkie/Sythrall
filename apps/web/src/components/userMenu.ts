@@ -176,12 +176,8 @@ function _renderRuntime(): string {
       ${fila('Frontend', location.origin)}
       ${fila('API', 'same-origin, vía proxy', state.backendOk)}
       ${fila('Servidor', cap?.server ?? '—')}
-      ${fila('Python', cap ? String(cap.python).split(' ')[0] : '—')}
-      ${fila(
-        'Motor de análisis',
-        cap?.HAS_COMPLEXITY_ENGINE ? 'disponible' : 'no respondía al arrancar la API',
-        !!cap?.HAS_COMPLEXITY_ENGINE,
-      )}
+      ${fila('Motor', cap?.engine ?? '—')}
+      ${fila('Lenguajes', cap ? String(cap.languages?.length ?? 0) : '—')}
     </div>`
 }
 

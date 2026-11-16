@@ -1,6 +1,11 @@
 [package]
 name = "sythrall-terminal"
-version = "0.1.0"
+# **Fase 35** — alineada con la del producto (`package.json`). El crate decia
+# 0.1.0 desde siempre y no importaba, porque la version que el cliente veia la
+# daba `main.py` como literal ("Sythrall v4.12"). Ahora el motor la reporta en
+# `/capabilities` desde `CARGO_PKG_VERSION`, asi que las dos tienen que
+# coincidir o el producto se anuncia con un numero equivocado.
+version = "5.1.0"
 edition = "2021"
 
 [[bin]]
@@ -17,7 +22,7 @@ path = "services/complexity/src/lib.rs"
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "sync", "signal"] }
-axum = { version = "0.7", features = ["ws"] }
+axum = { version = "0.7", features = ["ws", "multipart"] }
 futures-util = "0.3"
 portable-pty = "0.8"
 rand = "0.8"
@@ -51,6 +56,35 @@ tree-sitter-ada = "0.1"
 # leer los atributos de cada funcion, no compilar sondas como hace `dcost.rs`.
 tree-sitter-d = "0.8"
 object = "0.36"
+# DEFLATE para leer ZIPs (`servicio/zip.rs`, Fase 35). **Ya estaba en el arbol
+# de dependencias**: `object` la usa para las secciones comprimidas de los
+# ejecutables, asi que declararla no agrega una sola linea nueva a compilar —
+# solo la hace accesible. El contenedor ZIP se lee a mano (~120 lineas de un
+# formato documentado); lo que NO se reimplementa es el algoritmo de
+# compresion. Misma division que con `toml`/`object`/`tree-sitter`: leer un
+# formato estandar si, reconstruir un algoritmo ajeno no.
+flate2 = "1"
+# Cliente HTTP+TLS para `/analyze/api` (`servicio/apis.rs`, Fase 35), el
+# chequeo de salud de APIs externas. Decidido por el usuario el 2026-11-15.
+#
+# `hyper`, `hyper-util` y `http-body-util` YA estaban en el arbol porque axum
+# los usa del lado servidor; lo unico nuevo es la capa TLS. Se eligio el
+# conjunto minimo a proposito: `default-features = false` saca HTTP/2 y el
+# almacen de certificados del sistema, `ring` en vez de `aws-lc-rs` evita un
+# build de C, y `webpki-tokio` usa las raices embebidas de `webpki-roots`, que
+# son las mismas de Mozilla y no dependen de como este configurada la maquina.
+#
+# TLS no se reimplementa jamas: es criptografia, y la regla del proyecto es no
+# reconstruir algoritmos ajenos. Misma categoria que `flate2` para DEFLATE.
+hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "tls12", "webpki-tokio", "ring"] }
+hyper-util = { version = "0.1", features = ["client", "client-legacy", "http1", "tokio"] }
+http-body-util = "0.1"
+# `hyper` y `rustls` ya estaban en el arbol (axum y hyper-rustls los traen);
+# se declaran para poder nombrarlos desde el codigo. No agregan nada nuevo a
+# compilar. `rustls` con `default-features = false` + `ring`: el proveedor
+# criptografico se elige explicito y se evita el build de C de aws-lc-rs.
+hyper = { version = "1", features = ["client", "http1"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "tls12", "logging"] }
 # Parser TOML para `Cargo.toml`/`pyproject.toml` en `manifest.rs`. El doc de
 # ese modulo dejo escrito que se agregaba "cuando haya un motivo, no antes";
 # el motivo es cerrar el grafo de dependencias multi-lenguaje. Es un parser de

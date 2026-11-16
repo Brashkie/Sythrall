@@ -42,14 +42,6 @@ export function renderFileAnalysis(f: CodeFile): void {
   el.innerHTML = `
     <div style="font-size:.58rem;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">ANÁLISIS: ${esc(f.name)}</div>
     ${
-      m.pylint_score != null
-        ? `<div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:10px;text-align:center">
-      <div style="font-size:.58rem;color:var(--muted);margin-bottom:3px">PYLINT SCORE</div>
-      <div style="font-family:var(--mono);font-size:1.8rem;color:${m.pylint_score >= 8 ? 'var(--ok)' : m.pylint_score >= 5 ? 'var(--warn)' : 'var(--err)'}">${m.pylint_score.toFixed(1)}<span style="font-size:.85rem;color:var(--muted)">/10</span></div>
-    </div>`
-        : ''
-    }
-    ${
       mi != null
         ? `<div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:10px">
       <div style="font-size:.58rem;color:var(--muted);margin-bottom:2px">MAINTAINABILITY INDEX</div>
@@ -143,8 +135,6 @@ export function renderMetrics(): void {
     return
   }
   const analyzed = state.files.filter((f) => f.analyzed)
-  const scores = analyzed.filter((f) => f.metrics.pylint_score != null).map((f) => f.metrics.pylint_score!)
-  const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null
 
   el.innerHTML = `
     <div class="metric-section">
@@ -153,7 +143,6 @@ export function renderMetrics(): void {
       ${mr('Total issues', state.results.issues.length, state.results.issues.length > 20 ? 'var(--err)' : state.results.issues.length > 5 ? 'var(--warn)' : 'var(--ok)')}
       ${mr('Errores', state.results.issues.filter((i) => i.severity === 'error').length, 'var(--err)')}
       ${mr('Warnings', state.results.issues.filter((i) => i.severity === 'warning').length, 'var(--warn)')}
-      ${avg != null ? mr('Pylint (prom.)', avg.toFixed(1) + '/10', avg >= 8 ? 'var(--ok)' : avg >= 5 ? 'var(--warn)' : 'var(--err)') : ''}
     </div>
     ${analyzed
       .map(
@@ -163,7 +152,6 @@ export function renderMetrics(): void {
         <span>${languageBadge(f.ext)}</span>${esc(f.name)}
         <span class="tag ${f.issues.some((i) => i.severity === 'error') ? 'tg-err' : f.issues.length ? 'tg-warn' : 'tg-ok'} ml-auto">${f.issues.length || 'OK'}</span>
       </div>
-      ${f.metrics.pylint_score != null ? mr('Pylint', f.metrics.pylint_score.toFixed(1) + '/10', f.metrics.pylint_score >= 8 ? 'var(--ok)' : f.metrics.pylint_score >= 5 ? 'var(--warn)' : 'var(--err)') : ''}
       ${f.metrics.mi != null ? mr('Maintainability', f.metrics.mi + '/100', f.metrics.mi > 70 ? 'var(--ok)' : f.metrics.mi > 40 ? 'var(--warn)' : 'var(--err)') : ''}
       ${f.metrics.raw?.sloc ? mr('SLOC', f.metrics.raw.sloc) : ''}
     </div>`,

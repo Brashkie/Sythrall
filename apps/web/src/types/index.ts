@@ -91,7 +91,6 @@ export interface HalsteadMetrics {
 }
 
 export interface FileMetrics {
-  pylint_score?: number
   complexity?: ComplexityEntry[]
   mi?: number
   halstead?: HalsteadMetrics | null
@@ -164,7 +163,11 @@ export interface AnalysisResult {
   filename: string
   ts: string
   issues: Issue[]
-  metrics: { pylint_score?: number }
+  /** **Fase 35** — quedó vacío a propósito. Su único campo era
+   * `pylint_score`, y pylint se borró al mover el análisis al motor: el
+   * objeto se conserva porque el shape de la respuesta lo trae, no porque
+   * tenga contenido. */
+  metrics: Record<string, never>
   complexity: ComplexityEntry[]
   maintainability: number | null
   halstead: HalsteadMetrics | null
@@ -251,45 +254,29 @@ export interface LogError {
 
 /** Respuesta de `/capabilities`.
  *
- * **Los nombres son los que el backend manda de verdad (`HAS_*`), no los que
- * uno esperaría.** Este tipo declaraba `flake8`/`pylint`/`complexity`/`torch`
- * en minúscula — campos que ese endpoint nunca devolvió. Compilaba igual por
- * el index signature de abajo, y el resultado era que el panel "Servidor" del
- * lado derecho mostraba TODO como no disponible, siempre, aunque flake8 y
- * pylint estuvieran instalados. Un tipo que miente no falla: hace que la UI
- * mienta en silencio.
+ * **Fase 35 — este tipo cambió entero, porque el endpoint cambió de
+ * significado.** Antes declaraba `HAS_FLAKE8`, `HAS_TORCH`, `HAS_POLARS` y
+ * una docena más: qué librerías de **Python** tenía instaladas el backend.
+ * Eso describía al intérprete que servía la API, no al producto, y ese
+ * intérprete ya no existe.
  *
- * `HAS_COMPLEXITY_ENGINE` merece una nota aparte: es un chequeo hecho UNA
- * sola vez cuando arranca la API (`check_complexity_engine_sync`, timeout de
- * 0.5s) y nunca se reevalúa en esa corrida del proceso. En desarrollo la API
- * y el sidecar Rust arrancan a la vez y el sidecar tarda mucho más en
- * compilar, así que este flag suele quedar en `false` aunque el motor después
- * funcione perfecto. Por eso quien lo muestre tiene que decir que es del
- * arranque, no del momento. */
+ * Ahora el motor reporta lo que sabe hacer: los lenguajes que analiza (del
+ * manifest de plugins) y los toolchains externos que encuentra (`gcc`,
+ * `gnatprove`, `dmd`…), cada uno con para qué sirve y con qué variable de
+ * entorno apuntarlo si falta.
+ *
+ * **Y de paso desaparece un tipo que mentía.** La versión vieja declaraba
+ * `flake8`/`pylint`/`torch` en minúscula —campos que el endpoint nunca
+ * devolvió— y compilaba por el index signature, así que el panel "Servidor"
+ * mostraba todo como no disponible, siempre. Un tipo que miente no falla:
+ * hace que la UI mienta en silencio. Éste no tiene index signature. */
 export interface Capabilities {
-  python: string
   server: string
+  engine: string
   ts: string
-  HAS_FLAKE8: boolean
-  HAS_PYLINT: boolean
-  HAS_COMPLEXITY_ENGINE: boolean
-  HAS_NUMPY: boolean
-  HAS_PANDAS: boolean
-  HAS_SKLEARN: boolean
-  HAS_TORCH: boolean
-  HAS_TF: boolean
-  HAS_SCIPY: boolean
-  HAS_CV2: boolean
-  HAS_PLOTLY: boolean
-  HAS_POLARS: boolean
-  HAS_LGB: boolean
-  HAS_SPACY: boolean
-  HAS_ICECREAM: boolean
-  HAS_CYTHON: boolean
-  flake8_version?: string
-  pylint_version?: string
-  cython_version?: string
-  [key: string]: unknown
+  languages: Array<{ id: string; parser: string; features: number }>
+  toolchains: Record<string, { available: boolean; purpose: string; env: string }>
+  note: string
 }
 
 export type NotebookEnvId = 'thebe' | 'pyodide' | 'starboard'

@@ -11,7 +11,6 @@
 // ══════════════════════════════════════════
 
 import type {
-  AggregationVsPandasResult,
   ArchitectureSmell,
   AtomizacionResult,
   BusquedaPareto,
@@ -22,8 +21,6 @@ import type {
   DCostResult,
   EmpiricalValidationResult,
   ExecutableParseResult,
-  LinregVsSklearnResult,
-  MatmulVsNumpyResult,
   MemoryLayoutResult,
   NamingSmell,
   PuntoPareto,
@@ -451,19 +448,13 @@ let _binarySearchValidating = false
 // explícito del usuario): comparación real matmul Fortran vs. numpy, no un
 // exponente medido más — por eso vive con su propio estado/render, no
 // reusa `_renderKernelValidationRow`.
-let _matmulVsNumpyComparison: MatmulVsNumpyResult | null = null
-let _matmulVsNumpyComparing = false
 
 // Fase 26 — segunda pieza de "migrar de numpy/pandas/scikit-learn": mismo
 // criterio que `_matmulVsNumpyComparison` de arriba, esta vez agregación
 // (Zig) vs. pandas real.
-let _aggregationVsPandasComparison: AggregationVsPandasResult | null = null
-let _aggregationVsPandasComparing = false
 
 // Fase 26 — tercera y última pieza de "migrar de numpy/pandas/scikit-learn":
 // mismo criterio, esta vez regresión lineal (Fortran) vs. scikit-learn real.
-let _linregVsSklearnComparison: LinregVsSklearnResult | null = null
-let _linregVsSklearnComparing = false
 
 // Fase 19 (Machine Intelligence) — analizador de ejecutables. Independiente
 // del pipeline de código fuente de arriba (no hay "archivo seleccionado":
@@ -585,9 +576,6 @@ function _attachStaticEvents(el: HTMLElement): void {
     if (t.dataset['validateLinreg'] !== undefined) void _onValidateLinregClick()
     if (t.dataset['validateQuicksort'] !== undefined) void _onValidateQuicksortClick()
     if (t.dataset['validateBinarySearch'] !== undefined) void _onValidateBinarySearchClick()
-    if (t.dataset['compareMatmulNumpy'] !== undefined) void _onCompareMatmulNumpyClick()
-    if (t.dataset['compareAggregationPandas'] !== undefined) void _onCompareAggregationPandasClick()
-    if (t.dataset['compareLinregSklearn'] !== undefined) void _onCompareLinregSklearnClick()
     if (t.dataset['loadGodbolt'] !== undefined) _onLoadGodboltClick(t)
 
     // Codigo maquina (Fase 19). Los chips alternan y NO recompilan solos: una
@@ -1518,11 +1506,8 @@ function _renderAlgorithmValidationEngine(functions: ParsedFunction[]): string {
       _matchedFunctionNames(functions, 'data-validate-binary-search'),
     )}
     <div class="ms-title" style="margin-top:.75rem;font-size:.75rem">Migración numpy/pandas/scikit-learn — pieza 1: matmul</div>
-    ${_renderMatmulVsNumpyComparison()}
     <div class="ms-title" style="margin-top:.75rem;font-size:.75rem">Migración numpy/pandas/scikit-learn — pieza 2: agregación</div>
-    ${_renderAggregationVsPandasComparison()}
     <div class="ms-title" style="margin-top:.75rem;font-size:.75rem">Migración numpy/pandas/scikit-learn — pieza 3: regresión lineal</div>
-    ${_renderLinregVsSklearnComparison()}
   </div>`
 }
 
@@ -1650,113 +1635,6 @@ function _onLoadGodboltClick(target: HTMLElement): void {
     <div class="st-mem-note mt-1"><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Abrir en una pestaña nueva ↗</a> si no carga acá</div>`
 }
 
-/** Lado (kernel nativo o librería) de una comparación "vs" — el subconjunto
- * de `EmpiricalValidationResult`/`{available, measurements}` que `_renderVsComparison`
- * necesita, común a los 3 pares (Fortran/numpy, Zig/pandas, Fortran/sklearn)
- * pese a que cada uno usa nombres de campo distintos en su tipo real. */
-interface VsComparisonSide {
-  available: boolean
-  measurements: Array<{ n: number; seconds: number }>
-}
-
-/** Las 3 piezas de "migrar de numpy/pandas/scikit-learn" (Fase 26, pedido
- * explícito del usuario, 2026-08-31) comparten el mismo render: a diferencia
- * de los kernels de `_renderKernelValidationRow`, esto no mide UN exponente
- * — corre un kernel nativo YA validado Y la librería real, mismos tamaños/
- * datos, y muestra ambos tiempos lado a lado con una nota de comparación
- * honesta (en la pieza 1 gana numpy, en las otras 2 gana el kernel nativo —
- * lo que diga el backend se muestra tal cual, no se esconde). Antes vivía
- * triplicado casi textual (solo cambiaban nombres/campos); acá los 3
- * wrappers de abajo solo pasan sus propios datos. */
-function _renderVsComparison(
-  label: string,
-  dataAttr: string,
-  runLabel: string,
-  runTitle: string,
-  comparing: boolean,
-  comparisonNote: string | null,
-  leftLabel: string,
-  left: VsComparisonSide | null,
-  rightLabel: string,
-  right: VsComparisonSide | null,
-): string {
-  if (comparing) {
-    return `<div class="st-fn-head"><span class="st-fn-name">${label}</span> <span class="bigo-cs-badge bigo-empirical"><span class="up-spinner"></span> Comparando...</span></div>`
-  }
-  if (comparisonNote == null || !left || !right) {
-    return `<div class="st-fn-head"><span class="st-fn-name">${label}</span> <button class="btn btn-ghost btn-sm" ${dataAttr} title="${esc(runTitle)}">${esc(runLabel)}</button></div>`
-  }
-  const rows = left.measurements
-    .map((l) => {
-      const r = right.measurements.find((m) => m.n === l.n)
-      return `<tr><td>${l.n}</td><td>${l.seconds.toFixed(6)}s</td><td>${r ? r.seconds.toFixed(6) + 's' : '—'}</td></tr>`
-    })
-    .join('')
-  return `<div class="st-wasm-item">
-    <div class="st-fn-head">
-      <span class="st-fn-name">${label}</span>
-      <button class="btn btn-ghost btn-sm" ${dataAttr} title="Volver a correr la comparación">↺</button>
-    </div>
-    ${
-      left.available && right.available
-        ? `<table class="bigo-table" style="margin:.4rem 0">
-      <thead><tr><th>n</th><th>${esc(leftLabel)}</th><th>${esc(rightLabel)}</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`
-        : ''
-    }
-    <div class="st-wasm-rec">${esc(comparisonNote)}</div>
-  </div>`
-}
-
-function _renderMatmulVsNumpyComparison(): string {
-  const c = _matmulVsNumpyComparison
-  return _renderVsComparison(
-    'matmul: Fortran vs. numpy',
-    'data-compare-matmul-numpy',
-    'Comparar con numpy',
-    'Corre el kernel Fortran de matmul Y numpy real (mismos tamaños/datos) y compara los tiempos honestamente',
-    _matmulVsNumpyComparing,
-    c?.comparison_note ?? null,
-    'Fortran',
-    c?.fortran ?? null,
-    'numpy',
-    c?.numpy ?? null,
-  )
-}
-
-function _renderAggregationVsPandasComparison(): string {
-  const c = _aggregationVsPandasComparison
-  return _renderVsComparison(
-    'agregación: Zig vs. pandas',
-    'data-compare-aggregation-pandas',
-    'Comparar con pandas',
-    'Corre el kernel Zig de agregación Y pandas real (mismos tamaños/datos) y compara los tiempos honestamente',
-    _aggregationVsPandasComparing,
-    c?.comparison_note ?? null,
-    'Zig',
-    c?.zig ?? null,
-    'pandas',
-    c?.pandas ?? null,
-  )
-}
-
-function _renderLinregVsSklearnComparison(): string {
-  const c = _linregVsSklearnComparison
-  return _renderVsComparison(
-    'regresión lineal: Fortran vs. scikit-learn',
-    'data-compare-linreg-sklearn',
-    'Comparar con scikit-learn',
-    'Corre el kernel Fortran de regresión lineal Y scikit-learn real (mismos tamaños/datos) y compara los tiempos honestamente',
-    _linregVsSklearnComparing,
-    c?.comparison_note ?? null,
-    'Fortran',
-    c?.fortran ?? null,
-    'scikit-learn',
-    c?.sklearn ?? null,
-  )
-}
-
 /** Fábrica de handlers de click para "Validar/Comparar empíricamente" —
  * auditoría (2026-09-01): las 13 variantes (10 kernels + 3 comparaciones vs.
  * numpy/pandas/scikit-learn) tenían el mismo cuerpo de 11 líneas copiado y
@@ -1860,16 +1738,6 @@ const _onValidateMergesortClick = _makeValidateHandler(
   },
   api.validateMergesortBigO,
 )
-const _onCompareMatmulNumpyClick = _makeValidateHandler(
-  () => _matmulVsNumpyComparing,
-  (v) => {
-    _matmulVsNumpyComparing = v
-  },
-  (v) => {
-    _matmulVsNumpyComparison = v
-  },
-  api.compareMatmulVsNumpy,
-)
 const _onValidateAggregationClick = _makeValidateHandler(
   () => _aggregationValidating,
   (v) => {
@@ -1879,16 +1747,6 @@ const _onValidateAggregationClick = _makeValidateHandler(
     _aggregationValidation = v
   },
   api.validateAggregationBigO,
-)
-const _onCompareAggregationPandasClick = _makeValidateHandler(
-  () => _aggregationVsPandasComparing,
-  (v) => {
-    _aggregationVsPandasComparing = v
-  },
-  (v) => {
-    _aggregationVsPandasComparison = v
-  },
-  api.compareAggregationVsPandas,
 )
 const _onValidateLinregClick = _makeValidateHandler(
   () => _linregValidating,
@@ -1919,16 +1777,6 @@ const _onValidateBinarySearchClick = _makeValidateHandler(
     _binarySearchValidation = v
   },
   api.validateBinarySearchBigO,
-)
-const _onCompareLinregSklearnClick = _makeValidateHandler(
-  () => _linregVsSklearnComparing,
-  (v) => {
-    _linregVsSklearnComparing = v
-  },
-  (v) => {
-    _linregVsSklearnComparison = v
-  },
-  api.compareLinregVsSklearn,
 )
 
 // ─── Fase 19 (Machine Intelligence) — Analizador de ejecutables ──────────────

@@ -1717,7 +1717,7 @@ Sale de una conversación sobre si agregar D al ecosistema. La conclusión no fu
 
 - [ ] **D como lenguaje de implementación: no hay razón hoy, y no hace falta decidirlo.** Rust ya tiene el núcleo y da rendimiento sin GC; Zig ya tiene el tooling bajo nivel y es mejor en interop con C (compila C). No hay un workload de Sythrall donde D le gane a los dos. Si aparece, se aplica el procedimiento de arriba: benchmark D/Rust/Zig y decisión con datos. **Y el costo no es teórico**: de 1040 tests de Rust los únicos intermitentes son los benchmarks de toolchain (Zig, Fortran), y el commit más reciente del repo es un arreglo de ABI cross-platform en kernels de Assembly escritos a mano que rompía CI. Cada toolchain agregado es otra rama "¿está instalado?" y otra fuente de fragilidad — D traería `dmd`/`ldc`/`gdc`, tres compiladores con comportamientos distintos.
 
-### 🔴 Fase 35 — Sythrall sin Python *(el programa completo que el usuario pidió el 2026-11-14, con la superficie medida antes de prometer nada)*
+### ✅ Fase 35 — Sythrall sin Python *(el programa completo que el usuario pidió el 2026-11-14, con la superficie medida antes de prometer nada)*
 
 **Esto no es una fase más: es el cambio estructural más grande del proyecto.** El mandato fue de una línea —*"eliminar por completo Python"*— y las ocho cosas que lo acompañan son el resto del mismo movimiento. Lo que sigue está escrito con lo que se midió el día que se abrió, no con una estimación.
 
@@ -1734,7 +1734,7 @@ Sale de una conversación sobre si agregar D al ecosistema. La conclusión no fu
 
 **El reparto honesto de las 9.507 líneas que hay que mover:**
 - **~2.300 de relay puro** (`complexity_client.py` y los routers que sólo reenvían): no se portan, **desaparecen**. Cuando Rust sirva el HTTP, el intermediario no existe.
-- **~4.300 de lógica real** (`intelligence.py` 1.445, `ml.py` 742, `analysis.py` 646, `metrics_live.py` 462, `diagram.py` 444, `upload.py` 447, `history.py` 275): esto sí se porta.
+- **~4.300 de lógica real** (`intelligence.py` 1.445, `ml.py` 742, `analysis.py` 646, ~~`metrics_live.py` 462~~ **hecho**, ~~`diagram.py` 444~~ **hecho**, ~~`upload.py` 447~~ **hecho**, ~~`history.py` 275~~ **hecho**): esto sí se porta.
 - **El resto** es `main.py`, `shared.py`, auth y arranque, que se reemplazan por el arranque de axum que el sidecar ya tiene.
 
 **El orden, y por qué ése.** De menor a mayor riesgo, cada paso verificable solo:
@@ -1744,7 +1744,42 @@ Sale de una conversación sobre si agregar D al ecosistema. La conclusión no fu
 4. **`analysis.py` e `intelligence.py`** — los dos más grandes y los que más reglas propias tienen.
 5. **`ml.py`** — el catálogo de modelos/frameworks es una tabla de datos, no código; se mueve casi tal cual.
 6. **Arranque, auth y `/health`** — lo último: mientras exista Python, esto lo sostiene.
-7. **Borrar `apps/api`, `pyproject.toml`, `requirements*.txt`, `pytest.ini` y el `.venv`** del camino de ejecución. **Hasta que esto pase, la fase no está hecha**, por más que todo lo demás funcione.
+7. ~~**Borrar `apps/api`, `pyproject.toml`, `requirements*.txt`, `pytest.ini` y el `.venv`** del camino de ejecución~~ — **hecho el 2026-11-16**. Lo único que queda del `.venv` es el directorio en disco, que ya no lo usa nada: ningún script, ninguna compuerta de CI y ningún Dockerfile lo nombran.
+
+**CERRADA el 2026-11-16.** Python arrancó la fase en **14.080 líneas / 55 archivos** y está en **cero**: `apps/api` no existe. Tampoco `pyproject.toml`, `pytest.ini`, `requirements.txt`, `requirements-dev.txt`, `docker/api.Dockerfile` ni `scripts/run-backend.mjs`. El proxy de Vite manda **12 prefijos al motor y ninguno a Python**; el otro es `/terminal`, que siempre fue del sidecar de Rust. **Las compuertas de CI pasaron de nueve a seis**: `tsc`, `biome`, `vite build`, `cargo build --release`, `clippy -D warnings`, `cargo test`.
+
+| prefijo | sirve | estado |
+|---|---|---|
+| `/binary` | motor | ✅ relay borrado, no portado |
+| `/graph` · `/analyze/graph` | motor | ✅ los 3 payloads portados; los 6 constructores ya estaban en Rust |
+| `/static` | motor | ✅ los 9 endpoints; `parse-project` era orquestación |
+| `/execution` | motor | ✅ |
+| `/logs` | motor | ✅ reenviaba al `/log` del motor: un salto menos |
+| `/history` | motor | ✅ 5 endpoints + persistencia, CBOR en vez de SQLite |
+| `/api/upload` | motor | ✅ 9 endpoints, lector de ZIP propio, RAM constante |
+| `/metrics` | motor | ✅ 3 endpoints; análisis duplicado reemplazado, 9x más rápido |
+| `/analyze` | motor | ✅ diagramas, logs, código, proyecto, APIs externas y ML |
+| `/intel` | motor | ✅ los 7 del editor; fallbacks borrados |
+| `/capabilities` · `/health` · `/auth` | motor | ✅ paso 6; `/capabilities` cambió de significado |
+
+**Lo que el paso de `/metrics` agregó, y pega de lleno en `intelligence.py` y `ml.py`.**
+- **El análisis duplicado no se porta: se reemplaza, y los números cambian.** El router tenía su propio Big-O por lenguaje en paralelo a los parsers reales del motor, y no era equivalente sino **peor**: contaba bucles totales en vez de anidados, así que tres bucles seguidos daban `O(n³)` en vez de `O(n)`. Los dos routers que faltan tienen heurísticas propias del mismo tipo. **Cuando el reemplazo cambia un número que el usuario ve, va dicho en el CHANGELOG** — aunque el número nuevo sea el correcto.
+- **Usar la fuente de verdad del análisis puede ser la decisión equivocada, y el criterio es el presupuesto del endpoint.** La primera versión llamaba a `analyze_rich`: una sola implementación, cero código nuevo, y por eso parecía obviamente correcta. Medido en **release**: **16,3 ms** contra un presupuesto de **5 ms** en el endpoint que corre en cada tecla. El camino liviano —las mismas funciones públicas, sin las etapas que la barra no muestra— mide **1,74 ms**. **Antes de elegir el motor de análisis hay que saber cuántas veces por segundo se lo va a llamar.**
+- **Y las mediciones de rendimiento van en release, no en debug.** El primer número que saqué fue 87 ms y me hizo creer que el parseo era el problema; en release el mismo parseo son 1,68 ms. Debug exagera distinto en cada etapa, así que **no sirve ni para comparar proporciones**.
+- **No afirmar una mejora sin medirla, ni siquiera cuando el código viejo es evidentemente peor.** Escribí que el motor "distingue la forma de la recursión" porque el router devolvía `O(2^n)` para toda función recursiva. Era falso: el motor hace lo mismo, y `factorial(n-1)` sigue saliendo exponencial en los dos. **La sobreestimación es compartida**, y quedó con un test que la fija en vez de un comentario que la celebra.
+- **Un fallback se juzga por lo que cubre, no por ser un fallback.** El de `diagram.py` cubría "el sidecar no responde" (imposible adentro del motor) y se borró; el de `/metrics/live` cubre "el código del usuario todavía no compila", que mientras alguien escribe es la mitad del tiempo, y se portó. **La misma estructura, decisiones opuestas.**
+
+**Lo que el paso de `/analyze/diagram` agregó, y aplica a los routers que faltan.**
+- **Un fallback contra la caída del sidecar es código muerto una vez que el código vive EN el sidecar.** `diagram.py` traía dos implementaciones de cada builder —una sobre el análisis del motor, otra con `ast.walk` propio— y su docstring defendía conservar la segunda porque *"borrarlas sería una regresión real"*. Lo era mientras el motor fuese un proceso aparte que podía no responder; **adentro del motor esa rama es un estado imposible**, porque no se cae la conexión con uno mismo. Fueron 190 de 444 líneas que no se portaron: se borraron. **`intelligence.py` y `static_parser.py` tienen el mismo patrón** (`rich` primero, heurística Python si no hay sidecar), así que los dos van a encogerse más de lo que sus líneas totales sugieren.
+- **Deduplicar y ordenar son dos arreglos distintos, y arreglar uno puede romper el otro.** Los nodos del call graph salían de un set de Python: deduplicaba pero sin orden definido. Cambiarlo por una lista ordenada arregló el orden y **perdió la deduplicación**, y un método sobreescrito pasó a declarar el mismo nodo dos veces. No lo vieron los tests: lo vio pedir un diagrama real. **Cuando una estructura hace dos cosas a la vez, el reemplazo tiene que cubrir las dos explícitamente.**
+- **Hay que preguntarse si el dato se usa como identidad o como texto.** El mismo nombre de función va como id de nodo y como etiqueta en la misma línea de Mermaid: la etiqueta tolera casi todo, el id no. Python usaba el nombre crudo para los dos, y funcionaba sólo porque los identificadores de Python son `[A-Za-z0-9_]`.
+- **Y los cortes de texto van por caracteres, no por bytes.** Cortar un docstring a 40 bytes parte un acento al medio y deja UTF-8 inválido, que en Mermaid no se dibuja.
+
+**Lo que el paso de `/api/upload` agregó a esa lista.**
+- **Dos listas de la misma cosa es una divergencia esperando.** Había dos sets de directorios ignorados —uno en las subidas, otro en el análisis— y no coincidían: subir una carpeta de un proyecto Rust escribía todo `target/` a disco porque sólo el lado del análisis lo ignoraba. **Al portar, lo primero es buscar si la constante que se mueve tiene un gemelo.** Y una de esas reglas (`"*.egg-info"`, en un set consultado por igualdad exacta) nunca había matcheado nada: código muerto con forma de regla.
+- **Una diferencia de framework puede ser una mejora, no un obstáculo.** FastAPI parseaba el multipart completo antes del handler; axum lo streamea, así que `project_id` puede llegar después de los archivos. En vez de replicar el buffering, se escribe a un área de staging y se mueve al final: **la RAM queda constante en un archivo por vez** en vez de proporcional al cuerpo. El caso real que motivó el filtro de `node_modules` eran 27.614 archivos y 513 MB.
+- **Los tests de un router que se va no se reapuntan: se preguntan qué necesitaban.** Tres tests creaban su proyecto subiendo un ZIP para que otro endpoint lo leyera del disco. Lo que necesitaban era *un proyecto en el disco*; ahora lo escriben directo. Ejercitar una subida entera de paso era acoplamiento, no cobertura.
+- **Y la lección que costó datos reales: una verificación manual contra el directorio de producción es destructiva acá.** La suite de tests escribía en el `uploads/` real y la retención (`MAX_PROJECTS = 20`) le borró 20 proyectos al usuario; eso se arregló apuntando los tests a un temporal. Después **el mismo error se repitió a mano**: verificar los endpoints nuevos contra el directorio real borró 10 proyectos más. **Toda verificación manual de `/api/upload` va con el motor arrancado con `SYTHRALL_UPLOADS_DIR` apuntando a un temporal**, que es la variable que este mismo paso unificó entre Python y Rust.
 
 **La regla que el usuario puso y que gobierna toda la fase: *"bench quién gana, y si no gana se borra sin piedad"*.** No se porta nada a ciegas. Cada pieza que se mueve se mide contra la que reemplaza —tiempo y **RAM**, que fue pedido explícitamente— y si la versión nueva no gana, **no se queda por haberla escrito**. Vale para los puertos de Python a Rust y vale para lo que ya existe.
 
@@ -1766,9 +1801,12 @@ Sale de una conversación sobre si agregar D al ecosistema. La conclusión no fu
 
 **Los demás puntos del mandato, cada uno con su criterio de hecho:**
 - [ ] **Muchos archivos a la vez.** Hoy el escaneo es secuencial por archivo. Se mide primero: cuántos archivos, cuánta RAM y cuánto tarda el proyecto más grande que se pueda armar, y recién después se decide el paralelismo. **Sin la medición previa no se toca**, porque "va más rápido" sin un número es una opinión.
+  - **Medio paso dado, y sólo medio**: la *subida* dejó de necesitar RAM proporcional al cuerpo. El port de `/api/upload` escribe cada archivo a un área de staging a medida que llega, así que el pico queda en **un archivo por vez** en lugar del multipart completo en memoria — el caso real de 27.614 archivos y 513 MB ya no tiene que caber. **El escaneo y el análisis siguen secuenciales y sin medir**, que es lo que este punto pide de verdad: la subida era el camino de entrada, no el cuello de botella.
 - [ ] **Rendimiento y RAM.** Mismo criterio: medir antes, y el que no gana se borra.
-- [ ] **Limpieza profunda.** Código muerto, CSS muerto, exports sin consumidores (ya apareció uno), duplicados. `panels/static.ts` sigue en **3.559 líneas** y es el archivo más grande del frontend: partirlo de verdad significa mover el bloque de validación empírica con sus ~30 variables de estado de módulo.
+  - **Primer resultado medido, del paso de `/metrics`**: el endpoint más llamado de la app pasó de **16,3 ms** a **1,74 ms** por llamada (release, archivo de 443 líneas con 40 funciones) al dejar de pedirle a `analyze_rich` un análisis completo para mostrar siete números. **El que no ganaba se borró**: la implementación con `analyze_rich` no quedó como opción, y hay un test de presupuesto con el tope en 10 ms que detecta si alguien la vuelve a enchufar.
+- [x] **Limpieza profunda** — *en curso, con lo de esta fase hecho*. Código muerto, CSS muerto, exports sin consumidores (ya apareció uno), duplicados. `panels/static.ts` sigue en **3.585 líneas** y es el archivo más grande del frontend: partirlo de verdad significa mover el bloque de validación empírica con sus ~30 variables de estado de módulo.
 - [ ] **UI/UX.** Continuo, no un paso con final.
+  - **Brecha anotada en este paso**: el flowchart para lenguajes que no son Python detecta funciones de JS/TS con un patrón y para cualquier otra extensión muestra sólo el nombre del archivo y su cantidad de líneas — aunque el motor ya parsea **13 lenguajes de verdad**. Se portó tal cual a propósito: ampliarlo es un cambio de producto, no parte de una migración. Cuando se haga, los parsers ya están.
 - [ ] **App de escritorio.** Declarado futuro por el usuario, sin fecha. Entra cuando el producto esté sin Python: una app de escritorio que embeba un intérprete de Python sería empezar al revés.
 - [x] **Licencia y vuelta a open source** — *hecho el 2026-11-14*. Ver el aviso al principio de los README: el proyecto nació público bajo GPL-3.0, pasó a privado en la v4.12.0 y vuelve a ser público bajo GPL-3.0. **Y se corrigió un defecto real**: el `LICENSE` era un resumen con un enlace, y la GPL exige acompañar el programa con *una copia* de la licencia. Ahora trae el texto íntegro (674 líneas).
 

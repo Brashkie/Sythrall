@@ -230,7 +230,11 @@ fn vacio() -> Value {
     json!([])
 }
 
-fn parse_one(filename: String, content: &str) -> Value {
+/// **`pub` desde la Fase 35.** Este despachador por extension ya existia
+/// para escanear proyectos; `static_parser.py` tenia su propia copia del
+/// mismo mapa extension -> parser en 1.122 lineas. Ahora `/static/parse` usa
+/// este, que es el mismo que usa el escaneo: una sola tabla de despacho.
+pub fn parse_one(filename: String, content: &str) -> Value {
     let ext = Path::new(&filename).extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
     // Conteo físico de líneas (mismo criterio que Python's `content.count("\n")`,
     // "wc -l") — se manda de vuelta en vez de `content` para que

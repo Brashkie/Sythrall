@@ -7,13 +7,20 @@ import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { ascii, color } from 'ansimax'
+import { readAuthSecret } from './lib/authSecret.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
+// **Fase 35** — el secreto va acá porque el motor pasó a ser el EMISOR de los
+// tokens de sesión de la terminal (`servicio/sistema.rs`). Antes lo recibía
+// `run-backend.mjs`, que ya no existe; `run-terminal.mjs` sigue recibiéndolo
+// porque es el verificador. Los dos tienen que ver el mismo valor o el token
+// que uno firma el otro lo rechaza.
 const child = spawn('cargo', ['run', '--bin', 'complexity-engine'], {
   cwd: root,
   stdio: 'inherit',
   shell: process.platform === 'win32',
+  env: { ...process.env, SYTHRALL_AUTH_SECRET: readAuthSecret() },
 })
 
 child.on('error', (err) => {

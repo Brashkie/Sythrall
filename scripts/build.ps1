@@ -14,21 +14,12 @@ try {
     Pop-Location
 }
 
-$venvPython = Join-Path $root ".venv\Scripts\python.exe"
-if (Test-Path $venvPython) {
-    Write-Host "`n[2/3] Backend (sanity check)..." -ForegroundColor Yellow
-    Push-Location $root
-    try {
-        & $venvPython -m compileall -q apps\api\main.py apps\api\shared.py apps\api\routers apps\api\services
-    } finally {
-        Pop-Location
-    }
-} else {
-    Write-Host "`n[2/3] Backend - omitido (ejecuta scripts\setup.ps1 para validar tambien el backend)." -ForegroundColor DarkYellow
-}
+# **Fase 35** - aca habia un 'compileall' del backend de Python. Ya no hay
+# backend de Python: el chequeo equivalente es 'cargo build', que el bloque de
+# abajo ya hace.
 
 if (Get-Command cargo -ErrorAction SilentlyContinue) {
-    Write-Host "`n[3/3] Rust sidecars (terminal + complexity) (cargo build --release)..." -ForegroundColor Yellow
+    Write-Host "`n[2/2] Rust sidecars (terminal + complexity) (cargo build --release)..." -ForegroundColor Yellow
     Push-Location $root
     try {
         cargo build --release
@@ -36,7 +27,7 @@ if (Get-Command cargo -ErrorAction SilentlyContinue) {
         Pop-Location
     }
 } else {
-    Write-Host "`n[3/3] Rust sidecars (terminal + complexity) - omitido (instala Rust: https://rustup.rs)." -ForegroundColor DarkYellow
+    Write-Host "`n[2/2] Rust sidecars (terminal + complexity) - omitido (instala Rust: https://rustup.rs)." -ForegroundColor DarkYellow
 }
 
 Write-Host "`nBuild completo. Salida frontend en dist\" -ForegroundColor Green

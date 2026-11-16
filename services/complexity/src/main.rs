@@ -1,6 +1,7 @@
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Query};
-use axum::routing::{get, post};
+use axum::http::StatusCode;
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use complexity_core::servicio::logstore::{self, LogEntry};
 use serde::{Deserialize, Serialize};
@@ -28,6 +29,18 @@ fn to_json<T: Serialize>(result: T) -> Json<Value> {
 struct ComplexityRequest {
     #[allow(dead_code)]
     filename: String,
+    content: String,
+}
+
+/// **El shape que manda el frontend para SPARK: solo `content`.**
+///
+/// El router de Python que esto reemplaza (Fase 35) le agregaba un
+/// `filename` fijo antes de reenviar, asi que `ComplexityRequest` nunca vio
+/// la peticion cruda. Al sacar esa capa aparecio que el cliente no manda
+/// `filename` — y para verificar un fuente Ada no hace falta: el nombre del
+/// archivo lo deriva `spark.rs` de la unidad, que es lo que GNAT exige.
+#[derive(Deserialize)]
+struct VerificacionRequest {
     content: String,
 }
 
@@ -59,10 +72,6 @@ fn default_log_limit() -> usize {
     100
 }
 
-fn log_dir() -> PathBuf {
-    PathBuf::from(std::env::var("SYTHRALL_LOG_DIR").unwrap_or_else(|_| "logs".to_string()))
-}
-
 /// Fuentes conocidas — un archivo por origen, cada uno escrito por un solo
 /// proceso (este sidecar para "api"/"complexity", `terminal-server` para
 /// "terminal"), así que no hay que coordinar escrituras concurrentes al
@@ -83,7 +92,14 @@ async fn main() {
     // al sistema de archivos ni ejecución de comandos — el riesgo que
     // justifica el token en terminal-server (una shell real) no aplica acá.
     let app = Router::new()
-        .route("/health", get(health))
+        // El `/health` del MOTOR (un `{"ok": true}` para los scripts de
+        // arranque y el conftest) se mueve a `/engine/health`, y `/health`
+        // pasa a ser el del producto, que es el que servia `main.py` y el que
+        // el frontend pide.
+        .route("/engine/health", get(health))
+        .route("/health", get(sistema_salud))
+        .route("/capabilities", get(sistema_capacidades))
+        .route("/auth/terminal-token", get(sistema_token))
         .route("/metrics/complexity", post(metrics_complexity))
         .route("/parse/python", post(parse_python))
         .route("/graph/import", post(graph_import))
@@ -94,6 +110,10 @@ async fn main() {
         .route("/graph/heatmap", post(graph_heatmap))
         .route("/ml/detect", post(ml_detect))
         .route("/log", post(log_append).get(log_read))
+        // **Fase 35** — el cliente pide `/logs?limit=N`, que es como lo
+        // exponia el router de Python mientras reenviaba aca. Mismo
+        // handler: el shape ya era identico.
+        .route("/logs", get(log_read))
         .route("/parse/c", post(parse_c))
         .route("/parse/cpp", post(parse_cpp))
         .route("/parse/js", post(parse_js))
@@ -102,8 +122,90 @@ async fn main() {
         .route("/parse/ada", post(parse_ada))
         .route("/parse/d", post(parse_d))
         .route("/verify/spark", post(verify_spark))
+        // El frontend lo pedia por este camino cuando el router de
+        // Python lo reenviaba; se conserva para no cambiar el cliente
+        // al mismo tiempo que se borra la capa de abajo.
+        .route("/execution/spark-verify", post(verify_spark))
         .route("/parse/rust", post(parse_rust))
         .route("/parse/asm", post(parse_asm))
+        // ── Fase 35: el prefijo `/static`, que vivia en FastAPI ──
+        // ── Fase 35: los grafos, que vivian en `routers/graph.py` ──
+        .route("/analyze/graph/types", get(grafo_tipos))
+        .route("/analyze/graph", post(grafo_generar))
+        .route("/analyze/graph/project", post(grafo_generar))
+        // ── Fase 35: los diagramas, que vivian en `routers/diagram.py` ──
+        .route("/analyze/diagram", post(diagrama_generar))
+        // ── Fase 35: lo que queda de `routers/analysis.py` ──
+        .route("/analyze/logs-analyze", post(logs_analizar))
+        .route("/analyze/code", post(analisis_de_codigo))
+        .route("/analyze/project", post(analisis_de_proyecto))
+        .route("/analyze/api", post(apis_chequear))
+        .route("/analyze/ml", post(ml_panel))
+        // ── Fase 35: `/intel`, de `routers/intelligence.py` ──
+        .route("/intel/lint", post(intel_lint))
+        .route("/intel/analyze", post(intel_analizar))
+        .route("/intel/hover", post(intel_hover))
+        .route("/intel/definition", post(intel_definicion))
+        .route("/intel/references", post(intel_referencias))
+        .route("/intel/completions", post(intel_completado))
+        .route("/intel/rename", post(intel_renombrar))
+        // ── Fase 35: las metricas en vivo, de `routers/metrics_live.py` ──
+        .route("/metrics/live", post(metricas_en_vivo))
+        .route("/metrics/validate", post(metricas_validar))
+        .route("/metrics/health", get(metricas_estado))
+        // ── Fase 35: el historial, que vivia en `routers/history.py` ──
+        //
+        // **El orden ya no decide, pero el conflicto sigue existiendo.**
+        // FastAPI resolvia por orden de declaracion, asi que `/overview`
+        // declarado despues de `/:project_id` devolvia "los snapshots del
+        // proyecto llamado 'overview'" — una lista vacia. El router de axum
+        // prefiere el segmento literal sobre el parametro sin importar el
+        // orden, asi que aca el bug no se puede cometer; se deja igual el
+        // orden de Python para que la comparacion entre ambos sea directa.
+        .route("/history/overview", get(historial_panorama))
+        .route("/history/compare/:desde/:hasta", get(historial_comparar))
+        .route("/history/snapshot/:snapshot_id", delete(historial_borrar))
+        .route("/history/:project_id/snapshot", post(historial_crear_snapshot))
+        .route("/history/:project_id", get(historial_de_proyecto))
+        // ── Fase 35: las subidas, que vivian en `routers/upload.py` ──
+        //
+        // El tope de cuerpo es por ruta y no global: `/files` y `/folder`
+        // pueden traer una carpeta entera, `/zip` tiene su propio tope de
+        // 200 MB declarado en el handler, y los endpoints de lectura no
+        // necesitan ninguno. Un tope global tendria que ser el mayor de
+        // todos, o sea ninguno.
+        .route(
+            "/api/upload/files",
+            post(upload_files).layer(DefaultBodyLimit::max(512 * 1024 * 1024)),
+        )
+        .route(
+            "/api/upload/folder",
+            post(upload_folder).layer(DefaultBodyLimit::max(512 * 1024 * 1024)),
+        )
+        .route(
+            "/api/upload/zip",
+            // Un poco arriba del tope real (200 MB) para que un ZIP pasado
+            // llegue al handler y salga con un 413 que dice el limite, en vez
+            // de un rechazo crudo del layer sin cuerpo.
+            post(upload_zip).layer(DefaultBodyLimit::max(subidas::MAX_ZIP as usize + 1024 * 1024)),
+        )
+        .route("/api/upload/empty", post(upload_empty))
+        .route("/api/upload/projects", get(upload_projects))
+        .route("/api/upload/projects/:project_id/tree", get(upload_tree))
+        .route(
+            "/api/upload/projects/:project_id/file",
+            get(upload_file_content).post(upload_create_file),
+        )
+        .route("/api/upload/projects/:project_id", delete(upload_delete_project))
+        .route("/static/languages", get(static_languages))
+        .route("/static/parse", post(static_parse))
+        .route("/static/parse-project", post(static_parse_project))
+        .route("/static/bigO", post(static_big_o))
+        .route("/static/wasm", post(static_wasm))
+        .route("/static/compile-asm", post(static_compile_asm))
+        .route("/static/compile-pareto", post(static_compile_pareto))
+        .route("/static/css-atomic", post(static_css_atomic))
+        .route("/static/css-usage", post(static_css_usage))
         .route("/compile/asm", post(compilar_asm))
         .route("/compile/pareto", post(pareto_compilacion))
         .route("/parse/notebook", post(parse_notebook))
@@ -117,6 +219,14 @@ async fn main() {
         .route(
             "/parse/executable",
             post(parse_executable).layer(DefaultBodyLimit::max(64 * 1024 * 1024)),
+        )
+        .route(
+            "/binary/parse",
+            // El tope del layer va un poco ARRIBA del tope real a proposito:
+            // asi un archivo pasado de tamanio llega al handler y sale con la
+            // forma degradada de siempre, en vez de un 413 crudo que el panel
+            // no sabe mostrar.
+            post(binary_parse).layer(DefaultBodyLimit::max(MAX_UPLOAD_BINARIO + 1024 * 1024)),
         )
         .route("/execution/validate-matmul", post(validate_matmul))
         .route("/execution/validate-bubble-sort", post(validate_bubble_sort))
@@ -141,7 +251,7 @@ async fn main() {
     let addr: std::net::SocketAddr = format!("{host}:{port}").parse().expect("host/puerto inválido");
     println!("🦀 Complexity engine escuchando en http://{addr}");
     if let Err(e) = logstore::append(
-        &log_dir().join("complexity.cbor"),
+        &logstore::log_dir().join("complexity.cbor"),
         &LogEntry { ts: logstore::now_string(), level: "info".into(), msg: format!("Complexity engine escuchando en http://{addr}"), source: "complexity".into() },
     ) {
         // Best-effort — no debe tumbar el arranque si SYTHRALL_LOG_DIR no es
@@ -153,8 +263,16 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .unwrap_or_else(|e| panic!("no se pudo bindear {addr}: {e}"));
-    axum::serve(listener, app).await.expect("servidor caído");
+    // `into_make_service_with_connect_info` y no `app` directo: el handler
+    // del token necesita la IP del peer para el chequeo de loopback, y sin
+    // esto `ConnectInfo` no está disponible.
+    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())
+        .await
+        .expect("servidor caído");
 }
+
+/// Mismo tope que tenia el router de Python que esto reemplaza.
+const MAX_UPLOAD_BINARIO: usize = 64 * 1024 * 1024;
 
 async fn health() -> Json<Value> {
     Json(json!({ "ok": true }))
@@ -202,6 +320,1146 @@ async fn salud_proyecto(
     Json(req): Json<complexity_core::servicio::salud::EntradaSalud>,
 ) -> Json<Value> {
     to_json(complexity_core::servicio::salud::calcular(&req))
+}
+
+// ───────────────────────── Fase 35 — el prefijo `/static` ─────────────────
+//
+// Nueve endpoints que servia `apps/api/routers/static_analysis.py`. El campo
+// `available` del shape significaba "ipudo hablar con el sidecar?"; aca el
+// sidecar **es** el proceso, asi que es siempre `true`. Se deja igual en vez
+// de sacarlo: el cliente lo lee, y romperlo no era parte del trato.
+
+/// Los cinco tipos de grafo que el selector ofrece.
+async fn grafo_tipos() -> Json<Value> {
+    Json(complexity_core::servicio::grafo::tipos())
+}
+
+// ── Fase 35: el historial, que vivia en `routers/history.py` ──────────────
+//
+// El router de Python guardaba en SQLite; aca el almacenamiento es el mismo
+// CBOR append-only que `logstore`, para no meterle al motor una dependencia
+// de SQLite por unas decenas de registros de cuatro numeros. El porque largo
+// esta en el doc de `servicio::historial`.
+
+/// Panorama entre todos los proyectos con snapshots guardados.
+///
+/// Lee el historial y el directorio de subidas, los dos de disco, asi que va
+/// a `spawn_blocking`.
+async fn historial_panorama() -> (StatusCode, Json<Value>) {
+    match tokio::task::spawn_blocking(|| {
+        let nombres = complexity_core::servicio::proyecto::nombres_de_proyectos();
+        complexity_core::servicio::historial::panorama(&nombres)
+    })
+    .await
+    {
+        Ok(v) => (StatusCode::OK, Json(v)),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "detail": format!("el panorama no se pudo armar: {e}") })),
+        ),
+    }
+}
+
+/// Corre el analisis del proyecto y guarda su `health`/`summary`.
+///
+/// **Usa `analizar_proyecto`, la misma funcion que `/static/parse-project`**
+/// — una sola fuente de verdad para el scoring, no una segunda formula aca.
+/// En Python esto era un salto HTTP del backend al motor; ahora las dos
+/// mitades viven en el mismo proceso y la llamada es directa.
+async fn historial_crear_snapshot(
+    axum::extract::Path(project_id): axum::extract::Path<String>,
+) -> (StatusCode, Json<Value>) {
+    let resultado = tokio::task::spawn_blocking(move || {
+        let dir = complexity_core::servicio::proyecto::directorio_de_subidas().join(&project_id);
+        if !dir.is_dir() {
+            return Err((
+                StatusCode::NOT_FOUND,
+                format!("Proyecto '{project_id}' no encontrado"),
+            ));
+        }
+        let req = complexity_core::servicio::proyecto::ProyectoRequest {
+            project_id: Some(project_id.clone()),
+            ..Default::default()
+        };
+        let analisis = complexity_core::servicio::proyecto::analizar_proyecto(&req);
+        let (Some(health), Some(summary)) = (analisis.get("health"), analisis.get("summary"))
+        else {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "El analisis no devolvio scores: no se puede guardar un snapshot sin ellos."
+                    .to_string(),
+            ));
+        };
+        complexity_core::servicio::historial::guardar(
+            &project_id,
+            health.clone(),
+            summary.clone(),
+            Some(complexity_core::servicio::plugin::capacidades_de_analisis()),
+        )
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("el snapshot no se pudo guardar: {e}"),
+            )
+        })
+    })
+    .await;
+    match resultado {
+        Ok(Ok(s)) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(s).unwrap_or_else(|e| json!({ "detail": e.to_string() }))),
+        ),
+        Ok(Err((code, detail))) => (code, Json(json!({ "detail": detail }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "detail": format!("el analisis no termino: {e}") })),
+        ),
+    }
+}
+
+async fn historial_de_proyecto(
+    axum::extract::Path(project_id): axum::extract::Path<String>,
+) -> Json<Value> {
+    let snaps =
+        tokio::task::spawn_blocking(move || complexity_core::servicio::historial::de_proyecto(&project_id))
+            .await
+            .unwrap_or_default();
+    Json(serde_json::to_value(snaps).unwrap_or_else(|_| json!([])))
+}
+
+async fn historial_comparar(
+    axum::extract::Path((desde, hasta)): axum::extract::Path<(u64, u64)>,
+) -> (StatusCode, Json<Value>) {
+    match tokio::task::spawn_blocking(move || {
+        complexity_core::servicio::historial::comparar(desde, hasta)
+    })
+    .await
+    {
+        Ok(Some(v)) => (StatusCode::OK, Json(v)),
+        Ok(None) => {
+            (StatusCode::NOT_FOUND, Json(json!({ "detail": "Snapshot no encontrado" })))
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "detail": format!("la comparacion no termino: {e}") })),
+        ),
+    }
+}
+
+async fn historial_borrar(
+    axum::extract::Path(snapshot_id): axum::extract::Path<u64>,
+) -> (StatusCode, Json<Value>) {
+    match tokio::task::spawn_blocking(move || complexity_core::servicio::historial::borrar(snapshot_id))
+        .await
+    {
+        Ok(Ok(true)) => (StatusCode::OK, Json(json!({ "deleted": snapshot_id }))),
+        Ok(Ok(false)) => {
+            (StatusCode::NOT_FOUND, Json(json!({ "detail": "Snapshot no encontrado" })))
+        }
+        Ok(Err(e)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "detail": format!("el snapshot no se pudo borrar: {e}") })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "detail": format!("el borrado no termino: {e}") })),
+        ),
+    }
+}
+
+/// **Un solo handler para `/analyze/graph` y `/analyze/graph/project`.** En
+/// Python eran dos endpoints porque uno recibia archivos y el otro un
+/// `project_id`; aca el request trae los dos campos y `resultados_de` decide
+/// de donde leer, asi que la duplicacion desaparece.
+///
+/// Va a `spawn_blocking`: con `project_id` esto lee y parsea el proyecto
+/// entero del disco.
+async fn grafo_generar(
+    Json(req): Json<complexity_core::servicio::grafo::GrafoRequest>,
+) -> Json<Value> {
+    match tokio::task::spawn_blocking(move || complexity_core::servicio::grafo::generar(&req)).await {
+        Ok(v) => Json(v),
+        Err(e) => Json(json!({ "error": format!("el grafo no se pudo generar: {e}"), "mermaid": "", "nodes": [], "edges": [] })),
+    }
+}
+
+// ── Fase 35, paso 6: sistema y auth, lo ultimo de Python ──────────────────
+
+/// `/health` del producto. **Ojo con el nombre**: el motor ya tenia un
+/// `/health` propio que devuelve `{"ok": true}` y lo usan los scripts de
+/// arranque y el conftest. Este es el del PRODUCTO, con las capacidades, y
+/// vive en la misma ruta que servia `main.py`. El del motor pasa a
+/// `/engine/health` para que los dos convivan sin que uno tape al otro.
+async fn sistema_salud() -> Json<Value> {
+    Json(
+        tokio::task::spawn_blocking(complexity_core::servicio::sistema::salud)
+            .await
+            .unwrap_or_else(|e| json!({ "status": "error", "detail": e.to_string() })),
+    )
+}
+
+async fn sistema_capacidades() -> Json<Value> {
+    Json(
+        tokio::task::spawn_blocking(complexity_core::servicio::sistema::capacidades)
+            .await
+            .unwrap_or_else(|e| json!({ "server": "Sythrall", "detail": e.to_string() })),
+    )
+}
+
+/// Firma un token de sesion para la terminal, **solo si el pedido viene de
+/// esta maquina**. Si alguna vez esto se expone mas alla de localhost, se
+/// corta hasta que exista login real.
+async fn sistema_token(
+    headers: axum::http::HeaderMap,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>,
+) -> (StatusCode, Json<Value>) {
+    let xff = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok());
+    if !complexity_core::servicio::sistema::es_loopback(xff, Some(&peer.ip().to_string())) {
+        return (StatusCode::FORBIDDEN, Json(json!({ "detail": "forbidden" })));
+    }
+    match complexity_core::servicio::sistema::token_de_terminal() {
+        Ok(v) => (StatusCode::OK, Json(v)),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "detail": e }))),
+    }
+}
+
+// ── Fase 35: la inteligencia del editor, de `routers/intelligence.py` ─────
+//
+// Siete endpoints bajo `/intel`. `flake8`/`pylint` no estan (misma decision
+// que en `servicio::analisis`) y los fallbacks de definition/references se
+// borraron: `ast::symbols` ya tenia las cuatro funciones.
+
+/// El camino rapido: se dispara en cada debounce de 300 ms del editor.
+async fn intel_lint(
+    Json(req): Json<complexity_core::servicio::editor::ArchivoRequest>,
+) -> Json<Value> {
+    match tokio::task::spawn_blocking(move || {
+        complexity_core::servicio::editor::lint_rapido(&req.filename, &req.content)
+    })
+    .await
+    {
+        Ok(v) => Json(v),
+        Err(e) => Json(json!({ "markers": [], "ms": 0, "source": "fast", "error": e.to_string() })),
+    }
+}
+
+/// El camino lento: se dispara cuando el usuario deja de escribir (~2 s).
+async fn intel_analizar(
+    Json(req): Json<complexity_core::servicio::editor::ArchivoRequest>,
+) -> Json<Value> {
+    match tokio::task::spawn_blocking(move || {
+        complexity_core::servicio::editor::analisis_completo(&req.filename, &req.content)
+    })
+    .await
+    {
+        Ok(v) => Json(v),
+        Err(e) => Json(json!({ "markers": [], "source": "heavy", "error": e.to_string() })),
+    }
+}
+
+async fn intel_hover(
+    Json(req): Json<complexity_core::servicio::editor::PosicionRequest>,
+) -> Json<Value> {
+    match tokio::task::spawn_blocking(move || complexity_core::servicio::editor::hover(&req)).await {
+        Ok(v) => Json(v),
+        Err(_) => Json(json!({ "markdown": "", "range": Value::Null })),
+    }
+}
+
+async fn intel_definicion(
+    Json(req): Json<complexity_core::servicio::editor::SimboloRequest>,
+) -> Json<Value> {
+    match tokio::task::spawn_blocking(move || complexity_core::servicio::editor::definicion(&req))
+        .await
+    {
+        Ok(v) => Json(v),
+        Err(_) => Json(json!({ "found": false, "symbol": "", "definitions": [] })),
+    }
+}
+
+async fn intel_referencias(
+    Json(req): Json<complexity_core::servicio::editor::SimboloRequest>,
+) -> Json<Value> {
+    match tokio::task::spawn_blocking(move || complexity_core::servicio::editor::referencias(&req))
+        .await
+    {
+        Ok(v) => Json(v),
+        Err(_) => Json(json!({ "symbol": "", "references": [], "definition_line": Value::Null, "total": 0 })),
+    }
+}
+
+async fn intel_completado(
+    Json(req): Json<complexity_core::servicio::editor::CompletadoRequest>,
+) -> Json<Value> {
+    match tokio::task::spawn_blocking(move || complexity_core::servicio::editor::completado(&req))
+        .await
+    {
+        Ok(v) => Json(v),
+        Err(_) => Json(json!({ "symbols": [], "total": 0 })),
+    }
+}
+
+async fn intel_renombrar(
+    Json(req): Json<complexity_core::servicio::editor::RenombrarRequest>,
+) -> Json<Value> {
+    match tokio::task::spawn_blocking(move || complexity_core::servicio::editor::renombrar(&req))
+        .await
+    {
+        Ok(v) => Json(v),
+        Err(e) => Json(json!({ "valid": false, "edits": [], "error": e.to_string() })),
+    }
+}
+
+/// **El panel de ML, que vivia en `routers/ml.py`** (Fase 35). La deteccion
+/// ya estaba en `servicio::ml`; lo que se porto es el diagrama Mermaid del
+/// pipeline y el score con sugerencias.
+async fn ml_panel(
+    Json(req): Json<complexity_core::servicio::mlpanel::MlRequest>,
+) -> Json<Value> {
+    match tokio::task::spawn_blocking(move || complexity_core::servicio::mlpanel::analizar(&req))
+        .await
+    {
+        Ok(v) => Json(v),
+        Err(e) => Json(json!({ "issues": [], "error": format!("el analisis de ML no termino: {e}") })),
+    }
+}
+
+/// **Chequeo de APIs externas, lo ultimo de `routers/analysis.py`** (Fase 35).
+///
+/// **NO va a `spawn_blocking`**: es I/O de red asincronico, no computo. Meter
+/// esto en el threadpool ocuparia un hilo entero esperando un socket, que es
+/// exactamente lo contrario de lo que hay que hacer — y el motivo por el que
+/// el resto de los handlers si lo usan (ellos queman CPU).
+///
+/// El port valida certificados; el cliente de Python usaba `verify=False`.
+async fn apis_chequear(
+    Json(req): Json<complexity_core::servicio::apis::ApisRequest>,
+) -> Json<Value> {
+    Json(complexity_core::servicio::apis::chequear(&req).await)
+}
+
+// ── Fase 35: el panel de problemas, de `routers/analysis.py` ──────────────
+//
+// `flake8` y `pylint` NO estan: se borraron por decision del usuario, porque
+// invocarlos por subprocess dejaba a "Sythrall sin Python" necesitando un
+// Python instalado. Quedan las 7 reglas que `_run_ast` tenia, portadas
+// enteras, mas la complejidad del motor.
+
+async fn analisis_de_codigo(
+    Json(req): Json<complexity_core::servicio::analisis::CodigoRequest>,
+) -> Json<Value> {
+    match tokio::task::spawn_blocking(move || {
+        complexity_core::servicio::analisis::analizar_codigo(&req)
+    })
+    .await
+    {
+        Ok(v) => Json(v),
+        Err(e) => Json(json!({ "issues": [], "error": format!("el analisis no termino: {e}") })),
+    }
+}
+
+/// Con `project_id` lee el proyecto entero del disco, asi que es el pedido
+/// mas caro de los dos: `spawn_blocking` no es opcional.
+async fn analisis_de_proyecto(
+    Json(req): Json<complexity_core::servicio::analisis::ProyectoRequest>,
+) -> Json<Value> {
+    match tokio::task::spawn_blocking(move || {
+        complexity_core::servicio::analisis::analizar_proyecto(&req)
+    })
+    .await
+    {
+        Ok(v) => Json(v),
+        Err(e) => Json(json!({ "files": {}, "error": format!("el analisis no termino: {e}") })),
+    }
+}
+
+/// **Analisis de logs, que vivia en `routers/analysis.py::analyze_logs`**
+/// (Fase 35). Clasificacion de texto por palabras clave: no parsea ningun
+/// lenguaje, pero recorre archivos enteros, asi que va a `spawn_blocking`.
+async fn logs_analizar(
+    Json(req): Json<complexity_core::servicio::logs::LogsRequest>,
+) -> Json<Value> {
+    match tokio::task::spawn_blocking(move || complexity_core::servicio::logs::analizar(&req)).await
+    {
+        Ok(v) => Json(v),
+        Err(e) => Json(json!({
+            "errors": [], "warnings": [], "summary": {},
+            "error": format!("el analisis de logs no termino: {e}"),
+        })),
+    }
+}
+
+// ── Fase 35: las metricas en vivo, que vivian en `routers/metrics_live.py` ──
+//
+// `/metrics/live` es el endpoint mas llamado de la app: lo dispara el editor
+// en cada pausa de tecleo. El presupuesto declarado es 5 ms y el camino
+// liviano de `servicio::metricas` mide 1,74 ms en release — ver el doc de
+// `de_python` para por que NO usa `analyze_rich`.
+
+async fn metricas_en_vivo(
+    Json(req): Json<complexity_core::servicio::metricas::MetricasRequest>,
+) -> Json<Value> {
+    match tokio::task::spawn_blocking(move || complexity_core::servicio::metricas::en_vivo(&req))
+        .await
+    {
+        Ok(v) => Json(v),
+        Err(e) => Json(json!({ "parse_ok": false, "safe_mode": true, "parse_error": e.to_string() })),
+    }
+}
+
+async fn metricas_validar(
+    Json(req): Json<complexity_core::servicio::metricas::MetricasRequest>,
+) -> Json<Value> {
+    match tokio::task::spawn_blocking(move || complexity_core::servicio::metricas::validar(&req))
+        .await
+    {
+        Ok(v) => Json(v),
+        Err(e) => Json(json!({ "valid": false, "errors": [e.to_string()] })),
+    }
+}
+
+async fn metricas_estado() -> Json<Value> {
+    // Consulta el toolchain por `pylint`, que toca disco: va al threadpool.
+    Json(
+        tokio::task::spawn_blocking(complexity_core::servicio::metricas::estado)
+            .await
+            .unwrap_or_else(|e| json!({ "status": "error", "detail": e.to_string() })),
+    )
+}
+
+/// **Los diagramas Mermaid, que vivian en `routers/diagram.py`** (Fase 35).
+///
+/// `analyze_rich` sobre un archivo grande no es gratis, asi que va a
+/// `spawn_blocking` igual que el resto del parseo.
+async fn diagrama_generar(
+    Json(req): Json<complexity_core::servicio::diagrama::DiagramaRequest>,
+) -> Json<Value> {
+    match tokio::task::spawn_blocking(move || complexity_core::servicio::diagrama::generar(&req))
+        .await
+    {
+        Ok(v) => Json(v),
+        // El panel espera SIEMPRE un `mermaid`: si no llega uno, no dibuja
+        // nada y no dice por que. Asi que el error viaja como un diagrama.
+        Err(e) => Json(json!({
+            "filename": "",
+            "diagram_type": "",
+            "mermaid": format!("flowchart TD\n    ERR[Error: {}]", e.to_string().chars().take(60).collect::<String>()),
+            "ts": logstore::now_string(),
+        })),
+    }
+}
+
+// ── Fase 35: las subidas, que vivian en `routers/upload.py` ───────────────
+//
+// Nueve endpoints bajo `/api/upload`. Lo que cambio de forma, y a proposito:
+// cada archivo se escribe a disco **a medida que llega** en un directorio de
+// staging, en vez de tener el cuerpo entero del multipart en memoria. Ver el
+// doc de `subidas::directorio_temporal_de_subida` para el porque (axum
+// streamea el multipart y FastAPI no lo hacia).
+
+use complexity_core::servicio::subidas;
+
+/// De donde sale la ruta de destino de cada archivo de la subida — es la
+/// unica diferencia real entre `/files` y `/folder`, que en Python eran dos
+/// handlers de 50 lineas casi identicas.
+#[derive(Clone, Copy, PartialEq)]
+enum ModoDeSubida {
+    /// Archivos sueltos: se queda solo con el nombre, sin ninguna ruta.
+    Sueltos,
+    /// Una carpeta: se conserva la ruta relativa que manda el browser.
+    Carpeta,
+}
+
+struct SubidaRecibida {
+    nombre_pedido: String,
+    project_id_pedido: Option<String>,
+    guardados: Vec<Value>,
+    errores: Vec<Value>,
+    ignorados: u64,
+    /// El primer segmento del primer archivo, que el picker de carpeta del
+    /// browser garantiza que es el nombre de la carpeta elegida.
+    primera_carpeta: Option<String>,
+    temporal: PathBuf,
+}
+
+/// Lee el multipart entero, escribiendo cada archivo al staging.
+async fn recibir_subida(
+    mut multipart: axum::extract::Multipart,
+    modo: ModoDeSubida,
+) -> Result<SubidaRecibida, String> {
+    let temporal = subidas::directorio_temporal_de_subida();
+    std::fs::create_dir_all(&temporal).map_err(|e| format!("no se pudo crear el staging: {e}"))?;
+
+    let mut r = SubidaRecibida {
+        nombre_pedido: String::new(),
+        project_id_pedido: None,
+        guardados: Vec::new(),
+        errores: Vec::new(),
+        ignorados: 0,
+        primera_carpeta: None,
+        temporal: temporal.clone(),
+    };
+
+    while let Some(campo) = multipart.next_field().await.map_err(|e| e.to_string())? {
+        let nombre_campo = campo.name().unwrap_or("").to_string();
+        let nombre_archivo = campo.file_name().map(str::to_string);
+
+        // Un campo sin `filename` es un campo de texto del formulario.
+        let Some(nombre_archivo) = nombre_archivo else {
+            let valor = campo.text().await.unwrap_or_default();
+            match nombre_campo.as_str() {
+                "project_name" => r.nombre_pedido = valor,
+                "project_id" if !valor.is_empty() => r.project_id_pedido = Some(valor),
+                _ => {}
+            }
+            continue;
+        };
+
+        if r.primera_carpeta.is_none() {
+            r.primera_carpeta =
+                subidas::segmentos_seguros(&nombre_archivo).first().cloned();
+        }
+
+        let ext = subidas::extension_de(&nombre_archivo);
+        if subidas::esta_bloqueada(&ext) {
+            r.errores.push(json!({
+                "file": nombre_archivo,
+                "reason": format!("Extensión no permitida: {ext}"),
+            }));
+            continue;
+        }
+
+        // La ruta de destino, segun el modo.
+        let partes: Vec<String> = match modo {
+            ModoDeSubida::Sueltos => subidas::segmentos_seguros(&nombre_archivo)
+                .last()
+                .cloned()
+                .map(|n| vec![n])
+                .unwrap_or_default(),
+            ModoDeSubida::Carpeta => {
+                let mut p = subidas::segmentos_seguros(&nombre_archivo);
+                // El picker de carpeta del browser antepone SIEMPRE el nombre
+                // de la carpeta elegida a cada archivo. Ese segmento ya se usa
+                // aparte como sugerencia de nombre del proyecto; dejarlo aca
+                // anidaria todo un nivel de mas dentro de una carpeta con el
+                // mismo nombre. El `> 1` es para no vaciar la lista cuando hay
+                // un solo archivo sin ruta relativa.
+                if p.len() > 1 {
+                    p.remove(0);
+                }
+                p
+            }
+        };
+        if partes.is_empty() {
+            continue;
+        }
+        // Carpetas del sistema: mismo criterio que la extraccion de ZIP. Sin
+        // esto, subir una carpeta de un proyecto JS normal escribia decenas de
+        // miles de archivos de `node_modules` a disco.
+        if partes[..partes.len() - 1].iter().any(|p| subidas::es_ignorado(p)) {
+            r.ignorados += 1;
+            continue;
+        }
+
+        let datos = match campo.bytes().await {
+            Ok(b) => b,
+            Err(e) => {
+                r.errores.push(json!({ "file": nombre_archivo, "reason": e.to_string() }));
+                continue;
+            }
+        };
+        if datos.len() as u64 > subidas::MAX_ARCHIVO {
+            r.errores
+                .push(json!({ "file": nombre_archivo, "reason": "Archivo demasiado grande (máx 50 MB)" }));
+            continue;
+        }
+
+        let destino = partes.iter().fold(temporal.clone(), |a, p| a.join(p));
+        if let Some(padre) = destino.parent() {
+            if let Err(e) = std::fs::create_dir_all(padre) {
+                r.errores.push(json!({ "file": nombre_archivo, "reason": e.to_string() }));
+                continue;
+            }
+        }
+        match std::fs::write(&destino, &datos) {
+            Ok(()) => r.guardados.push(json!({
+                "name": nombre_archivo,
+                "size": datos.len(),
+                "path": partes.join("/"),
+            })),
+            Err(e) => r.errores.push(json!({ "file": nombre_archivo, "reason": e.to_string() })),
+        }
+    }
+
+    Ok(r)
+}
+
+/// La cola comun de los cuatro endpoints que crean o modifican un proyecto:
+/// arbol → info → nombre resuelto → guardar metadata → podar los viejos.
+fn finalizar(dir: &std::path::Path, nombre_pedido: &str, fallback: &str) -> (Value, String, Value) {
+    let arbol = subidas::arbol(dir);
+    let mut info = subidas::info_de(dir);
+    let nombre = subidas::resolver_nombre(dir, &mut info, nombre_pedido, fallback);
+    subidas::guardar_metadata(dir, &info);
+    subidas::podar(subidas::MAX_PROYECTOS);
+    (arbol, nombre, info)
+}
+
+/// Resuelve el directorio destino: reusa el proyecto pedido (404 si no esta)
+/// o crea uno nuevo.
+fn resolver_o_crear(
+    project_id: Option<String>,
+) -> Result<(String, PathBuf), (StatusCode, String)> {
+    match project_id {
+        Some(id) => {
+            let dir = subidas::ruta_de_proyecto(&id)
+                .ok_or((StatusCode::BAD_REQUEST, "Path inválido.".to_string()))?;
+            if !dir.is_dir() {
+                return Err((StatusCode::NOT_FOUND, format!("Proyecto {id} no encontrado.")));
+            }
+            Ok((id, dir))
+        }
+        None => {
+            let id = subidas::uuid_v4();
+            let dir = subidas::directorio_de_subidas().join(&id);
+            std::fs::create_dir_all(&dir)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            Ok((id, dir))
+        }
+    }
+}
+
+async fn upload_files(multipart: axum::extract::Multipart) -> (StatusCode, Json<Value>) {
+    subida_comun(multipart, ModoDeSubida::Sueltos).await
+}
+
+async fn upload_folder(multipart: axum::extract::Multipart) -> (StatusCode, Json<Value>) {
+    subida_comun(multipart, ModoDeSubida::Carpeta).await
+}
+
+async fn subida_comun(
+    multipart: axum::extract::Multipart,
+    modo: ModoDeSubida,
+) -> (StatusCode, Json<Value>) {
+    let recibida = match recibir_subida(multipart, modo).await {
+        Ok(r) => r,
+        Err(e) => {
+            return (StatusCode::BAD_REQUEST, Json(json!({ "detail": e })));
+        }
+    };
+    let temporal = recibida.temporal.clone();
+    // El staging se borra pase lo que pase: un `?` que salga antes del final
+    // no tiene que dejar basura en disco.
+    let limpiar = || {
+        let _ = std::fs::remove_dir_all(&temporal);
+    };
+
+    if recibida.guardados.is_empty() && recibida.errores.is_empty() {
+        limpiar();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "detail": "No se enviaron archivos." })),
+        );
+    }
+
+    let (project_id, dir) = match resolver_o_crear(recibida.project_id_pedido.clone()) {
+        Ok(v) => v,
+        Err((code, detail)) => {
+            limpiar();
+            return (code, Json(json!({ "detail": detail })));
+        }
+    };
+
+    if let Err(e) = subidas::mover_contenido(&recibida.temporal, &dir) {
+        limpiar();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "detail": format!("no se pudieron guardar los archivos: {e}") })),
+        );
+    }
+    limpiar();
+
+    let fallback = match modo {
+        ModoDeSubida::Sueltos => format!("project-{}", &project_id[..8.min(project_id.len())]),
+        ModoDeSubida::Carpeta => {
+            recibida.primera_carpeta.clone().unwrap_or_else(|| "folder".to_string())
+        }
+    };
+    let (arbol, nombre, _info) = finalizar(&dir, &recibida.nombre_pedido, &fallback);
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "project_id": project_id,
+            "project_name": nombre,
+            "type": if modo == ModoDeSubida::Sueltos { "files" } else { "folder" },
+            "saved": recibida.guardados,
+            "errors": recibida.errores,
+            "tree": arbol,
+            "total_files": recibida.guardados.len(),
+        })),
+    )
+}
+
+async fn upload_zip(mut multipart: axum::extract::Multipart) -> (StatusCode, Json<Value>) {
+    let mut nombre_pedido = String::new();
+    let mut nombre_archivo: Option<String> = None;
+    let mut contenido: Option<axum::body::Bytes> = None;
+
+    while let Ok(Some(campo)) = multipart.next_field().await {
+        let campo_nombre = campo.name().unwrap_or("").to_string();
+        match campo.file_name().map(str::to_string) {
+            Some(f) => {
+                nombre_archivo = Some(f);
+                contenido = campo.bytes().await.ok();
+            }
+            None if campo_nombre == "project_name" => {
+                nombre_pedido = campo.text().await.unwrap_or_default();
+            }
+            None => {}
+        }
+    }
+
+    let (Some(nombre_archivo), Some(bytes)) = (nombre_archivo, contenido) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "detail": "No se envió ningún archivo." })),
+        );
+    };
+    if !nombre_archivo.to_ascii_lowercase().ends_with(".zip") {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "detail": "Solo se aceptan archivos .zip" })),
+        );
+    }
+    if bytes.len() as u64 > subidas::MAX_ZIP {
+        return (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(json!({ "detail": "ZIP demasiado grande (máx 200 MB)" })),
+        );
+    }
+    if !complexity_core::servicio::zip::es_zip(&bytes) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "detail": "El archivo no es un ZIP válido." })),
+        );
+    }
+
+    let resultado = tokio::task::spawn_blocking(move || {
+        let (project_id, dir) = resolver_o_crear(None)?;
+        let extraccion = subidas::extraer_zip(&bytes, &dir);
+        // El nombre por defecto es el del ZIP sin la extension.
+        let tallo = nombre_archivo.rsplit_once('.').map(|(a, _)| a).unwrap_or(&nombre_archivo).to_string();
+        let (arbol, nombre, info) = finalizar(&dir, &nombre_pedido, &tallo);
+        Ok::<Value, (StatusCode, String)>(json!({
+            "project_id": project_id,
+            "project_name": nombre,
+            "type": "zip",
+            "original_zip": nombre_archivo,
+            "extracted": extraccion["extracted"],
+            "skipped": extraccion["skipped"],
+            "errors": extraccion["errors"],
+            "tree": arbol,
+            "info": info,
+            // A diferencia de /files y /folder, esta respuesta no traia
+            // `total_files` en el nivel superior (solo dentro de `info`), y el
+            // frontend lo lee de arriba para el header del explorador: todo
+            // proyecto creado por ZIP mostraba "undefined archivos".
+            "total_files": info["total_files"],
+        }))
+    })
+    .await;
+
+    match resultado {
+        Ok(Ok(v)) => (StatusCode::OK, Json(v)),
+        Ok(Err((code, detail))) => (code, Json(json!({ "detail": detail }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "detail": format!("la extracción no terminó: {e}") })),
+        ),
+    }
+}
+
+/// Un proyecto sin ningun archivo, para escribir codigo desde cero en vez de
+/// partir de algo ya existente.
+async fn upload_empty(mut multipart: axum::extract::Multipart) -> (StatusCode, Json<Value>) {
+    let mut nombre_pedido = String::new();
+    while let Ok(Some(campo)) = multipart.next_field().await {
+        if campo.name() == Some("project_name") {
+            nombre_pedido = campo.text().await.unwrap_or_default();
+        }
+    }
+    match tokio::task::spawn_blocking(move || {
+        let (project_id, dir) = resolver_o_crear(None)?;
+        let (arbol, nombre, _info) = finalizar(&dir, &nombre_pedido, "proyecto-vacío");
+        Ok::<Value, (StatusCode, String)>(json!({
+            "project_id": project_id,
+            "project_name": nombre,
+            "type": "empty",
+            "saved": [],
+            "errors": [],
+            "tree": arbol,
+            "total_files": 0,
+        }))
+    })
+    .await
+    {
+        Ok(Ok(v)) => (StatusCode::OK, Json(v)),
+        Ok(Err((code, detail))) => (code, Json(json!({ "detail": detail }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "detail": e.to_string() })),
+        ),
+    }
+}
+
+async fn upload_projects() -> Json<Value> {
+    let proyectos = tokio::task::spawn_blocking(subidas::listar).await.unwrap_or_default();
+    let total = proyectos.len();
+    Json(json!({ "projects": proyectos, "total": total }))
+}
+
+async fn upload_tree(
+    axum::extract::Path(project_id): axum::extract::Path<String>,
+) -> (StatusCode, Json<Value>) {
+    match tokio::task::spawn_blocking(move || {
+        let dir = subidas::ruta_de_proyecto(&project_id)
+            .ok_or((StatusCode::BAD_REQUEST, "Path inválido.".to_string()))?;
+        if !dir.is_dir() {
+            return Err((StatusCode::NOT_FOUND, "Proyecto no encontrado.".to_string()));
+        }
+        Ok::<Value, (StatusCode, String)>(json!({
+            "project_id": project_id,
+            "tree": subidas::arbol(&dir),
+            "info": subidas::info_cacheada(&dir),
+        }))
+    })
+    .await
+    {
+        Ok(Ok(v)) => (StatusCode::OK, Json(v)),
+        Ok(Err((code, detail))) => (code, Json(json!({ "detail": detail }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "detail": e.to_string() })),
+        ),
+    }
+}
+
+#[derive(Deserialize)]
+struct RutaDeArchivo {
+    path: String,
+}
+
+async fn upload_file_content(
+    axum::extract::Path(project_id): axum::extract::Path<String>,
+    Query(q): Query<RutaDeArchivo>,
+) -> (StatusCode, Json<Value>) {
+    match tokio::task::spawn_blocking(move || {
+        let dir = subidas::ruta_de_proyecto(&project_id)
+            .ok_or((StatusCode::BAD_REQUEST, "Path inválido.".to_string()))?;
+        // El path del archivo se valida igual que el del proyecto: por
+        // componentes normalizados, no por prefijo de texto.
+        let candidato = subidas::normalizar(&dir.join(&q.path));
+        if !candidato.starts_with(&dir) {
+            return Err((StatusCode::BAD_REQUEST, "Path inválido.".to_string()));
+        }
+        if !candidato.is_file() {
+            return Err((StatusCode::NOT_FOUND, "Archivo no encontrado.".to_string()));
+        }
+        let tamano = candidato.metadata().map(|m| m.len()).unwrap_or(0);
+        if tamano > subidas::MAX_LECTURA {
+            return Err((
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "Archivo muy grande para leer (máx 5 MB).".to_string(),
+            ));
+        }
+        let crudo = std::fs::read(&candidato).map_err(|e| {
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al leer el archivo: {e}"))
+        })?;
+        // `from_utf8_lossy` es el equivalente de `errors="replace"`: un
+        // archivo con bytes invalidos se muestra con el caracter de reemplazo
+        // en vez de fallar — abrir un binario por accidente no tiene que dar
+        // un 500.
+        let nombre = candidato.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        Ok::<Value, (StatusCode, String)>(json!({
+            "path": q.path,
+            "content": String::from_utf8_lossy(&crudo),
+            "size": tamano,
+            "extension": subidas::extension_de(&nombre),
+        }))
+    })
+    .await
+    {
+        Ok(Ok(v)) => (StatusCode::OK, Json(v)),
+        Ok(Err((code, detail))) => (code, Json(json!({ "detail": detail }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "detail": e.to_string() })),
+        ),
+    }
+}
+
+async fn upload_create_file(
+    axum::extract::Path(project_id): axum::extract::Path<String>,
+    mut multipart: axum::extract::Multipart,
+) -> (StatusCode, Json<Value>) {
+    let mut ruta = String::new();
+    let mut contenido = String::new();
+    while let Ok(Some(campo)) = multipart.next_field().await {
+        match campo.name().unwrap_or("") {
+            "path" => ruta = campo.text().await.unwrap_or_default(),
+            "content" => contenido = campo.text().await.unwrap_or_default(),
+            _ => {}
+        }
+    }
+
+    match tokio::task::spawn_blocking(move || {
+        let dir = subidas::ruta_de_proyecto(&project_id)
+            .ok_or((StatusCode::BAD_REQUEST, "Path inválido.".to_string()))?;
+        if !dir.is_dir() {
+            return Err((StatusCode::NOT_FOUND, "Proyecto no encontrado.".to_string()));
+        }
+        // **Aca el path lo escribe una persona a mano**, a diferencia de
+        // `/folder`, donde la lista de archivos la genero el browser. Un `..`
+        // se RECHAZA en vez de sanearse en silencio hacia otro lugar dentro
+        // del proyecto: reinterpretar lo que alguien tipeo es peor que
+        // decirle que no.
+        let crudas: Vec<&str> = ruta.split(['/', '\\']).filter(|s| !s.is_empty()).collect();
+        if crudas.is_empty() || crudas.iter().any(|p| *p == "." || *p == "..") {
+            return Err((StatusCode::BAD_REQUEST, "Path inválido.".to_string()));
+        }
+        let destino = crudas.iter().fold(dir.clone(), |a, p| a.join(p));
+        if !subidas::normalizar(&destino).starts_with(&dir) {
+            return Err((StatusCode::BAD_REQUEST, "Path inválido.".to_string()));
+        }
+        if destino.exists() {
+            return Err((StatusCode::CONFLICT, "Ya existe un archivo con ese nombre.".to_string()));
+        }
+        if let Some(padre) = destino.parent() {
+            std::fs::create_dir_all(padre)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        }
+        std::fs::write(&destino, contenido.as_bytes())
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        // `actualizar_metadata` y no `info_de` + `guardar_metadata`: eso
+        // ultimo le borraba el nombre al proyecto en cada archivo nuevo. Ver
+        // el doc de esa funcion.
+        subidas::actualizar_metadata(&dir);
+        Ok::<Value, (StatusCode, String)>(json!({
+            "path": crudas.join("/"),
+            "size": contenido.len(),
+        }))
+    })
+    .await
+    {
+        Ok(Ok(v)) => (StatusCode::OK, Json(v)),
+        Ok(Err((code, detail))) => (code, Json(json!({ "detail": detail }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "detail": e.to_string() })),
+        ),
+    }
+}
+
+async fn upload_delete_project(
+    axum::extract::Path(project_id): axum::extract::Path<String>,
+) -> (StatusCode, Json<Value>) {
+    match tokio::task::spawn_blocking(move || {
+        let dir = subidas::ruta_de_proyecto(&project_id)
+            .ok_or((StatusCode::BAD_REQUEST, "Path inválido.".to_string()))?;
+        if !dir.is_dir() {
+            return Err((StatusCode::NOT_FOUND, "Proyecto no encontrado.".to_string()));
+        }
+        subidas::borrar_proyecto(&dir)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        Ok::<Value, (StatusCode, String)>(
+            json!({ "message": format!("Proyecto {project_id} eliminado correctamente.") }),
+        )
+    })
+    .await
+    {
+        Ok(Ok(v)) => (StatusCode::OK, Json(v)),
+        Ok(Err((code, detail))) => (code, Json(json!({ "detail": detail }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "detail": e.to_string() })),
+        ),
+    }
+}
+
+/// Lo que cada plugin de lenguaje reclama y con que parser. Sale del manifest,
+/// que es la unica fuente de verdad desde la Fase 24.
+async fn static_languages() -> Json<Value> {
+    let mut lenguajes = serde_json::Map::new();
+    for m in complexity_core::servicio::plugin::builtin_manifests() {
+        lenguajes.insert(
+            m.id.to_string(),
+            json!({
+                "extensions": m.extensions,
+                "parser": m.parser,
+                "features": m.features,
+                // Antes esto preguntaba si el sidecar respondia. Ahora el
+                // motor es quien sirve, asi que si esta ruta contesta, esta.
+                "available": true,
+            }),
+        );
+    }
+    Json(json!({
+        "languages": lenguajes,
+        "capabilities": { "complexity_engine": true },
+    }))
+}
+
+async fn static_parse(Json(req): Json<ComplexityRequest>) -> Json<Value> {
+    Json(complexity_core::servicio::scanner::parse_one(req.filename, &req.content))
+}
+
+/// **Puede tardar**: escanea y parsea un proyecto entero del disco, asi que
+/// va a `spawn_blocking` por el mismo motivo que SPARK.
+async fn static_parse_project(
+    Json(req): Json<complexity_core::servicio::proyecto::ProyectoRequest>,
+) -> Json<Value> {
+    match tokio::task::spawn_blocking(move || {
+        complexity_core::servicio::proyecto::analizar_proyecto(&req)
+    })
+    .await
+    {
+        Ok(v) => Json(v),
+        Err(e) => Json(json!({ "files": [], "error": format!("el análisis no terminó: {e}") })),
+    }
+}
+
+/// Solo el Big-O de un archivo, con su distribucion y los caminos calientes.
+async fn static_big_o(Json(req): Json<ComplexityRequest>) -> Json<Value> {
+    let parsed = complexity_core::servicio::scanner::parse_one(req.filename.clone(), &req.content);
+    let vacio = vec![];
+    let funciones = parsed.get("functions").and_then(Value::as_array).unwrap_or(&vacio);
+    let tabla: Vec<Value> = funciones
+        .iter()
+        .map(|f| {
+            json!({
+                "function": f.get("name"),
+                "line": f.get("line"),
+                "big_o": f.get("big_o").and_then(Value::as_str).unwrap_or("?"),
+                "reason": f.get("big_o_reason").and_then(Value::as_str).unwrap_or(""),
+                "complexity": f.get("complexity").and_then(Value::as_u64).unwrap_or(1),
+                "loc": f.get("loc").and_then(Value::as_u64).unwrap_or(0),
+            })
+        })
+        .collect();
+    let mut distribucion = serde_json::Map::new();
+    for e in &tabla {
+        let k = e.get("big_o").and_then(Value::as_str).unwrap_or("?").to_string();
+        let n = distribucion.get(&k).and_then(Value::as_u64).unwrap_or(0) + 1;
+        distribucion.insert(k, json!(n));
+    }
+    // "Caliente" es O(n²) o peor — la misma lista que usaba Python.
+    const CALIENTES: &[&str] = &["O(n²)", "O(n³)", "O(2^n)", "O(n^4)"];
+    let hot: Vec<Value> = tabla
+        .iter()
+        .filter(|e| {
+            e.get("big_o").and_then(Value::as_str).is_some_and(|b| CALIENTES.contains(&b))
+        })
+        .cloned()
+        .collect();
+    Json(json!({
+        "filename": req.filename,
+        "language": parsed.get("language").and_then(Value::as_str).unwrap_or("?"),
+        "functions": tabla,
+        "distribution": distribucion,
+        "hot_paths": hot,
+        "total": tabla.len(),
+    }))
+}
+
+async fn static_wasm(Json(req): Json<ComplexityRequest>) -> Json<Value> {
+    let parsed = complexity_core::servicio::scanner::parse_one(req.filename.clone(), &req.content);
+    let vacio = vec![];
+    let hints = parsed.get("wasm_hints").and_then(Value::as_array).unwrap_or(&vacio);
+    let criticos: Vec<Value> = hints
+        .iter()
+        .filter(|h| h.get("priority").and_then(Value::as_u64).unwrap_or(0) >= 4)
+        .cloned()
+        .collect();
+    let resumen = if hints.is_empty() {
+        format!("{} función(es) candidata(s) a WASM/Cython. Sin candidatos detectados.", hints.len())
+    } else {
+        format!(
+            "{} función(es) candidata(s) a WASM/Cython. {} crítica(s).",
+            hints.len(),
+            criticos.len()
+        )
+    };
+    Json(json!({
+        "filename": req.filename,
+        "language": parsed.get("language").and_then(Value::as_str).unwrap_or("?"),
+        "hints": hints,
+        "total": hints.len(),
+        "critical": criticos,
+        "summary": resumen,
+    }))
+}
+
+async fn static_compile_asm(Json(req): Json<CompilacionRequest>) -> Json<Value> {
+    let niveles = if req.opt_levels.is_empty() { niveles_por_defecto() } else { req.opt_levels };
+    let r = complexity_core::costo::compilar::comparar_niveles(
+        &req.language,
+        &req.content,
+        &niveles,
+        &req.features,
+    );
+    Json(json!({ "available": true, "results": r, "error": Value::Null }))
+}
+
+async fn static_compile_pareto(Json(req): Json<ParetoRequest>) -> Json<Value> {
+    let configs = if req.configs.is_empty() {
+        complexity_core::costo::compilar::configs_por_defecto()
+    } else {
+        req.configs
+    };
+    let r = complexity_core::costo::compilar::buscar_pareto(&req.language, &req.content, &configs);
+    Json(json!({ "available": true, "result": r, "error": Value::Null }))
+}
+
+async fn static_css_atomic(Json(req): Json<ComplexityRequest>) -> Json<Value> {
+    let analisis = complexity_core::lenguajes::cssparse::parse_css(&req.content);
+    let r = complexity_core::servicio::cssatomico::atomizar(&analisis);
+    Json(json!({ "available": true, "result": r, "error": Value::Null }))
+}
+
+/// El cliente manda `project_id`; el directorio y las listas las resuelve el
+/// motor, que es quien lee el disco.
+async fn static_css_usage(
+    Json(req): Json<complexity_core::servicio::proyecto::ProyectoRequest>,
+) -> Json<Value> {
+    let Some(id) = req.project_id.as_deref().filter(|s| !s.is_empty()) else {
+        return Json(json!({ "available": false, "reason": "falta el project_id" }));
+    };
+    if id.contains("..") || id.contains('/') || id.contains('\\') {
+        return Json(json!({ "available": false, "reason": "identificador de proyecto inválido" }));
+    }
+    let dir = complexity_core::servicio::proyecto::directorio_de_subidas().join(id);
+    if !dir.is_dir() {
+        return Json(json!({ "available": false, "reason": "el proyecto no existe" }));
+    }
+    let (extensions, filenames) = complexity_core::servicio::proyecto::reclamos_de_los_plugins();
+    let req = complexity_core::servicio::scanner::ScanRequest {
+        project_dir: dir.to_string_lossy().to_string(),
+        extensions,
+        ignored_dirs: complexity_core::servicio::proyecto::DIRECTORIOS_IGNORADOS
+            .iter()
+            .map(|d| (*d).to_string())
+            .collect(),
+        filenames,
+    };
+    let files = complexity_core::servicio::scanner::collect_project_files(&req);
+    let r = complexity_core::servicio::cssusage::analyze_css_usage(&files);
+    let mut salida = serde_json::to_value(r).unwrap_or_else(|_| json!({}));
+    if let Some(o) = salida.as_object_mut() {
+        o.insert("available".to_string(), json!(true));
+    }
+    Json(salida)
 }
 
 async fn css_atomico(Json(req): Json<ComplexityRequest>) -> Json<Value> {
@@ -312,7 +1570,7 @@ async fn ml_detect(Json(req): Json<MlDetectRequest>) -> Json<Value> {
 /// ya existe para todo lo demás.
 async fn log_append(Json(req): Json<LogPost>) -> Json<Value> {
     let entry = LogEntry { ts: logstore::now_string(), level: req.level, msg: req.msg, source: req.source.clone() };
-    let path = log_dir().join(format!("{}.cbor", req.source));
+    let path = logstore::log_dir().join(format!("{}.cbor", req.source));
     match logstore::append(&path, &entry) {
         Ok(()) => Json(json!({ "ok": true })),
         Err(e) => Json(json!({ "ok": false, "error": e.to_string() })),
@@ -378,7 +1636,7 @@ async fn parse_fortran(Json(req): Json<ComplexityRequest>) -> Json<Value> {
 /// `/health` durante una corrida de SPARK pasó de ~60 ms a **1.533 ms**, y
 /// esa corrida era de las rápidas. Es el mismo error que la regla de
 /// `run_in_threadpool` evita del lado de Python, en la otra punta.
-async fn verify_spark(Json(req): Json<ComplexityRequest>) -> Json<Value> {
+async fn verify_spark(Json(req): Json<VerificacionRequest>) -> Json<Value> {
     match tokio::task::spawn_blocking(move || complexity_core::teoria::spark::verificar(&req.content))
         .await
     {
@@ -491,6 +1749,34 @@ async fn compilar_asm(Json(req): Json<CompilacionRequest>) -> Json<Value> {
 /// application/octet-stream`), con un límite de tamaño elevado a 64MB
 /// específicamente en esta ruta (el default de axum, 2MB, alcanza para
 /// texto fuente pero no para un `.exe`/`.dll` real cualquiera).
+/// **Fase 35 — el primer prefijo que Python deja de sostener.**
+///
+/// `/binary/parse` vivia en `apps/api/routers/binary_analysis.py`, que leia
+/// el upload y reenviaba los bytes por HTTP a `/parse/executable` de este
+/// mismo binario. **Aca `binparse` esta en proceso**, asi que ese salto HTTP
+/// no se porto: desaparecio. Es la primera prueba de lo que la Fase 35 dice
+/// sobre las ~2.300 lineas de relay — no se traducen, se borran.
+///
+/// El contrato con el frontend no cambia: mismo `multipart/form-data` con el
+/// campo `file`, mismo shape de respuesta, misma degradacion con gracia.
+async fn binary_parse(mut multipart: axum::extract::Multipart) -> Json<Value> {
+    while let Ok(Some(campo)) = multipart.next_field().await {
+        let Ok(bytes) = campo.bytes().await else {
+            continue;
+        };
+        if bytes.len() > MAX_UPLOAD_BINARIO {
+            let mb = MAX_UPLOAD_BINARIO / (1024 * 1024);
+            return to_json(complexity_core::lenguajes::binparse::degraded(format!(
+                "el archivo pesa más de {mb}MB — no se analiza."
+            )));
+        }
+        return to_json(complexity_core::lenguajes::binparse::parse(&bytes));
+    }
+    to_json(complexity_core::lenguajes::binparse::degraded(
+        "no llegó ningún archivo en el formulario.".to_string(),
+    ))
+}
+
 async fn parse_executable(bytes: Bytes) -> Json<Value> {
     to_json(complexity_core::lenguajes::binparse::parse(&bytes))
 }
@@ -650,7 +1936,7 @@ async fn scan_project(Json(req): Json<complexity_core::servicio::scanner::ScanRe
 }
 
 async fn log_read(Query(q): Query<LogQuery>) -> Json<Value> {
-    let dir = log_dir();
+    let dir = logstore::log_dir();
     let mut entries: Vec<LogEntry> = LOG_SOURCES.iter().flat_map(|src| logstore::read_all(&dir.join(format!("{src}.cbor")))).collect();
     entries.sort_by(|a, b| a.ts.cmp(&b.ts));
     let total = entries.len();

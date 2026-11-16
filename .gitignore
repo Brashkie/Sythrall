@@ -37,7 +37,14 @@ desktop.ini
 .claude/
 .cursor/
 
-# ── Python / Backend ─────────────────────────────────────
+# ── Python ───────────────────────────────────────────
+#
+# **Fase 35 (2026-11-16) — Sythrall ya no tiene Python.** Estas reglas se
+# quedan igual: son una red barata para cuando alguien arma un venv o corre
+# una herramienta de Python en el repo para algo puntual (analizar un
+# proyecto, una prueba suelta), y entonces estos archivos no se suben. No
+# describen cómo está construido Sythrall — el backend es
+# `services/complexity`, en Rust.
 __pycache__/
 **/__pycache__/
 *.pyc
@@ -93,9 +100,9 @@ htmlcov/
 uploads/
 
 # ── Logs (CBOR, ver services/complexity/src/logstore.rs) ─
-# complexity-engine/terminal-server crean logs/ relativo a su propio cwd
-# (raíz del repo en dev, apps/api/ cuando pytest levanta el sidecar) — nunca
-# se sube al repo, mismo criterio que uploads/ arriba.
+# complexity-engine/terminal-server crean logs/ relativo a su propio cwd (la
+# raíz del repo en dev, o lo que diga SYTHRALL_LOG_DIR) — nunca se sube al
+# repo, mismo criterio que uploads/ arriba.
 logs/
 
 # ── History DB (Fase 28, services/history_store.py) ──────

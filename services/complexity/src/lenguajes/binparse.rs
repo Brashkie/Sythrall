@@ -75,7 +75,11 @@ pub struct ExecutableParseResult {
 /// criterio de honestidad que el resto del motor.
 const MAX_ITEMS: usize = 500;
 
-fn degraded(note: String) -> ExecutableParseResult {
+/// **`pub` desde la Fase 35**, cuando `/binary/parse` dejo de vivir en
+/// Python. El router de FastAPI tenia su propia copia de esta forma escrita a
+/// mano en un dict; ahora la construye el tipo, asi que no se pueden
+/// desincronizar.
+pub fn degraded(note: String) -> ExecutableParseResult {
     ExecutableParseResult {
         available: false,
         format: "unknown".to_string(),

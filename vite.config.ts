@@ -35,54 +35,85 @@ import { defineConfig } from 'vite'
 
 const BACKEND_PROXY: Record<string, ProxyOptions> = {
   // ── Upload de proyectos
+  //
+  // **Fase 35** — los 9 endpoints pasaron al motor (`servicio/subidas.rs`).
+  // Es I/O y lógica de producto, no análisis: árbol de archivos, metadata
+  // cacheada, extracción de ZIP y poda de proyectos viejos. El lector de ZIP
+  // se escribió a mano (`servicio/zip.rs`) usando el DEFLATE de `flate2`, que
+  // ya estaba en el árbol de dependencias.
   '/api/upload': {
-    target: 'http://localhost:8420',
+    target: 'http://localhost:7682',
     changeOrigin: true,
-    // Sin rewrite: /api/upload/files → localhost:8420/api/upload/files ✓
+    // Sin rewrite: /api/upload/files → localhost:7682/api/upload/files ✓
   },
 
-  // ── Análisis de código, ML, diagramas, logs
+  // ── Análisis de código, ML, diagramas, logs y chequeo de APIs
+  //
+  // **Fase 35** — una sola entrada. Esto llegó a tener OCHO, porque los
+  // endpoints de `/analyze` fueron pasando al motor de a uno y cada uno
+  // necesitaba su entrada específica declarada ANTES del `/analyze` genérico
+  // que todavía iba a FastAPI: Vite resuelve por prefijo en orden de
+  // declaración, así que el general se comía al específico. Ya no hay
+  // FastAPI, así que todas colapsan en esta.
   '/analyze': {
-    target: 'http://localhost:8420',
+    target: 'http://localhost:7682',
     changeOrigin: true,
-    // /analyze/code    → localhost:8420/analyze/code    ✓
-    // /analyze/ml      → localhost:8420/analyze/ml      ✓
-    // /analyze/diagram → localhost:8420/analyze/diagram ✓
-    // /analyze/api     → localhost:8420/analyze/api     ✓  (antes /check/api)
-    // /analyze/logs-analyze → localhost:8420/analyze/logs-analyze ✓ (antes /analyze/logs)
   },
 
   // ── Logs del servidor FastAPI
+  // **Fase 35** — `/logs` lo servia un router de Python que solo reenviaba al
+  // `/log` del motor. Mismo shape, un salto menos.
   '/logs': {
-    target: 'http://localhost:8420',
+    target: 'http://localhost:7682',
     changeOrigin: true,
   },
 
-  // ── Historial de API checks
-  '/api/history': {
-    target: 'http://localhost:8420',
-    changeOrigin: true,
-  },
+  // **Fase 35** — aca habia una entrada `/api/history` (el historial de API
+  // checks). Se fue con el router de logs: ningun cliente la pedia y el
+  // endpoint ya no existe en ningun lado, asi que la entrada del proxy
+  // apuntaba al vacio. Se borra en vez de reapuntarla.
 
-  // ── Sistema: capabilities y health
+  // ── Sistema: capabilities, health y el token de la terminal
+  //
+  // **Fase 35, paso 6** — lo último que servía Python. `/capabilities` cambió
+  // de significado: reportaba qué librerías de Python tenía instaladas el
+  // backend (`HAS_FLAKE8`, `HAS_TORCH`…), y eso describía al intérprete que
+  // servía la API, no al producto. Ahora reporta los lenguajes del manifest y
+  // los toolchains que el motor encuentra.
   '/capabilities': {
-    target: 'http://localhost:8420',
+    target: 'http://localhost:7682',
     changeOrigin: true,
   },
   '/health': {
-    target: 'http://localhost:8420',
+    target: 'http://localhost:7682',
     changeOrigin: true,
   },
+  // **Fase 35** — los nueve endpoints de `/static` pasaron al motor. El mas
+  // grande (`parse-project`) era orquestacion, no analisis: encadenaba cuatro
+  // cosas que el motor ya hacia.
   '/static': {
-    target: 'http://localhost:8420',
+    target: 'http://localhost:7682',
     changeOrigin: true,
   },
+  // **Fase 35** — la inteligencia del editor (lint, hover, definición,
+  // referencias, autocompletado, renombrar) pasó al motor
+  // (`servicio/editor.rs`). Los fallbacks de definición/referencias se
+  // borraron: `ast::symbols` ya tenía las cuatro funciones.
   '/intel': {
-    target: 'http://localhost:8420',
+    target: 'http://localhost:7682',
     changeOrigin: true,
   },
+  // **Fase 35** — las métricas en vivo del editor pasaron al motor
+  // (`servicio/metricas.rs`). El prefijo entero va al motor: `metrics_live.py`
+  // era el único router de Python bajo `/metrics`, y `/metrics/complexity` ya
+  // lo servía el motor desde antes.
+  //
+  // No fue un port: el router traía su propio análisis por lenguaje (`ast` de
+  // Python, expresiones regulares para JS/TS/C/Fortran) en paralelo a los
+  // parsers reales, y era medidamente peor — contaba bucles totales en vez de
+  // anidados, así que tres bucles seguidos daban O(n³).
   '/metrics': {
-    target: 'http://localhost:8420',
+    target: 'http://localhost:7682',
     changeOrigin: true,
   },
 
@@ -98,7 +129,7 @@ const BACKEND_PROXY: Record<string, ProxyOptions> = {
 
   // ── Auth: emisión de tokens de sesión (JWT)
   '/auth': {
-    target: 'http://localhost:8420',
+    target: 'http://localhost:7682',
     changeOrigin: true,
     xfwd: true,
   },
@@ -111,22 +142,33 @@ const BACKEND_PROXY: Record<string, ProxyOptions> = {
   // por curl directo al backend, no a través de este proxy). Sin esto,
   // cualquier botón de "Validar empíricamente"/"Comparar con numpy/pandas"
   // se cuelga con un 404 silencioso en dev.
+  // **Fase 35** — de los 16 endpoints de `/execution`, 12 ya vivian identicos
+  // en el motor y el router de Python solo los reenviaba. Apunta al motor.
   '/execution': {
-    target: 'http://localhost:8420',
+    target: 'http://localhost:7682',
     changeOrigin: true,
   },
 
   // ── Binary/Executable Analysis (Fase 19 — Machine Intelligence, segundo
   // bullet): mismo patrón, agregado junto con el router.
+  // **Fase 35 — el primer prefijo que ya no pasa por Python.** `/binary`
+  // vivia en el router `binary_analysis` de Python, que leia el upload y lo
+  // reenviaba por HTTP al motor. Ahora apunta al motor directo: `binparse`
+  // esta en proceso ahi, asi que ese salto desaparecio en vez de portarse.
   '/binary': {
-    target: 'http://localhost:8420',
+    target: 'http://localhost:7682',
     changeOrigin: true,
   },
 
   // ── History (Fase 28 — Enterprise Intelligence, primera porción):
-  // snapshots locales de Project Health, mismo patrón que el resto.
+  // snapshots locales de Project Health.
+  //
+  // **Fase 35** — pasó al motor. El router de Python guardaba en SQLite y
+  // para el snapshot le pedía el análisis al motor por HTTP; ahora las dos
+  // mitades viven en el mismo proceso y el almacenamiento es el CBOR
+  // append-only de `logstore`, sin dependencia nueva.
   '/history': {
-    target: 'http://localhost:8420',
+    target: 'http://localhost:7682',
     changeOrigin: true,
   },
 }

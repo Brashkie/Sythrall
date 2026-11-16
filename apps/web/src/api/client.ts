@@ -335,16 +335,23 @@ export interface ProjectHealth {
 }
 
 // Fase 28 (Enterprise Intelligence) — snapshot local de Project Health por
-// proyecto (`services/history_store.py`, SQLite, sin auth todavía). `health`
-// es el mismo `ProjectHealth` de arriba; `summary` es un subconjunto de
-// `StaticProjectResult['summary']` (sin `big_o_distribution`, que no tiene
-// un delta aritmético con sentido — ver `routers/history.py`).
+// proyecto, sin auth todavía. `health` es el mismo `ProjectHealth` de arriba;
+// `summary` es un subconjunto de `StaticProjectResult['summary']` (sin
+// `big_o_distribution`, que no tiene un delta aritmético con sentido).
+//
+// Fase 35 — lo sirve el motor (`servicio/historial.rs`); antes era un router
+// de Python sobre SQLite. El shape no cambió.
 export interface HistorySnapshot {
   id: number
   project_id: string
   created_at: string
   health: ProjectHealth
   summary: Record<string, number>
+  /** Qué sabía analizar el motor cuando se midió. `null` en un snapshot
+   * anterior a que esto se guardara — que NO es lo mismo que "no tenía
+   * capacidades", y es la distinción de la que depende
+   * `HistoryComparison['capabilities_diff']`. */
+  capabilities: string[] | null
 }
 
 export interface HistoryDiffEntry {
@@ -648,7 +655,7 @@ export interface StaticProjectResult {
    * veredicto Keep/Refactor/Replace/Rewrite/Migrate: agrupa los candidatos
    * de `modernization.rs` por archivo con conteos por confianza/patrón,
    * sin inventar ninguna categoría que la evidencia no sostenga — ver el
-   * comentario en `routers/static_analysis.py`. */
+   * comentario en `servicio/proyecto.rs`. */
   modernization_candidates: Array<{
     variable: string
     pattern: string
@@ -693,39 +700,6 @@ export interface EmpiricalValidationResult {
   note: string
 }
 
-/** Fase 26 — primera pieza de "migrar de numpy/pandas/scikit-learn" (pedido
- * explícito del usuario): compara el kernel Fortran de matmul YA validado
- * contra numpy real, mismos tamaños/datos, side by side — antes de proponer
- * cualquier reemplazo nativo hay que medir contra la librería real, no
- * asumir. `numpy.available` es `false` cuando numpy no está instalado en el
- * entorno del backend, degrada con gracia igual que el resto. */
-export interface MatmulVsNumpyResult {
-  fortran: EmpiricalValidationResult
-  numpy: {
-    available: boolean
-    measurements: Array<{ n: number; seconds: number }>
-    note: string
-  }
-  comparison_note: string
-}
-
-/** Fase 26 — segunda pieza de "migrar de numpy/pandas/scikit-learn": compara
- * el kernel Zig de agregación por categoría YA validado contra pandas real
- * (`groupby().agg()`), mismos tamaños/datos, side by side. A diferencia de
- * `MatmulVsNumpyResult` (donde numpy gana), acá gana el kernel nativo — el
- * `comparison_note` incluye la salvedad de que asume categorías fijas.
- * `pandas.available` es `false` cuando pandas no está instalado en el
- * entorno del backend, degrada con gracia igual que el resto. */
-export interface AggregationVsPandasResult {
-  zig: EmpiricalValidationResult
-  pandas: {
-    available: boolean
-    measurements: Array<{ n: number; seconds: number }>
-    note: string
-  }
-  comparison_note: string
-}
-
 /** Fase 19 (Machine Intelligence) — segundo bullet, cierra la fase: un
  * ejecutable/librería ya compilado (`.exe`/`.dll`/`.so`/`.dylib`/`.o`), NO
  * código fuente — formato/arquitectura/punto de entrada, secciones,
@@ -734,23 +708,6 @@ export interface AggregationVsPandasResult {
  * elementos (un binario real puede tener muchísimos más). `available:
  * false` cuando el archivo no es un binario reconocido, pesa más de 64MB, o
  * el sidecar no está disponible — degrada con gracia igual que el resto. */
-/** Fase 26 — tercera y última pieza de "migrar de numpy/pandas/scikit-learn":
- * compara el kernel Fortran de regresión lineal YA validado contra
- * scikit-learn real (`LinearRegression.fit()`), mismos tamaños/datos, side
- * by side. Igual que `AggregationVsPandasResult`, gana el kernel nativo —
- * el `comparison_note` incluye la salvedad de que asume una sola variable
- * predictora. `sklearn.available` es `false` cuando scikit-learn no está
- * instalado en el entorno del backend, degrada con gracia igual que el resto. */
-export interface LinregVsSklearnResult {
-  fortran: EmpiricalValidationResult
-  sklearn: {
-    available: boolean
-    measurements: Array<{ n: number; seconds: number }>
-    note: string
-  }
-  comparison_note: string
-}
-
 export interface ExecutableParseResult {
   available: boolean
   format: string
@@ -875,16 +832,21 @@ export const api = {
     post<AnalysisResult>('/analyze/code', {
       filename,
       content,
-      tools: ['ast', 'flake8', 'pylint', 'complexity'],
+      tools: ['ast', 'complexity'],
     }),
 
-  // ── Análisis de proyecto completo — flake8/pylint corren UNA vez para todos
-  // los archivos en vez de un subprocess por archivo (ver /analyze/project en
-  // el backend para el porqué: ~30x más rápido en proyectos grandes)
+  // ── Análisis de proyecto completo.
+  //
+  // **Fase 35** — este endpoint existía porque flake8 y pylint arrancaban un
+  // intérprete POR ARCHIVO y acá corrían una sola vez con todos los paths
+  // juntos (~30x en proyectos grandes). Esos dos linters se borraron al mover
+  // el análisis al motor, así que ya no hay costo de arranque que amortizar:
+  // sigue existiendo porque leer un proyecto del disco por `project_id` es
+  // útil por sí mismo, no por el batch.
   analyzeProject: (files: { filename: string; content: string }[]) =>
     post<AnalyzeProjectResult>('/analyze/project', {
       files,
-      tools: ['ast', 'flake8', 'pylint', 'complexity'],
+      tools: ['ast', 'complexity'],
     }),
 
   /** Igual que analyzeProject, pero para un proyecto ya subido (Proyectos) —
@@ -892,7 +854,7 @@ export const api = {
   analyzeProjectById: (projectId: string) =>
     post<AnalyzeProjectResult>('/analyze/project', {
       project_id: projectId,
-      tools: ['ast', 'flake8', 'pylint', 'complexity'],
+      tools: ['ast', 'complexity'],
     }),
 
   // ── ML/DL
@@ -1130,30 +1092,13 @@ export const api = {
    * Assembly, forma algorítmica distinta a la suma de cuadrados). */
   validateMergesortBigO: () => post<EmpiricalValidationResult>('/execution/validate-mergesort', {}),
 
-  /** Fase 26 — primera pieza de "migrar de numpy/pandas/scikit-learn":
-   * corre el kernel Fortran de matmul Y numpy real, mismos tamaños/datos,
-   * y devuelve ambos lado a lado con una nota de comparación honesta. */
-  compareMatmulVsNumpy: () => post<MatmulVsNumpyResult>('/execution/validate-matmul-vs-numpy', {}),
-
   /** Fase 26 — séptimo kernel, tercera vez en Zig: agregación por categoría
    * (suma/promedio, la forma detrás de un `groupby().agg()`), valida O(n). */
   validateAggregationBigO: () => post<EmpiricalValidationResult>('/execution/validate-aggregation', {}),
 
-  /** Fase 26 — segunda pieza de "migrar de numpy/pandas/scikit-learn":
-   * corre el kernel Zig de agregación Y pandas real, mismos tamaños/datos,
-   * y devuelve ambos lado a lado — acá gana el kernel nativo, a diferencia
-   * de la pieza 1, con la salvedad de categorías fijas incluida en la nota. */
-  compareAggregationVsPandas: () => post<AggregationVsPandasResult>('/execution/validate-aggregation-vs-pandas', {}),
-
   /** Fase 26 — octavo kernel, segunda vez en Fortran: regresión lineal
    * univariada por mínimos cuadrados (forma cerrada), valida O(n). */
   validateLinregBigO: () => post<EmpiricalValidationResult>('/execution/validate-linreg', {}),
-
-  /** Fase 26 — tercera y última pieza de "migrar de numpy/pandas/scikit-learn":
-   * corre el kernel Fortran de regresión lineal Y scikit-learn real, mismos
-   * tamaños/datos, y devuelve ambos lado a lado — gana el kernel nativo,
-   * mismo tipo de salvedad que la pieza 2 (pandas). */
-  compareLinregVsSklearn: () => post<LinregVsSklearnResult>('/execution/validate-linreg-vs-sklearn', {}),
 
   /** Fase 26 — noveno kernel, cuarta vez en Zig y la primera en demostrar
    * recursión: quicksort recursivo (partición de Lomuto), valida la misma

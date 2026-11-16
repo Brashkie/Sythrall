@@ -292,17 +292,15 @@ export async function checkBackend(): Promise<void> {
     badge.className = 'be-badge be-ok'
     txt.textContent = 'Todo operativo'
     const serverInfo = document.getElementById('server-info')!
+    // **Fase 35** — este panel listaba las librerías de Python del backend
+    // (flake8, PyTorch, Polars…). Ya no hay backend de Python: ahora muestra
+    // lo que el motor sabe hacer, que es lo que al usuario le sirve saber.
+    const toolchains = Object.entries(d.toolchains ?? {})
     serverInfo.innerHTML = `
       <div class="metric-section">
-        <div class="ms-title">Servidor</div>
-        ${mr('Python', d.python?.toString().split(' ')[0])}
-        ${cap('flake8', d.HAS_FLAKE8)}
-        ${cap('pylint', d.HAS_PYLINT)}
-        ${cap('PyTorch', d.HAS_TORCH)}
-        ${cap('TensorFlow', d.HAS_TF)}
-        ${cap('Polars', d.HAS_POLARS)}
-        ${cap('LightGBM', d.HAS_LGB)}
-        ${cap('spaCy', d.HAS_SPACY)}
+        <div class="ms-title">Motor</div>
+        ${mr('Lenguajes', String(d.languages?.length ?? 0))}
+        ${toolchains.map(([nombre, t]) => cap(nombre, t.available)).join('')}
       </div>`
     appendLog('ok', 'Backend OK — ' + d.server, 'be')
   } catch (e) {
@@ -547,7 +545,7 @@ const ETAPAS = [
   {
     id: 'issues',
     label: 'Problemas de código',
-    desc: 'Lint y errores por archivo (flake8, pylint, AST).',
+    desc: 'Errores y advertencias por archivo, del analizador propio.',
     motivoSinProyecto: 'Necesita un proyecto abierto o archivos en el Editor',
   },
   {
@@ -752,7 +750,6 @@ async function analyzeAllFiles(): Promise<void> {
         if (!r) continue
         f.issues = r.issues
         f.metrics = {
-          pylint_score: r.metrics?.pylint_score,
           complexity: r.complexity ?? [],
           mi: r.maintainability ?? undefined,
           halstead: r.halstead,
@@ -836,7 +833,6 @@ export async function analyzeCurrentFile(): Promise<void> {
       const res = await api.analyzeCode(f.name, f.content)
       f.issues = res.issues
       f.metrics = {
-        pylint_score: res.metrics?.pylint_score,
         complexity: res.complexity ?? [],
         mi: res.maintainability ?? undefined,
         halstead: res.halstead,

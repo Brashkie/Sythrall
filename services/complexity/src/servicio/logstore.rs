@@ -50,7 +50,27 @@ pub struct LogEntry {
 /// Howard Hinnant, `days_from_civil` invertido) ya que solo hace falta un
 /// timestamp legible ocasional, no manejo de zonas horarias.
 pub fn now_string() -> String {
-    let secs = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    let (year, month, day, hour, minute, second) = civil_de_segundos(
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs(),
+    );
+    format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}")
+}
+
+/// La misma fecha civil pero en ISO 8601 (`YYYY-MM-DDTHH:MM:SS`) y para un
+/// instante **cualquiera**, no sólo ahora.
+///
+/// Existe porque el árbol de archivos de un proyecto reporta el `mtime` de
+/// cada archivo, y el shape que el frontend ya consume es el `isoformat()` de
+/// Python. Comparte la aritmética con `now_string` a propósito: duplicar el
+/// algoritmo de Hinnant en dos módulos es exactamente cómo se termina con dos
+/// calendarios que no coinciden en un caso de borde.
+pub fn iso_de_segundos(secs: u64) -> String {
+    let (year, month, day, hour, minute, second) = civil_de_segundos(secs);
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}")
+}
+
+/// Segundos desde epoch → `(año, mes, día, hora, minuto, segundo)` en UTC.
+pub fn civil_de_segundos(secs: u64) -> (i64, u64, u64, u64, u64, u64) {
     let days = (secs / 86_400) as i64;
     let rem = secs % 86_400;
     let (hour, minute, second) = (rem / 3600, (rem % 3600) / 60, rem % 60);
@@ -67,7 +87,23 @@ pub fn now_string() -> String {
     let month = if mp < 10 { mp + 3 } else { mp - 9 };
     let year = if month <= 2 { y + 1 } else { y };
 
-    format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}")
+    (year, month, day, hour, minute, second)
+}
+
+/// Dónde viven los logs. Mismo patrón que el resto: variable de entorno con
+/// un default relativo.
+///
+/// **Vivía en `main.rs` y se movió acá** cuando `servicio::apis` necesitó
+/// escribir un log: la decisión de dónde van los archivos de log es de este
+/// módulo, no del armado del router HTTP.
+pub fn log_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from(std::env::var("SYTHRALL_LOG_DIR").unwrap_or_else(|_| "logs".to_string()))
+}
+
+/// El archivo de log de una fuente. Un archivo por origen — ver el doc de
+/// `FUENTES` en `main.rs` para por qué no hace falta coordinar escrituras.
+pub fn log_path(fuente: &str) -> std::path::PathBuf {
+    log_dir().join(format!("{fuente}.cbor"))
 }
 
 /// Agrega una entrada al final del archivo — crea el directorio/archivo si

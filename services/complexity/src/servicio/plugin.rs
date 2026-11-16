@@ -343,6 +343,30 @@ const LANGUAGE_PLUGIN_PERMISSIONS: &[PermissionGrant] = &[
 /// pasa por `rustpython-parser` en este mismo sidecar — el `ast` de stdlib
 /// solo corre en el esqueleto de fallback sin sidecar
 /// (`_skeleton_functions_python` en `static_parser.py`).
+/// `["c:big_o", "c:modernization", "python:security_findings", ...]` — qué
+/// sabe producir el motor, derivado de los manifests. Ordenado, para que dos
+/// listas se comparen sin ruido.
+///
+/// **Se guarda con cada snapshot del historial** por un motivo concreto:
+/// cuando un lenguaje empieza a emitir un tipo de hallazgo que antes
+/// devolvía `[]` —pasó cuatro veces en este repo— el score de ese proyecto
+/// baja sin que el código se haya tocado, y comparar contra un snapshot
+/// viejo muestra una "regresión" que nunca existió. Con esto, `compare`
+/// puede decir qué cambió en el analizador entre las dos mediciones.
+///
+/// Se toman **todas** las features, no solo las de tipo hallazgo: una
+/// capacidad de parseo nueva también mueve los conteos de `summary`. Y
+/// mantener acá una segunda lista de "cuáles cuentan" sería justo el tipo de
+/// tabla paralela que se desactualiza en silencio.
+pub fn capacidades_de_analisis() -> Vec<String> {
+    let mut v: Vec<String> = builtin_manifests()
+        .iter()
+        .flat_map(|m| m.features.iter().map(|f| format!("{}:{}", m.id, f)))
+        .collect();
+    v.sort();
+    v
+}
+
 pub fn builtin_manifests() -> Vec<PluginManifest> {
     vec![
         PluginManifest {

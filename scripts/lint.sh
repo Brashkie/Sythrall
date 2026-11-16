@@ -1,27 +1,16 @@
 #!/usr/bin/env bash
-# Sythrall — Lint
-# Biome (frontend) + Ruff (backend), sin escribir cambios.
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Lint de todo el proyecto: biome (frontend) + clippy (Rust).
+#
+# **Fase 35** — ya no hay `ruff check apps/api`: no hay Python.
+set -uo pipefail
+root="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$root"
 failed=0
 
-echo "== Sythrall — Lint =="
-
-echo ""
-echo "[1/2] Frontend (biome check)..."
-cd "$root"
+echo "[1/2] Frontend (biome)..."
 npm run lint || failed=1
 
-VENV_RUFF="$root/.venv/bin/ruff"
-[ -f "$VENV_RUFF" ] || VENV_RUFF="$root/.venv/Scripts/ruff.exe"
-echo ""
-echo "[2/2] Backend (ruff check)..."
-cd "$root"
-if [ -f "$VENV_RUFF" ]; then "$VENV_RUFF" check apps/api; else ruff check apps/api; fi || failed=1
+echo "[2/2] Rust (clippy)..."
+cargo clippy --all-targets -- -D warnings || failed=1
 
-if [ "$failed" -ne 0 ]; then
-  echo ""
-  echo "Hay problemas de lint — revisa la salida arriba." >&2
-  exit 1
-fi
-echo ""
-echo "Sin problemas de lint."
+exit $failed

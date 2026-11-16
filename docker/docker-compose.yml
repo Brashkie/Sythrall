@@ -1,8 +1,8 @@
 # Todos los Dockerfiles viven acá mismo (docker/), no dispersos dentro de
-# cada apps/services/*. El build context de los 4 servicios sigue siendo la
+# cada apps/services/*. El build context de los 3 servicios sigue siendo la
 # RAÍZ del repo (`context: ..`, relativo a este archivo) — no `docker/` — así
 # que las rutas de COPY dentro de cada Dockerfile no cambian: siguen siendo
-# relativas al repo (`COPY apps/api/ .`, `COPY services/terminal/ ...`, etc.).
+# relativas al repo (`COPY services/complexity/ ...`, etc.).
 #
 # IMPORTANTE: `.dockerignore` se queda en la raíz del repo a propósito, no
 # acá — Docker solo lo lee desde el directorio que es el build CONTEXT
@@ -10,30 +10,6 @@
 # Moverlo a docker/ lo dejaría de aplicar en silencio (contexto de build
 # gigante, node_modules/.git incluidos) sin ningún error visible.
 services:
-
-  backend:
-    build:
-      context: ..
-      dockerfile: docker/api.Dockerfile
-    container_name: sythrall-backend
-    restart: unless-stopped
-    ports:
-      - "8420:8000"
-    environment:
-      - PYTHONUNBUFFERED=1
-      # Nombre del servicio Docker, no 127.0.0.1 — dentro de la red de
-      # docker-compose cada contenedor se resuelve por su nombre de servicio.
-      - COMPLEXITY_ENGINE_URL=http://complexity:7682
-    volumes:
-      - uploads_data:/app/uploads
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 25s
-    networks:
-      - sythrall-net
 
   frontend:
     build:
@@ -44,7 +20,7 @@ services:
     ports:
       - "8080:80"
     depends_on:
-      backend:
+      complexity:
         condition: service_healthy
     networks:
       - sythrall-net
@@ -62,6 +38,10 @@ services:
       # de Docker — el aislamiento real ya lo da la red del contenedor/el mapeo
       # de puertos explícito, no el bind interno.
       - TERMINAL_HOST=0.0.0.0
+      # **El verificador de los tokens de sesión.** Tiene que ver el MISMO
+      # valor que el motor, que es el emisor: si no coinciden, el token que uno
+      # firma el otro lo rechaza y la terminal no conecta.
+      - SYTHRALL_AUTH_SECRET=${SYTHRALL_AUTH_SECRET:-}
     networks:
       - sythrall-net
 
@@ -75,6 +55,29 @@ services:
       - "7682:7682"
     environment:
       - COMPLEXITY_HOST=0.0.0.0
+      # **Fase 35** — el motor es el backend: sirve el HTTP del producto y es
+      # dueño de los proyectos subidos, así que el volumen es suyo.
+      # **El emisor de los tokens de la terminal.** Mismo valor que el
+      # servicio `terminal`, que los verifica. Sin esto
+      # `/auth/terminal-token` devuelve 500 y la terminal integrada no
+      # funciona; el resto de la app sí, porque el motor no exige el secreto
+      # para arrancar — a diferencia del `routers/auth.py` de Python, que
+      # hacía `raise` al importarse y tumbaba el backend entero.
+      - SYTHRALL_AUTH_SECRET=${SYTHRALL_AUTH_SECRET:-}
+      - SYTHRALL_UPLOADS_DIR=/app/uploads/projects
+      - SYTHRALL_HISTORY_DIR=/app/data
+      - SYTHRALL_LOG_DIR=/app/logs
+    volumes:
+      - uploads_data:/app/uploads
+    healthcheck:
+      # `/engine/health` y no `/health`: el primero es el del motor (un
+      # `{"ok":true}` barato), el segundo es el del producto y arma las
+      # capacidades consultando toolchains en disco.
+      test: ["CMD", "wget", "-qO-", "http://localhost:7682/engine/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     networks:
       - sythrall-net
 

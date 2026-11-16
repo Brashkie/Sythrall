@@ -5,14 +5,14 @@
 
 </div>
 
-> **Plataforma de inteligencia de código empresarial** — análisis estático, inspección ML/DL, inteligencia de editor en tiempo real, visualización de grafos de código, terminal integrada y monitoreo de APIs. Construida con TypeScript (sin frameworks) + FastAPI + Rust + Monaco Editor.
+> **Plataforma de inteligencia de código empresarial** — análisis estático, inspección ML/DL, inteligencia de editor en tiempo real, visualización de grafos de código, terminal integrada y monitoreo de APIs. Construida con TypeScript (sin frameworks) + Rust + Monaco Editor.
 
 <div align="center">
 
 ![Version](https://img.shields.io/badge/versión-4.12.0-blue?style=flat-square)
 [![CI](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml/badge.svg)](https://github.com/Brashkie/Sythrall/actions/workflows/ci.yml)
 ![Frontend](https://img.shields.io/badge/Frontend-Vite%20%2B%20TypeScript-646cff?style=flat-square)
-![Backend](https://img.shields.io/badge/Backend-FastAPI%20%2B%20Python-009688?style=flat-square)
+![Backend](https://img.shields.io/badge/Backend-Rust%20%2B%20axum-CE422B?style=flat-square)
 ![Terminal](https://img.shields.io/badge/Terminal-Rust%20%2B%20axum-dea584?style=flat-square)
 ![Deploy](https://img.shields.io/badge/Deploy-Docker%20%2B%20Nginx-2496ed?style=flat-square)
 ![Tests](https://img.shields.io/badge/Tests-436%20pasando-00f5a0?style=flat-square)
@@ -39,7 +39,7 @@
 
 ## ¿Qué es Sythrall?
 
-Sythrall es una plataforma profesional de inteligencia de código construida como proyecto educativo y de demostración empresarial. Combina un frontend moderno en TypeScript puro (sin frameworks en runtime), un backend Python/FastAPI con soporte completo de ML/DL, un motor de análisis estático multi-lenguaje, y una integración con Monaco Editor que rivaliza con la experiencia de desarrollo de VS Code.
+Sythrall es una plataforma profesional de inteligencia de código construida como proyecto educativo y de demostración empresarial. Combina un frontend moderno en TypeScript puro (sin frameworks en runtime) con un backend en Rust que sirve el HTTP y hace el análisis en proceso, sobre 13 lenguajes, más una integración con Monaco Editor que rivaliza con la experiencia de desarrollo de VS Code. **Tuvo un backend en Python/FastAPI hasta la Fase 35 (2026-11-16), cuando se le quitó la última línea** — el CHANGELOG cuenta por qué y qué costó.
 
 ### Capacidades principales
 
@@ -66,7 +66,7 @@ Sythrall es una plataforma profesional de inteligencia de código construida com
 
 ## Estructura del proyecto
 
-Todos los manifiestos/configs viven en la raíz del repo; el código fuente vive en dos directorios con una división explícita — `apps/` son los dos productos que un usuario corre directamente (`apps/api`, `apps/web`), `services/` son los procesos Rust independientes que esos productos llaman por HTTP (`services/terminal`, `services/complexity`) pero que nadie lanza directo. `scripts/` es el único punto de entrada para todo (ver [scripts/README.md](scripts/README.md)).
+Todos los manifiestos/configs viven en la raíz del repo; el código fuente vive en dos directorios — `apps/web` es el frontend, y `services/` tiene los dos procesos de Rust: `services/complexity` es el backend (HTTP + análisis) y `services/terminal` el sidecar de la terminal integrada. `scripts/` es el único punto de entrada para todo (ver [scripts/README.md](scripts/README.md)).
 
 ```
 sythrall/
@@ -75,10 +75,8 @@ sythrall/
 ├── vite.config.ts                  ← root: 'apps/web', build.outDir: '../../dist'
 ├── tsconfig.json                   ← include: apps/web/src
 ├── biome.json                      ← Config de Biome (lint/format)
-├── requirements.txt                ← Deps runtime del backend
 ├── requirements-dev.txt            ← Ruff (lint/format), solo dev
 ├── pyproject.toml                  ← Config de Ruff
-├── pytest.ini                      ← testpaths: apps/api/tests
 ├── Cargo.toml                      ← Manifiesto Rust — sidecars services/terminal + services/complexity (2 [[bin]], 1 [lib])
 ├── Cargo.lock
 ├── .dockerignore                   ← queda en la raíz — Docker solo lo lee desde el directorio de build context
@@ -90,29 +88,10 @@ sythrall/
 │   ├── terminal.Dockerfile
 │   └── complexity.Dockerfile
 ├── scripts/                        ← Flujo de dev sin Docker (setup/dev/build/test/lint/format, .ps1 + .sh)
-│   ├── run-backend.mjs             ← levanta uvicorn (npm run dev:api)
 │   ├── run-terminal.mjs            ← levanta el sidecar de terminal en Rust (npm run dev:term)
 │   ├── run-complexity.mjs          ← levanta el sidecar de complejidad en Rust (npm run dev:cx)
 │   └── dev-banner.mjs              ← banner de arranque con ansimax para npm run dev
 ├── apps/                           ← productos que un usuario corre directamente, un directorio cada uno
-│   ├── api/                        ← Backend FastAPI
-│   │   ├── main.py                 ← FastAPI (35+ rutas)
-│   │   ├── shared.py
-│   │   ├── routers/
-│   │   │   ├── upload.py           ← POST /api/upload/{files,folder,zip} + CRUD
-│   │   │   ├── analysis.py         ← POST /analyze/{code,api,logs-analyze}
-│   │   │   ├── ml.py               ← POST /analyze/ml
-│   │   │   ├── diagram.py          ← POST /analyze/diagram
-│   │   │   ├── logs.py             ← GET /logs + GET /api/history
-│   │   │   ├── static_analysis.py  ← POST /static/{parse,parse-project,bigO,wasm}
-│   │   │   ├── intelligence.py     ← POST /intel/{lint,analyze,hover,definition,references,completions,rename}
-│   │   │   ├── graph.py            ← GET /analyze/graph/types, POST /analyze/graph{,/project}
-│   │   │   └── metrics_live.py     ← POST /metrics/live — métricas instantáneas por tecla
-│   │   ├── services/
-│   │   │   ├── project_service.py
-│   │   │   ├── static_parser.py    ← Parser multi-lenguaje: Python/C/C++/JS/TS
-│   │   │   └── complexity_client.py ← Cliente HTTP del sidecar Rust complexity-engine
-│   │   └── tests/                  ← 436 tests en total (ver sección Tests más abajo)
 │   └── web/                        ← Frontend TypeScript (Vite, sin frameworks)
 │       ├── index.html
 │       └── src/
@@ -221,7 +200,7 @@ La carpeta `scripts/` envuelve todo el flujo sin Docker en un solo comando — s
 ```powershell
 # Windows (PowerShell)
 .\scripts\setup.ps1   # instala venv del backend + node_modules del frontend
-.\scripts\dev.ps1     # corre backend (uvicorn --reload) + frontend (vite) juntos
+.\scripts\dev.ps1     # corre el frontend (vite) y los dos procesos de Rust juntos
 ```
 
 ```bash
@@ -230,18 +209,17 @@ La carpeta `scripts/` envuelve todo el flujo sin Docker en un solo comando — s
 ./scripts/dev.sh
 ```
 
-Ver [scripts/README.md](scripts/README.md) para la lista completa (`build`, `test`, `lint`, `format`). Por debajo, `dev` es simplemente `npm run dev` — `concurrently` corre Vite, uvicorn y el sidecar de terminal en Rust como un solo proceso (logs con prefijo `[web]`/`[api]`/`[term]`), así que `npm run dev` funciona igual directo si prefieres saltarte los scripts wrapper. Si no tenés `cargo` instalado, el resto de la app funciona igual — solo no vas a tener la terminal integrada (`[term]` imprime un aviso y termina, sin afectar a los otros dos procesos).
+Ver [scripts/README.md](scripts/README.md) para la lista completa (`build`, `test`, `lint`, `format`). Por debajo, `dev` es simplemente `npm run dev` — `concurrently` corre Vite y los dos procesos de Rust como uno solo (logs con prefijo `[web]`/`[term]`/`[cx]`). **`cargo` es obligatorio**: desde la Fase 35 el motor *es* el backend, así que sin él no hay nada sirviendo la API.
 
 El proceso `[term]` imprime un token aleatorio al arrancar (`Terminal token: ...`). Para uso local normal no lo necesitás — el panel de terminal se conecta solo. Solo importa si alguna vez configurás `TERMINAL_HOST` a algo distinto de `127.0.0.1` (ver la nota de seguridad de la terminal más abajo).
 
 <details>
 <summary>Comandos manuales (equivalentes, sin script)</summary>
 
-**Backend** (desde la raíz — ahí vive `requirements.txt`, el código está en `apps/api/`):
+**Backend** (el motor — desde la raíz, ahí vive `Cargo.toml`):
 ```bash
-pip install -r requirements.txt
-cd apps/api
-uvicorn main:app --host 0.0.0.0 --port 8420 --reload
+cargo run --bin complexity-engine
+# http://127.0.0.1:7682
 ```
 
 **Frontend** (desde la raíz — ahí viven `package.json`/`vite.config.ts`, el código fuente está en `apps/web/src`):
@@ -344,20 +322,6 @@ DELETE /api/upload/projects/{id}
 
 ---
 
-## Stack Python (backend)
-
-| Librería | Versión | Uso |
-|---|---|---|
-| FastAPI | 0.115.5 | Servidor REST async |
-| pylint / flake8 | latest | Calidad de código (complejidad/MI se movió al sidecar Rust `complexity-engine` — ver Stack Rust más abajo) |
-| tree-sitter | 0.23.2 | Parser AST multi-lenguaje |
-| networkx | 3.6.1 | Algoritmos de grafos |
-| numpy / pandas / polars | latest | Procesamiento de datos |
-| torch / tensorflow-cpu | latest | Deep learning |
-| scikit-learn / lightgbm | latest | ML clásico |
-| spacy / opencv / scipy | latest | NLP / Visión / Ciencia |
-| **Cython** | 3.2.4 | Compilación Python → C |
-
 ## Stack TypeScript (frontend)
 
 | Librería | Versión | Uso |
@@ -370,52 +334,56 @@ DELETE /api/upload/projects/{id}
 | @xterm/xterm | 6.0.0 | Emulador de terminal (lado cliente del sidecar en Rust) |
 | [ansimax](https://github.com/Brashkie/ansimax) | 1.5.0 | Rendering ANSI/CLI para el banner de arranque de `npm run dev` |
 
-## Stack Rust — dos sidecars, un solo `Cargo.toml`
+## Stack de Rust — el motor y la terminal, un solo `Cargo.toml`
 
-`terminal-server` (un sidecar chico para la terminal integrada) y `complexity-engine` (reemplaza la dependencia pip `radon` — complejidad ciclomática, Maintainability Index, métricas raw de líneas, análisis de seguridad/taint, y smells estructurales, calculados en proceso propio en vez de importados de una librería de terceros). Los dos bins comparten un solo `Cargo.toml` en la raíz — `services/{terminal,complexity}/` solo tienen código fuente, sin manifiesto propio.
+**Fase 35 (2026-11-16) — Sythrall no tiene Python.** `complexity-engine` es el
+backend: sirve todas las rutas HTTP del producto y hace el análisis en proceso.
+`terminal-server` es el sidecar de la terminal integrada. Los dos binarios
+comparten un `Cargo.toml` en la raíz — `services/{terminal,complexity}/` tienen
+sólo código, sin manifest por servicio.
 
-| Crate | Lo usa | Uso |
+| Crate | Usado por | Para qué |
 |---|---|---|
-| axum | ambos | Servidor HTTP/WebSocket + ruteo |
-| tokio | ambos | Runtime async |
-| portable-pty | terminal-server | ConPTY (Windows) / PTY (Unix) — una sola implementación para ambos |
-| subtle | terminal-server | Comparación de token en tiempo constante |
-| rand | terminal-server | CSPRNG para el token de cada corrida |
-| rustpython-parser | complexity-engine | Python source → AST |
-| criterion | complexity-engine (dev) | Benchmarks — `cargo bench --bench complexity_bench` |
+| axum | ambos | Servidor HTTP/WebSocket + routing |
+| tokio | ambos | Runtime asincrónico |
+| portable-pty | terminal-server | ConPTY (Windows) / PTY (Unix) — una implementación para los dos |
+| subtle | terminal-server | Comparación de tokens en tiempo constante |
+| jsonwebtoken | ambos | Tokens de sesión — el motor firma, la terminal verifica |
+| rand | ambos | CSPRNG para tokens e ids de proyecto |
+| rustpython-parser | motor | Código Python → AST |
+| tree-sitter (+ 9 gramáticas) | motor | AST de C/C++/JS/TS/Rust/Fortran/Ada/D |
+| object | motor | Leer ejecutables (PE/ELF/Mach-O) |
+| flate2 | motor | DEFLATE, para leer los ZIPs subidos |
+| hyper-rustls + rustls | motor | Cliente HTTP+TLS del chequeo de APIs externas |
+| ciborium | motor | CBOR, para el log y el historial de Project Health |
+| toml | motor | Leer manifests `Cargo.toml`/`pyproject.toml` |
+| criterion | motor (dev) | Benchmarks — `cargo bench --bench complexity_bench` |
 
-`complexity-engine` bindea a `127.0.0.1:7682` por defecto (`COMPLEXITY_HOST`/`COMPLEXITY_PORT` overrideables, misma convención que el sidecar de terminal) y expone `GET /health` + `POST /metrics/complexity` + `POST /parse/python`. Sin token de auth — a diferencia de la terminal, es un endpoint de cómputo puro sin acceso a shell/filesystem. El backend Python le pega vía `apps/api/services/complexity_client.py` y degrada con gracia (complejidad/MI vacíos, sin crash) si el sidecar no está corriendo — mismo patrón que flake8/pylint siendo opcionales.
+El motor escucha en `127.0.0.1:7682` por defecto (`COMPLEXITY_HOST`/
+`COMPLEXITY_PORT` lo cambian). `GET /engine/health` es su propia sonda de vida
+(un `{"ok":true}` barato); `GET /health` y `GET /capabilities` son los del
+producto, y reportan lo que el motor sabe hacer de verdad — los 13 lenguajes
+del manifest de plugins y cuáles toolchains externos (`gcc`, `gnatprove`,
+`dmd`, `gfortran`, `zig`) encuentra. El único con control de acceso es
+`GET /auth/terminal-token`, y sólo a pedidos de loopback.
 
 ---
 
 ## Tests
 
 ```bash
-cd apps/api && pytest
-# pytest.ini vive en la raíz y se autodetecta; testpaths = apps/api/tests
+cargo test          # el motor y el sidecar de la terminal
+npm run typecheck   # el frontend
 ```
 
-```
-test_intelligence.py       121 ✓
-test_analysis.py            62 ✓
-test_graph.py                54 ✓
-test_static_analysis.py      37 ✓
-test_metrics_live.py         34 ✓
-test_graph_phase2.py         31 ✓
-test_upload.py                30 ✓
-test_security_findings.py    30 ✓
-test_naming_smells.py        16 ✓
-test_structural_smells.py    14 ✓
-test_complexity_client.py     7 ✓
-──────────────────────────────
-Total: 436 pasando
-```
+**Fase 35** — no hay `pytest`: toda la lógica vive en Rust y sus tests son
+`cargo test`. La suite son **1.806 tests** más 11 marcados `#[ignore]`
+(benchmarks de wall-clock, se corren a mano con `cargo test -- --ignored` —
+miden la máquina tanto como el código, así que en CI darían rojos falsos).
 
-`pytest` levanta el sidecar Rust (`complexity-engine`) por su cuenta para toda la sesión — ver `tests/conftest.py` — ya que Big-O/complejidad/space/recursión/security/structural+naming smells para archivos `.py` son Rust-only ahora, sin fallback Python contra el cual testear.
-
-Los dos sidecars en Rust tienen sus propios checks — `cargo build --release`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (82 tests unitarios entre complejidad/MI/raw-metrics/Big-O/espacio/recursión/clasificadores CS-Engine/seguridad/smells estructurales+de nombres, contra valores calculados a mano) — corridos vía el job `terminal` en [`ci.yml`](.github/workflows/ci.yml), aparte del suite de Python de arriba (el mismo job compila/testea los dos bins, ya que comparten un `Cargo.toml`).
-
----
+CI corre seis compuertas, en [`ci.yml`](.github/workflows/ci.yml):
+`npm run typecheck`, `npm run lint`, `npm run build`, `cargo build --release`,
+`cargo clippy --all-targets -- -D warnings` y `cargo test`.
 
 ## Herramientas (lint & format)
 
@@ -426,7 +394,7 @@ Los dos sidecars en Rust tienen sus propios checks — `cargo build --release`, 
 ./scripts/format.sh    # o .\scripts\format.ps1 — aplica los cambios
 ```
 
-Comandos directos equivalentes (desde la raíz): `npm run lint` / `npm run format`, `ruff check apps/api` / `ruff format apps/api`.
+Comandos directos equivalentes (desde la raíz): `npm run lint` / `npm run format`, `cargo clippy --all-targets -- -D warnings` / `cargo fmt`.
 
 ---
 
@@ -447,7 +415,7 @@ docker compose -f docker/docker-compose.yml down -v                             
 
 ## Configuración
 
-`apps/api/.env`:
+`.env` en la raíz del repo:
 ```env
 PYTHONUNBUFFERED=1
 ```
@@ -492,7 +460,7 @@ services:
 netstat -ano | findstr :8420   # Windows
 lsof -i :8420                  # Linux / Mac
 ```
-Lo que sea que lo ocupe no es necesariamente un proceso viejo de Sythrall — en Windows en particular, servicios en segundo plano de software instalado sin relación pueden agarrar puertos arbitrarios primero. Si el PID no es `python`/`uvicorn`, no lo mates a ciegas; cambiá el puerto de Sythrall (`scripts/run-backend.mjs` + `getApiBase()` en `apps/web/src/store/state.ts`) o identificá primero qué es ese proceso.
+Lo que sea que lo ocupe no es necesariamente un proceso viejo de Sythrall — en Windows en particular, servicios en segundo plano de software instalado sin relación pueden agarrar puertos arbitrarios primero. Si el PID no es `complexity-engine`, no lo mates a ciegas; cambiá el puerto del motor (`COMPLEXITY_PORT`) o identificá primero qué es ese proceso.
 
 **Backend muestra "Sin backend"**
 ```bash
@@ -540,7 +508,7 @@ Sythrall no está "construido con seis lenguajes" — cada lenguaje ocupa la cap
 | 1 | Base | ✅ |
 | 2 | Inspector ML/DL | ✅ |
 | 3 | Zoom/Pan + Responsive | ✅ |
-| 4 | FastAPI + Upload de proyectos | ✅ |
+| 4 | Backend REST + Upload de proyectos | ✅ |
 | 5 | Análisis Estático + Editor Intelligence | ✅ |
 | 6 | Code Graph + Project Explorer | ✅ |
 | 7 | Panel de Problemas + Métricas en Vivo | ✅ |

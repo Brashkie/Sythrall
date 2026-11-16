@@ -1,32 +1,18 @@
 #!/usr/bin/env bash
-# Sythrall — Tests
-# Corre pytest (backend) y typecheck (frontend).
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Corre los tests: cargo test (Rust) + typecheck (frontend).
+#
+# **Fase 35** — ya no hay pytest: toda la logica vive en Rust y sus tests son
+# `cargo test`. Ver la regla del proyecto: nada de tests de Python para codigo
+# que solo existe en Rust.
+set -uo pipefail
+root="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$root"
 failed=0
 
-echo "== Sythrall — Tests =="
+echo "[1/2] Rust (cargo test)..."
+cargo test || failed=1
 
-VENV_PYTHON="$root/.venv/bin/python"
-[ -f "$VENV_PYTHON" ] || VENV_PYTHON="$root/.venv/Scripts/python.exe"
-if [ ! -f "$VENV_PYTHON" ]; then
-  echo "No se encontró .venv en la raíz — ejecuta scripts/setup.sh primero." >&2
-  exit 1
-fi
-
-echo ""
-echo "[1/2] Backend (pytest)..."
-cd "$root/apps/api"
-"$VENV_PYTHON" -m pytest || failed=1
-
-echo ""
 echo "[2/2] Frontend (typecheck)..."
-cd "$root"
 npm run typecheck || failed=1
 
-if [ "$failed" -ne 0 ]; then
-  echo ""
-  echo "Hay fallos — revisa la salida arriba." >&2
-  exit 1
-fi
-echo ""
-echo "Todo OK."
+exit $failed

@@ -31,32 +31,24 @@ RUN printf 'server {\n\
     }\n\
 \n\
     location /api/upload/ {\n\
-        proxy_pass         http://backend:8000;\n\
+        proxy_pass         http://complexity:7682;\n\
         proxy_http_version 1.1;\n\
         proxy_set_header   Host $host;\n\
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;\n\
         proxy_set_header   X-Real-IP $remote_addr;\n\
         proxy_read_timeout 300s;\n\
-        client_max_body_size 210m;\n\
+        client_max_body_size 520m;\n\
         add_header Access-Control-Allow-Origin  * always;\n\
         add_header Access-Control-Allow-Methods "GET, POST, DELETE, OPTIONS" always;\n\
         add_header Access-Control-Allow-Headers "Content-Type" always;\n\
         if ($request_method = OPTIONS) { return 204; }\n\
     }\n\
 \n\
-    location /api/history {\n\
-        proxy_pass         http://backend:8000;\n\
-        proxy_http_version 1.1;\n\
-        proxy_set_header   Host $host;\n\
-        add_header Access-Control-Allow-Origin  * always;\n\
-        add_header Access-Control-Allow-Methods "GET, OPTIONS" always;\n\
-        add_header Access-Control-Allow-Headers "Content-Type" always;\n\
-        if ($request_method = OPTIONS) { return 204; }\n\
-    }\n\
-\n\
     location /analyze/ {\n\
-        proxy_pass         http://backend:8000;\n\
+        proxy_pass         http://complexity:7682;\n\
         proxy_http_version 1.1;\n\
         proxy_set_header   Host $host;\n\
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;\n\
         proxy_read_timeout 120s;\n\
         add_header Access-Control-Allow-Origin  * always;\n\
         add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;\n\
@@ -65,19 +57,21 @@ RUN printf 'server {\n\
     }\n\
 \n\
     location /logs {\n\
-        proxy_pass         http://backend:8000;\n\
+        proxy_pass         http://complexity:7682;\n\
         proxy_http_version 1.1;\n\
         proxy_set_header   Host $host;\n\
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;\n\
         add_header Access-Control-Allow-Origin  * always;\n\
         add_header Access-Control-Allow-Methods "GET, OPTIONS" always;\n\
         add_header Access-Control-Allow-Headers "Content-Type" always;\n\
         if ($request_method = OPTIONS) { return 204; }\n\
     }\n\
 \n\
-    location ~ ^/(capabilities|health|docs|redoc|openapi\\.json) {\n\
-        proxy_pass         http://backend:8000;\n\
+    location ~ ^/(capabilities|health|auth|intel|metrics|static|execution|binary|history)(/|$) {\n\
+        proxy_pass         http://complexity:7682;\n\
         proxy_http_version 1.1;\n\
         proxy_set_header   Host $host;\n\
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;\n\
         add_header Access-Control-Allow-Origin  * always;\n\
         add_header Access-Control-Allow-Methods "GET, OPTIONS" always;\n\
         add_header Access-Control-Allow-Headers "Content-Type" always;\n\

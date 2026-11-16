@@ -1,32 +1,14 @@
-# Sythrall - Lint
-# Biome (frontend) + Ruff (backend), sin escribir cambios.
-$ErrorActionPreference = "Stop"
-$root = Split-Path -Parent $PSScriptRoot
-$failed = $false
+# Lint de todo el proyecto: biome (frontend) + clippy (Rust).
+#
+# **Fase 35** - ya no hay 'ruff check apps/api': no hay Python.
+$root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+Set-Location $root
+$failed = 0
 
-Write-Host "== Sythrall - Lint ==" -ForegroundColor Cyan
+Write-Host "[1/2] Frontend (biome)..."
+npm run lint; if (-not $?) { $failed = 1 }
 
-Write-Host "`n[1/2] Frontend (biome check)..." -ForegroundColor Yellow
-Push-Location $root
-try {
-    npm run lint
-    if ($LASTEXITCODE -ne 0) { $failed = $true }
-} finally {
-    Pop-Location
-}
+Write-Host "[2/2] Rust (clippy)..."
+cargo clippy --all-targets -- -D warnings; if (-not $?) { $failed = 1 }
 
-$venvRuff = Join-Path $root ".venv\Scripts\ruff.exe"
-Write-Host "`n[2/2] Backend (ruff check)..." -ForegroundColor Yellow
-Push-Location $root
-try {
-    if (Test-Path $venvRuff) { & $venvRuff check apps/api } else { ruff check apps/api }
-    if ($LASTEXITCODE -ne 0) { $failed = $true }
-} finally {
-    Pop-Location
-}
-
-if ($failed) {
-    Write-Host "`nHay problemas de lint - revisa la salida arriba." -ForegroundColor Red
-    exit 1
-}
-Write-Host "`nSin problemas de lint." -ForegroundColor Green
+exit $failed
