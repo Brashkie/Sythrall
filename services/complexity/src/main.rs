@@ -1,3 +1,21 @@
+//! Sythrall — plataforma de inteligencia de código.
+//! Copyright (C) 2025-2026 Brashkie / Hepein Oficial
+//!
+//! Este programa es software libre: podés redistribuirlo y/o modificarlo bajo
+//! los términos de la GNU General Public License publicada por la Free
+//! Software Foundation, en su versión 3 o (a tu elección) cualquier versión
+//! posterior.
+//!
+//! Se distribuye con la esperanza de que sea útil, pero **SIN NINGUNA
+//! GARANTÍA**; ni siquiera la garantía implícita de COMERCIABILIDAD o
+//! ADECUACIÓN A UN PROPÓSITO PARTICULAR. Ver la GNU General Public License
+//! para más detalles: el texto completo está en `LICENSE`, en la raíz del
+//! repositorio.
+//!
+//! El código de terceros que los binarios llevan compilado adentro —C y
+//! assembly de tree-sitter y de BoringSSL— está inventariado con sus avisos
+//! de copyright en `THIRD-PARTY.md`.
+
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Query};
 use axum::http::StatusCode;
@@ -77,6 +95,21 @@ fn default_log_limit() -> usize {
 /// "terminal"), así que no hay que coordinar escrituras concurrentes al
 /// mismo archivo entre los 2 binarios Rust separados.
 const LOG_SOURCES: &[&str] = &["api", "complexity", "terminal"];
+
+/// El aviso que la GPL-3.0 pide para un programa que interactúa por consola:
+/// *"If the program does terminal interaction, make it output a short notice
+/// like this when it starts in an interactive mode"*. Se imprime una vez al
+/// arrancar, antes de cualquier otra línea.
+fn aviso_de_licencia() {
+    println!(
+        "Sythrall v{}  Copyright (C) 2025-2026 Brashkie / Hepein Oficial\n\
+         Este programa viene SIN NINGUNA GARANTÍA, dentro de lo que la ley permite.\n\
+         Es software libre y podés redistribuirlo bajo la GPL-3.0-or-later.\n\
+         El texto está en LICENSE; el código de terceros que este binario lleva\n\
+         compilado adentro está en THIRD-PARTY.md.\n",
+        env!("CARGO_PKG_VERSION")
+    );
+}
 
 #[tokio::main]
 async fn main() {
@@ -249,6 +282,7 @@ async fn main() {
         .route("/symbols/references/ts", post(symbols_references_ts));
 
     let addr: std::net::SocketAddr = format!("{host}:{port}").parse().expect("host/puerto inválido");
+    aviso_de_licencia();
     println!("🦀 Complexity engine escuchando en http://{addr}");
     if let Err(e) = logstore::append(
         &logstore::log_dir().join("complexity.cbor"),

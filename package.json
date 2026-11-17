@@ -1,7 +1,20 @@
 {
   "name": "sythrall",
-  "version": "5.1.0",
-  "description": "Sythrall — Monitor de API y código ML/DL · FastAPI backend",
+  "version": "5.2.0",
+  "description": "Sythrall — plataforma de inteligencia de código: análisis estático multi-lenguaje, inspección ML/DL, grafos de código y terminal integrada. Motor en Rust.",
+  "license": "GPL-3.0-or-later",
+  "author": {
+    "name": "Brashkie",
+    "url": "https://github.com/Brashkie"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Brashkie/Sythrall.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Brashkie/Sythrall/issues"
+  },
+  "homepage": "https://github.com/Brashkie/Sythrall#readme",
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev-banner.mjs && concurrently -n web,term,cx -c blue,magenta,cyan \"npm:dev:web\" \"npm:dev:term\" \"npm:dev:cx\"",
@@ -24,10 +37,7 @@
     "diff": "^5.2.0",
     "jszip": "^3.10.1",
     "mermaid": "^11.4.0",
-    "monaco-editor": "^0.45.0",
-    "pyodide": "^0.29.3",
-    "starboard-notebook": "^0.15.7",
-    "thebe": "^0.9.3"
+    "monaco-editor": "^0.45.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.6",

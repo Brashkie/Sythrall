@@ -1,3 +1,21 @@
+//! Sythrall — plataforma de inteligencia de código.
+//! Copyright (C) 2025-2026 Brashkie / Hepein Oficial
+//!
+//! Este programa es software libre: podés redistribuirlo y/o modificarlo bajo
+//! los términos de la GNU General Public License publicada por la Free
+//! Software Foundation, en su versión 3 o (a tu elección) cualquier versión
+//! posterior.
+//!
+//! Se distribuye con la esperanza de que sea útil, pero **SIN NINGUNA
+//! GARANTÍA**; ni siquiera la garantía implícita de COMERCIABILIDAD o
+//! ADECUACIÓN A UN PROPÓSITO PARTICULAR. Ver la GNU General Public License
+//! para más detalles: el texto completo está en `LICENSE`, en la raíz del
+//! repositorio.
+//!
+//! El código de terceros que los binarios llevan compilado adentro —C y
+//! assembly de tree-sitter y de BoringSSL— está inventariado con sus avisos
+//! de copyright en `THIRD-PARTY.md`.
+
 //! **Los 81 módulos del motor, agrupados por lo que hacen.**
 //!
 //! Estuvieron planos hasta el 2026-10-16: 83 archivos en un solo directorio,

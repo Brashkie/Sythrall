@@ -102,11 +102,34 @@ fn en_toolchain_de_alire(local: &std::path::Path, prefijo: &str, binario: &str) 
     encontrados
 }
 
-/// ¿Responde este ejecutable? Se le pide la versión, que es lo más barato que
-/// todos entienden.
-fn responde(cmd: &std::ffi::OsStr) -> bool {
-    for flag in ["--version", "-version", "/?"] {
-        if Command::new(cmd).arg(flag).output().is_ok_and(|o| o.status.success()) {
+/// Con qué se le pregunta la versión a cada programa.
+///
+/// **Zig no acepta ningún flag de versión: usa `zig version`, un
+/// subcomando.** Con la lista de flags sola, los tres intentos
+/// (`--version`, `-version`, `/?`) salían con código 1 y el motor concluía
+/// que Zig no estaba instalado aunque estuviera y funcionara — y eso apagaba
+/// **en silencio** los kernels de Zig del Algorithm Validation Engine, que es
+/// la única razón por la que Zig está en esta lista. Verificado en una
+/// máquina con Zig 0.14.1 en el PATH: `zig --version` → exit 1, `zig version`
+/// → exit 0 y la versión por stdout.
+///
+/// **El subcomando NO se agrega a la lista general.** Un argumento pelado que
+/// un compilador no reconozca lo trata como archivo fuente: `gcc version`
+/// busca compilar un archivo llamado `version`. Falla, así que no rompería
+/// nada, pero sería un intento de compilación por cada sondeo de cada
+/// toolchain. Cada programa recibe lo que entiende.
+fn argumentos_de_version(programa: &str) -> &'static [&'static str] {
+    match programa {
+        "zig" => &["version"],
+        _ => &["--version", "-version", "/?"],
+    }
+}
+
+/// ¿Responde este programa? Se le pide la versión, que es lo más barato que
+/// todos entienden — cada uno a su manera, ver `argumentos_de_version`.
+fn responde(programa: &str) -> bool {
+    for arg in argumentos_de_version(programa) {
+        if Command::new(programa).arg(arg).output().is_ok_and(|o| o.status.success()) {
             return true;
         }
     }
@@ -128,11 +151,8 @@ pub fn resolver(programa: &str) -> Option<std::ffi::OsString> {
 
     // 2. El PATH, salvo para las claves que existen justamente para NO
     //    resolverse por PATH (ver `candidatos`).
-    if programa != "gnat-gcc" {
-        let bare = std::ffi::OsString::from(programa);
-        if responde(&bare) {
-            return Some(bare);
-        }
+    if programa != "gnat-gcc" && responde(programa) {
+        return Some(std::ffi::OsString::from(programa));
     }
 
     // 3. Donde cada instalador deja las cosas por defecto.
@@ -154,6 +174,38 @@ mod tests {
         assert_eq!(nombre_de_variable("gnat-gcc"), "SYTHRALL_TOOLCHAIN_GNAT_GCC");
         assert_eq!(nombre_de_variable("dmd"), "SYTHRALL_TOOLCHAIN_DMD");
         assert_eq!(nombre_de_variable("g++"), "SYTHRALL_TOOLCHAIN_G__");
+    }
+
+    /// **Zig se sondea con un subcomando, no con un flag.** Este test existe
+    /// por un defecto real: `responde` probaba sólo `--version`/`-version`/`/?`
+    /// y Zig los rechaza con código 1, así que el motor reportaba
+    /// `"zig": false` en `/health` con Zig 0.14.1 instalado y en el PATH. Los
+    /// kernels de Zig del Algorithm Validation Engine quedaban apagados sin
+    /// que nada lo dijera.
+    #[test]
+    fn zig_se_pregunta_con_subcomando_y_el_resto_con_flags() {
+        assert_eq!(argumentos_de_version("zig"), &["version"]);
+        for otro in ["gcc", "gfortran", "dmd", "gnatprove", "gnat-gcc"] {
+            assert_eq!(
+                argumentos_de_version(otro),
+                &["--version", "-version", "/?"],
+                "{otro} no debería recibir un argumento pelado: un compilador lo \
+                 trataría como archivo fuente"
+            );
+        }
+    }
+
+    /// Todo programa de la lista pública tiene que tener cómo preguntarle la
+    /// versión — si se agrega uno nuevo y `argumentos_de_version` no lo
+    /// contempla, cae en el caso general y este test lo deja explícito.
+    #[test]
+    fn todos_los_programas_declarados_tienen_sondeo() {
+        for (programa, _) in crate::servicio::sistema::PROGRAMAS {
+            assert!(
+                !argumentos_de_version(programa).is_empty(),
+                "{programa} se quedó sin forma de sondearse"
+            );
+        }
     }
 
     /// **La variable de entorno gana sobre todo lo demás.** Sin esta salida el

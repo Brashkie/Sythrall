@@ -324,15 +324,39 @@ DELETE /api/upload/projects/{id}
 
 ## Stack TypeScript (frontend)
 
+**Son nueve dependencias de ejecución y seis de desarrollo — la lista completa,
+tomada de `package.json`, no de memoria.** Esta tabla declaraba `chart.js`, que
+no está instalado ni se importa en ninguna parte, y se olvidaba de cuatro que
+sí: `jszip`, `diff` y los tres addons de xterm.
+
 | Librería | Versión | Uso |
 |---|---|---|
-| Vite | 5.3.1 | Bundler y dev server |
-| TypeScript | 5.4.5 | Tipado estático |
-| monaco-editor | 0.45.0 | Editor de código |
-| mermaid | 11.4.0 | Diagramas |
-| chart.js | 4.4.3 | Gráficas |
-| @xterm/xterm | 6.0.0 | Emulador de terminal (lado cliente del sidecar en Rust) |
-| [ansimax](https://github.com/Brashkie/ansimax) | 1.5.0 | Rendering ANSI/CLI para el banner de arranque de `npm run dev` |
+| monaco-editor | ^0.45.0 | Editor de código (7 imports — el que más se usa) |
+| mermaid | ^11.4.0 | Diagramas |
+| @xterm/xterm | ^6.0.0 | Emulador de terminal (lado cliente del sidecar en Rust) |
+| @xterm/addon-fit | ^0.11.0 | Ajusta la terminal al tamaño del contenedor |
+| @xterm/addon-search | ^0.16.0 | Búsqueda dentro de la terminal |
+| @xterm/addon-web-links | ^0.12.0 | Hace clickeables las URLs de la terminal |
+| jszip | ^3.10.1 | Empaqueta el proyecto para descargar — import dinámico |
+| diff | ^5.2.0 | Genera el parche unificado del panel Diff — import dinámico |
+| [ansimax](https://github.com/Brashkie/ansimax) | ^1.5.0 | Rendering ANSI/CLI para el banner de arranque de `npm run dev` |
+
+| Desarrollo | Versión | Uso |
+|---|---|---|
+| Vite | ^5.3.1 | Bundler y dev server |
+| TypeScript | ^5.4.5 | Tipado estático (`npm run typecheck`) |
+| @biomejs/biome | 2.5.6 | Linter y formateador (`npm run lint`) |
+| concurrently | 10.0.4 | Levanta los tres procesos de `npm run dev` |
+| @types/node, @types/diff | ^20.14.0, ^5.2.1 | Tipos |
+
+**Lo que se borró el 2026-11-16 y por qué.** `thebe`, `pyodide` y
+`starboard-notebook` estaban declaradas como dependencias de producción y el
+código no las importaba nunca: aparecían sólo como el **texto** de su nombre en
+el catálogo de entornos de notebook del panel ML, que existe para decirte
+cuáles usa *tu* archivo — Sythrall no ejecuta ninguno de los tres. `thebe`
+además arrastraba `@jupyterlab/testutils`, o sea `jest` y `ts-jest`, adentro
+del árbol de producción. Sacarlas llevó `node_modules` de **616 a 148 paquetes
+de primer nivel** y de **12 GB a 3,0 GB**.
 
 ## Stack de Rust — el motor y la terminal, un solo `Cargo.toml`
 
@@ -541,6 +565,29 @@ Ver [CHANGELOG.md](CHANGELOG.md) para el historial completo de versiones.
 
 ---
 
+## Estructura del motor (`services/complexity/src`)
+
+**105 módulos de Rust en 8 grupos**, en el orden del pipeline. Estuvieron
+planos hasta el 2026-10-16; el agrupamiento sale de lo que cada módulo hace, no
+de su nombre. Los conteos son de la Fase 35 (2026-11-16), cuando `servicio/`
+absorbió todo lo que servía el backend de Python.
+
+| Grupo | Módulos | Qué es |
+|---|---|---|
+| `lenguajes/` | 13 | El front-end: un módulo por lenguaje. Donde el texto se vuelve árbol. |
+| `ast/` | 7 | Infraestructura de árbol compartida, sin saber de ningún lenguaje. |
+| `costo/` | 15 | Big-O, ciclomática, espacio, costo amortizado y costo de compilar. |
+| `flujo/` | 9 | CFG, SSA, dominadores, grafo de llamadas, y lo que se deduce de recorrerlos. |
+| `hallazgos/` | 17 | Las reglas que afirman algo sobre el código del usuario. |
+| `teoria/` | 10 | CS formal aplicada: autómatas, lógica, combinatoria, decidibilidad. |
+| `servicio/` | 22 | La capa que sirve el producto: escaneo, subidas, historial, editor, diagramas, ML, métricas, APIs externas, sistema y auth. |
+| `bench/` | 12 | Kernels que Sythrall compila y corre para validarse contra la realidad. |
+
+En la raíz quedan sólo `lib.rs` (punto de entrada y re-exportaciones) y
+`main.rs` (el servidor HTTP, que desde la Fase 35 es **el** backend).
+
+---
+
 ## Autor
 
 **Brashkie** · [Hepein Oficial](https://github.com/Brashkie) · Lima, Perú
@@ -549,23 +596,18 @@ Ver [CHANGELOG.md](CHANGELOG.md) para el historial completo de versiones.
 
 ## Licencia
 
-GPL-3.0 — ver [LICENSE](LICENSE)
+**GPL-3.0-or-later** — el texto completo está en [LICENSE](LICENSE).
 
-### Estructura del motor (`services/complexity/src`)
+El proyecto nació público bajo GPL-3.0, pasó a privado en la v4.12.0 y volvió a
+ser público bajo GPL-3.0. Es un cambio de idea del autor, no una
+reinterpretación: se eligió copyleft en vez de una licencia permisiva para que
+cualquier trabajo derivado siga siendo libre.
 
-81 módulos en 8 grupos, en el orden del pipeline. Estuvieron planos hasta el
-2026-10-16; el agrupamiento sale de lo que cada módulo hace, no de su nombre.
-
-| Grupo | Módulos | Qué es |
-|---|---|---|
-| `lenguajes/` | 11 | El front-end: un módulo por lenguaje. Donde el texto se vuelve árbol. |
-| `ast/` | 6 | Infraestructura de árbol compartida, sin saber de ningún lenguaje. |
-| `costo/` | 13 | Big-O, ciclomática, espacio, costo amortizado y costo de compilar. |
-| `flujo/` | 8 | CFG, SSA, dominadores, grafo de llamadas, y lo que se deduce de recorrerlos. |
-| `hallazgos/` | 16 | Las reglas que afirman algo sobre el código del usuario. |
-| `teoria/` | 8 | CS formal aplicada: autómatas, lógica, combinatoria, decidibilidad. |
-| `servicio/` | 8 | La capa de servicio del sidecar: escaneo, manifests, shape, salud. |
-| `bench/` | 11 | Kernels que Sythrall compila y corre para validarse contra la realidad. |
-
-En la raíz quedan sólo `lib.rs` (punto de entrada y re-exportaciones) y
-`main.rs` (el servidor HTTP).
+**Código de terceros dentro de los binarios:** los ejecutables llevan
+compilado adentro C y assembly de otros proyectos (las nueve gramáticas de
+tree-sitter, y BoringSSL vía `ring`). Sus licencias piden reproducir el aviso
+de copyright al distribuir el binario, y **la mayoría no publica ese aviso en
+su paquete de crates.io** — se comprobó uno por uno. Por eso está
+[THIRD-PARTY.md](THIRD-PARTY.md), con el inventario completo y los avisos
+verificados contra el `LICENSE` de cada repositorio. Los textos largos, en
+[licenses/](licenses/).

@@ -181,6 +181,14 @@ export default defineConfig({
 
   build: {
     outDir: '../../dist',
+    // **Sin esto, `dist/` crece para siempre.** Vite vacía el directorio de
+    // salida solo cuando está adentro de `root`, y acá `root` es `apps/web`
+    // mientras la salida va a la raíz del repo — así que se negaba a
+    // limpiarlo y cada build dejaba sus chunks con hash nuevo al lado de los
+    // de todos los builds anteriores. Medido antes de tocarlo: **671
+    // archivos, 185 MB, 584 de ellos `.js`**, de los cuales la build vigente
+    // usaba 15. El resto era basura que `index.html` ya no referencia.
+    emptyOutDir: true,
     sourcemap: false,
     rollupOptions: {
       output: {

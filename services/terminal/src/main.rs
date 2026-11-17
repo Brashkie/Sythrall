@@ -1,3 +1,21 @@
+//! Sythrall — plataforma de inteligencia de código.
+//! Copyright (C) 2025-2026 Brashkie / Hepein Oficial
+//!
+//! Este programa es software libre: podés redistribuirlo y/o modificarlo bajo
+//! los términos de la GNU General Public License publicada por la Free
+//! Software Foundation, en su versión 3 o (a tu elección) cualquier versión
+//! posterior.
+//!
+//! Se distribuye con la esperanza de que sea útil, pero **SIN NINGUNA
+//! GARANTÍA**; ni siquiera la garantía implícita de COMERCIABILIDAD o
+//! ADECUACIÓN A UN PROPÓSITO PARTICULAR. Ver la GNU General Public License
+//! para más detalles: el texto completo está en `LICENSE`, en la raíz del
+//! repositorio.
+//!
+//! El código de terceros que los binarios llevan compilado adentro —C y
+//! assembly de tree-sitter y de BoringSSL— está inventariado con sus avisos
+//! de copyright en `THIRD-PARTY.md`.
+
 mod auth;
 mod pty_session;
 
@@ -100,6 +118,21 @@ enum ClientMsg {
     Resize { cols: u16, rows: u16 },
 }
 
+/// El aviso que la GPL-3.0 pide para un programa que interactúa por consola:
+/// *"If the program does terminal interaction, make it output a short notice
+/// like this when it starts in an interactive mode"*. Se imprime una vez al
+/// arrancar, antes de cualquier otra línea.
+fn aviso_de_licencia() {
+    println!(
+        "Sythrall v{}  Copyright (C) 2025-2026 Brashkie / Hepein Oficial\n\
+         Este programa viene SIN NINGUNA GARANTÍA, dentro de lo que la ley permite.\n\
+         Es software libre y podés redistribuirlo bajo la GPL-3.0-or-later.\n\
+         El texto está en LICENSE; el código de terceros que este binario lleva\n\
+         compilado adentro está en THIRD-PARTY.md.\n",
+        env!("CARGO_PKG_VERSION")
+    );
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
@@ -115,6 +148,7 @@ async fn main() {
              la genera sola) o exportala a mano antes de levantar este binario."
         )
     });
+    aviso_de_licencia();
     println!("Terminal lista — esperando conexiones autenticadas por token de sesión (JWT).");
 
     let host = std::env::var("TERMINAL_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());

@@ -15,8 +15,6 @@ import type {
   AtomizacionResult,
   BusquedaPareto,
   ComparacionMetaprogramacion,
-  CompilacionAsm,
-  CompileAsmResponse,
   CssUsageReport,
   DCostResult,
   EmpiricalValidationResult,
@@ -25,7 +23,6 @@ import type {
   NamingSmell,
   PuntoPareto,
   SecurityFinding,
-  SimdInfo,
   SparkObligation,
   SparkResult,
   StaticProjectResult,
@@ -41,6 +38,8 @@ import { renderHealthCards } from '../utils/health'
 import { appendLog, esc, fileOptionsHtml, fmtBytes, toast } from '../utils/helpers'
 import { icon, languageBadgeByName } from '../utils/icons'
 import { renderProjectContextBanner, wireProjectContextBanner } from '../utils/projectHeader'
+import { type ContextoDeMaquina, lenguajeCompilable, manejarClickDeMaquina, renderCodigoMaquina } from './maquina'
+import { manejarClickDeValidacion, renderMotorDeValidacion } from './validacion'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -425,24 +424,6 @@ let _tplCostRunning = false
 // cuadrados). A diferencia de matmul, estos no cuelgan de un badge detectado
 // por-función (no existe un detector "esto parece bubble sort" todavía) — se
 // muestran en una sección propia, siempre visible para lenguajes nativos.
-let _bubbleSortValidation: EmpiricalValidationResult | null = null
-let _bubbleSortValidating = false
-let _sumSquaresValidation: EmpiricalValidationResult | null = null
-let _sumSquaresValidating = false
-let _graphBfsValidation: EmpiricalValidationResult | null = null
-let _graphBfsValidating = false
-let _fibonacciValidation: EmpiricalValidationResult | null = null
-let _fibonacciValidating = false
-let _mergesortValidation: EmpiricalValidationResult | null = null
-let _mergesortValidating = false
-let _aggregationValidation: EmpiricalValidationResult | null = null
-let _aggregationValidating = false
-let _linregValidation: EmpiricalValidationResult | null = null
-let _linregValidating = false
-let _quicksortValidation: EmpiricalValidationResult | null = null
-let _quicksortValidating = false
-let _binarySearchValidation: EmpiricalValidationResult | null = null
-let _binarySearchValidating = false
 
 // Fase 26 — primera pieza de "migrar de numpy/pandas/scikit-learn" (pedido
 // explícito del usuario): comparación real matmul Fortran vs. numpy, no un
@@ -465,6 +446,48 @@ let _exeResult: ExecutableParseResult | null = null
 let _exeFileName: string | null = null
 let _exeAnalyzing = false
 
+// ─── Repintado y fuente analizada ─────────────────────────────────────────────
+
+/** Repinta el resultado sin tirar el análisis.
+ *
+ * **`renderStaticPanel()` no sirve acá**: reescribe el panel entero —barra de
+ * herramientas y estado vacío incluidos— y se lleva puesto el resultado del
+ * análisis, que es justo donde viven las secciones interactivas. Marcar un
+ * chip hacía desaparecer todo. `_renderResult` escribe solo en `#st-body`.
+ *
+ * **Se llamaba `_repintarMaquina`, y el nombre era falso**: lo usan seis
+ * features distintas (código máquina, comparación de metaprogramación, SPARK,
+ * Atomic CSS, el frente de Pareto y el costo de templates) porque es *el*
+ * repintado del panel, no el de una sección. Con ese nombre, cada feature
+ * nueva que lo necesitaba parecía estar tomando prestado algo ajeno. */
+function _repintarResultado(): void {
+  if (_result) _renderResult(_result)
+}
+
+/** El fuente que produjo el resultado que se está viendo.
+ *
+ * **No es `state.currentFile`.** Eso lo setea el explorador al abrir un
+ * archivo, pero analizar desde el selector de este panel no lo toca — así que
+ * leer de ahí daba vacío justo en el camino normal de uso. `_resultSource` es
+ * lo que `_runSingle` guardó, o sea exactamente lo que produjo el resultado.
+ *
+ * **Esta expresión estaba escrita tres veces idéntica** (código máquina,
+ * Pareto y Atomic CSS) y solo una de las tres traía la explicación de por qué
+ * el `||` está ahí. Las otras dos la repetían por copia. */
+function _fuenteAnalizada(): string {
+  return _resultSource || (state.currentFile?.content ?? '')
+}
+
+/** Lo que el explorador de código máquina necesita del panel.
+ *
+ * Funciones y no valores: el resultado que se está viendo cambia con cada
+ * análisis, y el handler se registra una sola vez. */
+const _contextoDeMaquina: ContextoDeMaquina = {
+  resultado: () => _result,
+  fuente: _fuenteAnalizada,
+  repintar: _repintarResultado,
+}
+
 // ─── Render principal ─────────────────────────────────────────────────────────
 
 export function renderStaticPanel(): void {
@@ -477,7 +500,7 @@ export function renderStaticPanel(): void {
   el.innerHTML = `
     <!-- Toolbar -->
     <div class="st-toolbar">
-      <select id="st-file-sel" class="diag-sel" style="min-width:200px">
+      <select id="st-file-sel" aria-label="Archivo a analizar" class="diag-sel" style="min-width:200px">
         <option value="">— Selecciona un archivo —</option>
         ${fileOpts}
       </select>
@@ -564,47 +587,28 @@ function _attachStaticEvents(el: HTMLElement): void {
   el.addEventListener('click', (e) => {
     const t = e.target as HTMLElement
     if (t.dataset['validateMatmul'] !== undefined) void _onValidateMatmulClick()
+    // Los 9 kernels del Algorithm Validation Engine viven en
+    // `panels/validacion.ts`: eran 9 líneas idénticas acá, con su estado y
+    // sus handlers duplicados. Ahora el módulo resuelve cuál es por su
+    // atributo y le pasamos cómo repintar.
+    if (
+      manejarClickDeValidacion(t, () => {
+        if (_result) _renderResult(_result)
+      })
+    )
+      return
     if (t.dataset['validateTemplateCost'] !== undefined) void _onValidateTemplateCostClick()
     if (t.dataset['compareMeta'] !== undefined) void _compararMeta()
     if (t.dataset['verifySpark'] !== undefined) void _verificarSpark()
-    if (t.dataset['validateBubbleSort'] !== undefined) void _onValidateBubbleSortClick()
-    if (t.dataset['validateSumSquares'] !== undefined) void _onValidateSumSquaresClick()
-    if (t.dataset['validateGraphBfs'] !== undefined) void _onValidateGraphBfsClick()
-    if (t.dataset['validateFibonacci'] !== undefined) void _onValidateFibonacciClick()
-    if (t.dataset['validateMergesort'] !== undefined) void _onValidateMergesortClick()
-    if (t.dataset['validateAggregation'] !== undefined) void _onValidateAggregationClick()
-    if (t.dataset['validateLinreg'] !== undefined) void _onValidateLinregClick()
-    if (t.dataset['validateQuicksort'] !== undefined) void _onValidateQuicksortClick()
-    if (t.dataset['validateBinarySearch'] !== undefined) void _onValidateBinarySearchClick()
     if (t.dataset['loadGodbolt'] !== undefined) _onLoadGodboltClick(t)
 
-    // Codigo maquina (Fase 19). Los chips alternan y NO recompilan solos: una
-    // compilacion de verdad tarda, asi que elegir filtros tiene que ser
-    // gratis y el gasto tiene que pedirlo el usuario.
-    const nivel = t.dataset['mcNivel']
-    if (nivel !== undefined) {
-      if (_asmNiveles.has(nivel)) _asmNiveles.delete(nivel)
-      else _asmNiveles.add(nivel)
-      _repintarMaquina()
-    }
-    const feat = t.dataset['mcFeature']
-    if (feat !== undefined) {
-      if (_asmFeatures.has(feat)) _asmFeatures.delete(feat)
-      else _asmFeatures.add(feat)
-      _repintarMaquina()
-    }
-    if (t.dataset['mcCompilar'] !== undefined && _result) void _compilarAsm(_result)
-    const ver = t.dataset['mcVer']
-    if (ver !== undefined) {
-      _asmVerTexto = _asmVerTexto === ver ? null : ver
-      _repintarMaquina()
-    }
+    // Los 6 controles del explorador de código máquina viven en
+    // `panels/maquina.ts`. Estaban acá, y la rama de `mc-cerrar` había
+    // quedado DESPUÉS de las dos de abajo, separada de las otras cinco que le
+    // corresponden — el tipo de cosa que pasa en un dispatch de 80 líneas.
+    if (manejarClickDeMaquina(t, _contextoDeMaquina)) return
     if (t.dataset['paretoBuscar'] !== undefined && _result) void _buscarPareto(_result)
     if (t.dataset['cssAtomizar'] !== undefined && _result) void _atomizarCss(_result)
-    if (t.dataset['mcCerrar'] !== undefined) {
-      _asmVerTexto = null
-      _repintarMaquina()
-    }
   })
 }
 
@@ -742,7 +746,7 @@ function _renderResult(r: StaticResult): void {
     ${_renderBigOTable(r.functions)}
 
     <!-- Algorithm Validation Engine — kernels Zig/Assembly (Fase 26) -->
-    ${['c', 'cpp', 'fortran', 'assembly'].includes(r.language) ? _renderAlgorithmValidationEngine(r.functions) : ''}
+    ${['c', 'cpp', 'fortran', 'assembly'].includes(r.language) ? renderMotorDeValidacion(r.functions) : ''}
 
     <!-- Compiler pipeline — Compiler Explorer embebido (Fase 17) -->
     ${
@@ -789,10 +793,10 @@ function _renderResult(r: StaticResult): void {
     ${r.modernization?.candidates.length ? _renderModernization(r.modernization) : ''}
 
     <!-- Codigo maquina: fuente -> ensamblador (Fase 19) -->
-    ${_renderMachineCode(r)}
+    ${renderCodigoMaquina(r)}
 
     <!-- Busqueda de configuracion, frente de Pareto (Fase 32) -->
-    ${_lenguajeCompilable(r) ? _renderPareto() : ''}
+    ${lenguajeCompilable(r) ? _renderPareto() : ''}
 
     <!-- Atomic CSS (Fase 31) -->
     ${_renderCssAtomico(r)}
@@ -1322,195 +1326,6 @@ function _renderMatmulValidationControl(): string {
   return `<button class="btn btn-ghost btn-sm" data-validate-matmul title="Compila y corre Fortran real (escrito por Sythrall, no tu código) para medir el exponente de crecimiento real">Validar empíricamente</button>`
 }
 
-type ValidateDataAttr =
-  | 'data-validate-bubble-sort'
-  | 'data-validate-sum-squares'
-  | 'data-validate-graph-bfs'
-  | 'data-validate-fibonacci'
-  | 'data-validate-mergesort'
-  | 'data-validate-aggregation'
-  | 'data-validate-linreg'
-  | 'data-validate-quicksort'
-  | 'data-validate-binary-search'
-
-/** Fase 26 — misma pieza visual que `_renderMatmulValidationControl`
- * (botón → spinner → badge medido), parametrizada para los kernels que ya
- * corren en Rust pero que hasta ahora no tenían ningún control en el
- * frontend — el backend (endpoint, cliente Python, tests) ya estaba
- * completo y verde, solo faltaba esto.
- *
- * `formatMeasured` es opcional porque el kernel de Fibonacci (`fib_bench.rs`)
- * no mide un exponente `n^k` como los otros 4 — mide la BASE de un
- * crecimiento exponencial (`baseⁿ`), así que necesita su propio formato de
- * badge (`base≈X.XX`, no `n^X.XX`) para no mentir sobre qué significa el
- * número. Default: el formato `n^X.XX` que sí aplica a los 4 kernels
- * polinomiales. */
-function _renderKernelValidationRow(
-  label: string,
-  dataAttr: ValidateDataAttr,
-  validating: boolean,
-  result: EmpiricalValidationResult | null,
-  predictedExponent: number,
-  tooltip: string,
-  formatMeasured: (v: number) => string = (v) => `medido: n^${v.toFixed(2)}`,
-  matchedFunctions: string[] = [],
-): string {
-  let control: string
-  if (validating) {
-    control = `<span class="bigo-cs-badge bigo-empirical"><span class="up-spinner"></span> Validando...</span>`
-  } else if (result) {
-    if (!result.available || result.estimated_exponent == null) {
-      control = `<span class="bigo-cs-badge bigo-empirical bigo-empirical-off" title="${esc(result.note)}">sin validar</span>`
-    } else {
-      const close = Math.abs(result.estimated_exponent - predictedExponent) < 0.3
-      control = `<span class="bigo-cs-badge bigo-empirical ${close ? 'bigo-empirical-ok' : 'bigo-empirical-off'}" title="${esc(result.note)}">${esc(formatMeasured(result.estimated_exponent))}</span> <button class="btn btn-ghost btn-sm" ${dataAttr} title="Volver a correr la validación">↺</button>`
-    }
-  } else {
-    control = `<button class="btn btn-ghost btn-sm" ${dataAttr} title="${esc(tooltip)}">Validar empíricamente</button>`
-  }
-  // Fase 26 — auto-match liviano (2026-09-01): si alguna función de ESTE
-  // archivo ya tiene la misma complejidad Big-O que este kernel predice
-  // (mismo campo `big_o` que el Big-O table de arriba ya muestra), se
-  // señala acá — pura coincidencia de string, sin ningún detector nuevo de
-  // "esto se parece a un bubble sort/BFS/etc." Mismo hedge que el resto de
-  // esta sección: valida la FORMA en general, no la función específica del
-  // usuario (ese mismo texto ya vive en cada `note` de la API).
-  const matchBadge = matchedFunctions.length
-    ? `<span class="bigo-cs-badge" style="background:var(--ghost-tint);color:var(--info)" title="Al menos una función de este archivo tiene esta misma complejidad Big-O predicha estáticamente — no significa que ESTA función tenga la misma forma que el kernel, solo el mismo exponente reclamado">↳ coincide con ${matchedFunctions.map((n) => `<code>${esc(n)}</code>`).join(', ')}</span>`
-    : ''
-  return `<div class="st-fn-head"><span class="st-fn-name">${esc(label)}</span> ${matchBadge} ${control}</div>`
-}
-
-/** Fase 26 — mapea cada kernel a la complejidad Big-O que predice, en el
- * MISMO string que `f.big_o` ya usa (`BIG_O_COLOR` arriba) — reusado tal
- * cual, sin normalizar formatos distintos. `data-validate-graph-bfs` no
- * tiene entrada acá: el motor de Big-O (Fase 13) nunca emite `"O(V+E)"`
- * como valor real de `big_o` para una función del usuario (ese string solo
- * aparece en la etiqueta de este kernel). `f.graph_traversal` (Fase 14) SÍ
- * marca `"BFS"` directamente, pero solo se calcula para Python
- * (`classifiers.rs::graph_info`, nunca en `cparse.rs`/`fparse.rs`/
- * `asmparse.rs`) — y esta sección entera solo se muestra para archivos
- * c/cpp/fortran/assembly, nunca Python (ver el condicional que llama a
- * `_renderAlgorithmValidationEngine`). Las dos señales nunca coexisten en
- * el archivo mostrado hoy, así que agregar ese match sería código
- * inalcanzable en la práctica — descartado a propósito, no es un
- * descuido. */
-const KERNEL_BIGO_MATCH: Partial<Record<ValidateDataAttr, string>> = {
-  'data-validate-bubble-sort': 'O(n²)',
-  'data-validate-sum-squares': 'O(n)',
-  'data-validate-fibonacci': 'O(2^n)',
-  'data-validate-mergesort': 'O(n log n)',
-  'data-validate-aggregation': 'O(n)',
-  'data-validate-linreg': 'O(n)',
-  'data-validate-quicksort': 'O(n log n)',
-  'data-validate-binary-search': 'O(log n)',
-}
-
-function _matchedFunctionNames(functions: ParsedFunction[], dataAttr: ValidateDataAttr): string[] {
-  const bigO = KERNEL_BIGO_MATCH[dataAttr]
-  if (!bigO) return []
-  return functions.filter((f) => f.big_o === bigO).map((f) => f.name)
-}
-
-function _renderAlgorithmValidationEngine(functions: ParsedFunction[]): string {
-  return `
-  <div class="metric-section">
-    <div class="ms-title">Algorithm Validation Engine (Fase 26)</div>
-    <div class="st-mem-note">Compila y corre kernels reales que Sythrall mismo escribe (nunca tu código) a varios tamaños para medir el exponente de crecimiento empírico — mismo patrón que el botón de matmul del Big-O table, generalizado a 2 lenguajes más. Cuando alguna función de este archivo comparte la misma complejidad Big-O predicha estáticamente que un kernel, se señala con "↳ coincide con" — pura coincidencia de string contra el Big-O table de arriba, no un detector de que tu función realmente TIENE esa forma.</div>
-    ${_renderKernelValidationRow(
-      'Bubble sort (Zig) — predicho O(n²)',
-      'data-validate-bubble-sort',
-      _bubbleSortValidating,
-      _bubbleSortValidation,
-      2,
-      'Compila y corre un bubble sort real en Zig (escrito por Sythrall, no tu código) para medir el exponente de crecimiento real',
-      undefined,
-      _matchedFunctionNames(functions, 'data-validate-bubble-sort'),
-    )}
-    ${_renderKernelValidationRow(
-      'Suma de cuadrados (Assembly x86) — predicho O(n)',
-      'data-validate-sum-squares',
-      _sumSquaresValidating,
-      _sumSquaresValidation,
-      1,
-      'Ensambla y corre una suma de cuadrados escrita a mano en Assembly x86 (AT&T, cdecl) para medir el exponente de crecimiento real',
-      undefined,
-      _matchedFunctionNames(functions, 'data-validate-sum-squares'),
-    )}
-    ${_renderKernelValidationRow(
-      'Recorrido de grafos BFS (Zig) — predicho O(V+E)',
-      'data-validate-graph-bfs',
-      _graphBfsValidating,
-      _graphBfsValidation,
-      1,
-      'Compila y corre un BFS real en Zig sobre un grafo disperso de grado fijo (escrito por Sythrall, no tu código) para medir el exponente de crecimiento real',
-    )}
-    ${_renderKernelValidationRow(
-      'Fibonacci recursivo ingenuo (Fortran) — predicho exponencial Θ(φⁿ)',
-      'data-validate-fibonacci',
-      _fibonacciValidating,
-      _fibonacciValidation,
-      1.618,
-      'Compila y corre un Fibonacci recursivo sin memoizar en Fortran (escrito por Sythrall, no tu código) para medir la base real de crecimiento exponencial',
-      (v) => `medido: base≈${v.toFixed(2)} (φ≈1.618)`,
-      _matchedFunctionNames(functions, 'data-validate-fibonacci'),
-    )}
-    ${_renderKernelValidationRow(
-      'Mergesort bottom-up (Assembly x86) — predicho O(n log n)',
-      'data-validate-mergesort',
-      _mergesortValidating,
-      _mergesortValidation,
-      1,
-      'Ensambla y corre un mergesort bottom-up iterativo escrito a mano en Assembly x86 (escrito por Sythrall, no tu código) para medir el exponente de crecimiento real',
-      undefined,
-      _matchedFunctionNames(functions, 'data-validate-mergesort'),
-    )}
-    ${_renderKernelValidationRow(
-      'Agregación por categoría (Zig) — predicho O(n)',
-      'data-validate-aggregation',
-      _aggregationValidating,
-      _aggregationValidation,
-      1,
-      'Compila y corre una agregación por categoría (suma/promedio, la forma detrás de un groupby().agg()) real en Zig (escrito por Sythrall, no tu código) para medir el exponente de crecimiento real',
-      undefined,
-      _matchedFunctionNames(functions, 'data-validate-aggregation'),
-    )}
-    ${_renderKernelValidationRow(
-      'Regresión lineal, forma cerrada (Fortran) — predicho O(n)',
-      'data-validate-linreg',
-      _linregValidating,
-      _linregValidation,
-      1,
-      'Compila y corre una regresión lineal univariada por mínimos cuadrados (forma cerrada) real en Fortran (escrito por Sythrall, no tu código) para medir el exponente de crecimiento real',
-      undefined,
-      _matchedFunctionNames(functions, 'data-validate-linreg'),
-    )}
-    ${_renderKernelValidationRow(
-      'Quicksort recursivo (Zig) — predicho O(n log n)',
-      'data-validate-quicksort',
-      _quicksortValidating,
-      _quicksortValidation,
-      1,
-      'Compila y corre un quicksort recursivo real en Zig (partición de Lomuto, escrito por Sythrall, no tu código) para medir el exponente de crecimiento real — misma forma que el mergesort de arriba, por una técnica distinta',
-      undefined,
-      _matchedFunctionNames(functions, 'data-validate-quicksort'),
-    )}
-    ${_renderKernelValidationRow(
-      'Búsqueda binaria (Assembly x86) — predicho O(log n)',
-      'data-validate-binary-search',
-      _binarySearchValidating,
-      _binarySearchValidation,
-      1,
-      'Ensambla y corre una búsqueda binaria iterativa escrita a mano en Assembly x86 (AT&T, cdecl, escrita por Sythrall, no tu código) para medir cómo escala el tiempo contra log2(tamaño del arreglo) — la primera forma sub-lineal de este motor',
-      (v) => `medido: log2(n)^${v.toFixed(2)}`,
-      _matchedFunctionNames(functions, 'data-validate-binary-search'),
-    )}
-    <div class="ms-title" style="margin-top:.75rem;font-size:.75rem">Migración numpy/pandas/scikit-learn — pieza 1: matmul</div>
-    <div class="ms-title" style="margin-top:.75rem;font-size:.75rem">Migración numpy/pandas/scikit-learn — pieza 2: agregación</div>
-    <div class="ms-title" style="margin-top:.75rem;font-size:.75rem">Migración numpy/pandas/scikit-learn — pieza 3: regresión lineal</div>
-  </div>`
-}
-
 // ─── Compiler pipeline — Compiler Explorer embebido (Fase 17) ─────────────────
 //
 // Primer bullet de la Fase 17 (Compiler Intelligence, hasta ahora un
@@ -1687,96 +1502,6 @@ const _onValidateTemplateCostClick = _makeValidateHandler(
     _tplCostResult = v
   },
   api.validateTemplateCost,
-)
-const _onValidateBubbleSortClick = _makeValidateHandler(
-  () => _bubbleSortValidating,
-  (v) => {
-    _bubbleSortValidating = v
-  },
-  (v) => {
-    _bubbleSortValidation = v
-  },
-  api.validateBubbleSortBigO,
-)
-const _onValidateSumSquaresClick = _makeValidateHandler(
-  () => _sumSquaresValidating,
-  (v) => {
-    _sumSquaresValidating = v
-  },
-  (v) => {
-    _sumSquaresValidation = v
-  },
-  api.validateSumSquaresBigO,
-)
-const _onValidateGraphBfsClick = _makeValidateHandler(
-  () => _graphBfsValidating,
-  (v) => {
-    _graphBfsValidating = v
-  },
-  (v) => {
-    _graphBfsValidation = v
-  },
-  api.validateGraphBfsBigO,
-)
-const _onValidateFibonacciClick = _makeValidateHandler(
-  () => _fibonacciValidating,
-  (v) => {
-    _fibonacciValidating = v
-  },
-  (v) => {
-    _fibonacciValidation = v
-  },
-  api.validateFibonacciExponential,
-)
-const _onValidateMergesortClick = _makeValidateHandler(
-  () => _mergesortValidating,
-  (v) => {
-    _mergesortValidating = v
-  },
-  (v) => {
-    _mergesortValidation = v
-  },
-  api.validateMergesortBigO,
-)
-const _onValidateAggregationClick = _makeValidateHandler(
-  () => _aggregationValidating,
-  (v) => {
-    _aggregationValidating = v
-  },
-  (v) => {
-    _aggregationValidation = v
-  },
-  api.validateAggregationBigO,
-)
-const _onValidateLinregClick = _makeValidateHandler(
-  () => _linregValidating,
-  (v) => {
-    _linregValidating = v
-  },
-  (v) => {
-    _linregValidation = v
-  },
-  api.validateLinregBigO,
-)
-const _onValidateQuicksortClick = _makeValidateHandler(
-  () => _quicksortValidating,
-  (v) => {
-    _quicksortValidating = v
-  },
-  (v) => {
-    _quicksortValidation = v
-  },
-  api.validateQuicksortBigO,
-)
-const _onValidateBinarySearchClick = _makeValidateHandler(
-  () => _binarySearchValidating,
-  (v) => {
-    _binarySearchValidating = v
-  },
-  (v) => {
-    _binarySearchValidation = v
-  },
-  api.validateBinarySearchBigO,
 )
 
 // ─── Fase 19 (Machine Intelligence) — Analizador de ejecutables ──────────────
@@ -2187,7 +1912,7 @@ function _renderComparacionMeta(): string {
 async function _compararMeta(): Promise<void> {
   if (_metaCompRunning) return
   _metaCompRunning = true
-  _repintarMaquina()
+  _repintarResultado()
   try {
     const res = await api.compareMetaprogramming()
     _metaCompResult = res
@@ -2195,7 +1920,7 @@ async function _compararMeta(): Promise<void> {
     toast('Error: ' + (e instanceof Error ? e.message : ''), 'err')
   } finally {
     _metaCompRunning = false
-    _repintarMaquina()
+    _repintarResultado()
   }
 }
 
@@ -2455,14 +2180,14 @@ function _renderSpark(): string {
 async function _verificarSpark(): Promise<void> {
   if (_sparkRunning) return
   _sparkRunning = true
-  _repintarMaquina()
+  _repintarResultado()
   try {
     _sparkResult = await api.verifySpark(_resultSource)
   } catch (e) {
     toast('Error: ' + (e instanceof Error ? e.message : ''), 'err')
   } finally {
     _sparkRunning = false
-    _repintarMaquina()
+    _repintarResultado()
   }
 }
 
@@ -2811,195 +2536,6 @@ function _asmTitulo(syntax: 'att' | 'intel' | 'arm' | undefined, es16o32: boolea
   return `Assembly x86-64 — sintaxis detectada: ${sintaxis}`
 }
 
-// ─── Código máquina (Fase 19) ────────────────────────────────────────────────
-//
-// **Lo que el motor ya sabía hacer y nadie podía ver.** `compilar.rs` compila
-// el fuente a ensamblador y `asmparse.rs` lo analiza desde hace fases, pero
-// hasta acá solo se llegaba por API. Un análisis que no se ve no existe, igual
-// que un atajo de teclado que nadie anuncia.
-//
-// La vista es deliberadamente una COMPARACIÓN y no un volcado: un número de
-// instrucciones suelto no dice nada, y "19 contra 13, con 9 movimientos de
-// datos contra 3" dice exactamente qué hizo el optimizador.
-
-/** Lenguajes que el puente sabe compilar, con la extensión que los delata. */
-const LENGUAJES_COMPILABLES: Record<string, string> = {
-  c: 'C',
-  cpp: 'C++',
-  rust: 'Rust',
-  fortran: 'Fortran',
-  zig: 'Zig',
-  ada: 'Ada',
-}
-
-/** De la extensión del archivo al id de lenguaje del motor. */
-const EXT_A_LENGUAJE: Record<string, string> = {
-  '.c': 'c',
-  '.h': 'c',
-  '.cpp': 'cpp',
-  '.cc': 'cpp',
-  '.cxx': 'cpp',
-  '.hpp': 'cpp',
-  '.rs': 'rust',
-  '.f90': 'fortran',
-  '.f95': 'fortran',
-  '.f': 'fortran',
-  '.zig': 'zig',
-  // Solo `.adb`, no `.ads`: una especificacion no tiene cuerpo, asi que
-  // compilarla emite poco y nada que mirar. El cuerpo es lo que tiene
-  // instrucciones.
-  '.adb': 'ada',
-}
-
-/** Extensiones de CPU que el motor acepta. Es la misma tabla cerrada de
- * `compilar.rs`: lo que no está acá no llega al compilador. */
-const FEATURES_CPU = ['sse2', 'sse4.2', 'avx', 'avx2', 'avx512f', 'fma'] as const
-
-const NIVELES_OPT = ['0', '1', '2', '3', 's'] as const
-
-let _asmCompilando = false
-let _asmResultado: CompileAsmResponse | null = null
-const _asmNiveles = new Set<string>(['0', '2'])
-const _asmFeatures = new Set<string>()
-let _asmVerTexto: string | null = null
-
-/** Repinta el resultado sin tirar el análisis.
- *
- * **`renderStaticPanel()` no sirve acá**: reescribe el panel entero —barra de
- * herramientas y estado vacío incluidos— y se lleva puesto el resultado del
- * análisis, que es justo donde vive esta sección. Marcar un chip hacía
- * desaparecer todo. `_renderResult` escribe solo en `#st-body`. */
-function _repintarMaquina(): void {
-  if (_result) _renderResult(_result)
-}
-
-/** `null` si el archivo no es de un lenguaje que se pueda compilar. */
-function _lenguajeCompilable(r: StaticResult): string | null {
-  const ext = (r.filename.match(/\.[^.]+$/)?.[0] ?? '').toLowerCase()
-  const porExt = EXT_A_LENGUAJE[ext]
-  if (porExt) return porExt
-  // Algunos resultados traen el lenguaje y no una extensión reconocible.
-  const lang = (r.language ?? '').toLowerCase()
-  return LENGUAJES_COMPILABLES[lang] ? lang : null
-}
-
-function _chip(texto: string, activo: boolean, attr: string): string {
-  return `<button class="mc-chip${activo ? ' active' : ''}" ${attr}>${esc(texto)}</button>`
-}
-
-/** Badge de SIMD. **Separa packed de escalar a propósito**: son la misma
- * familia de instrucciones y significan cosas opuestas sobre si el código
- * está vectorizado. */
-function _badgeSimd(s: SimdInfo | null): string {
-  if (!s)
-    return `<span class="mc-badge mc-badge-off" title="El procedimiento no toca un solo registro vectorial">sin SIMD</span>`
-  const estado = s.vectorized
-    ? `<span class="mc-badge mc-badge-ok" title="Hay instrucciones packed: una instrucción opera sobre varios elementos">vectorizado</span>`
-    : `<span class="mc-badge mc-badge-off" title="Usa registros vectoriales pero solo con instrucciones escalares (addss/mulsd): un elemento por instrucción, sin vectorizar">escalar</span>`
-  return `${estado}
-    <span class="mc-badge" title="Extensión de CPU más alta de la que hay evidencia">${esc(s.isa.toUpperCase())}</span>
-    <span class="mc-badge" title="Ancho del registro vectorial más grande que se toca">${s.max_width_bits} bits</span>
-    <span class="mc-badge" title="Instrucciones que operan sobre varios elementos a la vez">${s.packed_instructions} packed</span>
-    <span class="mc-badge" title="Instrucciones que usan un registro vectorial para un solo elemento">${s.scalar_simd_instructions} escalar</span>`
-}
-
-const CATEGORIAS: Array<[string, string]> = [
-  ['data_movement', 'mov. datos'],
-  ['arithmetic', 'aritmética'],
-  ['logic', 'lógica'],
-  ['comparison', 'comparación'],
-  ['control_flow', 'control'],
-  ['stack', 'pila'],
-  ['other', 'otras'],
-]
-
-function _filaNivel(c: CompilacionAsm): string {
-  if (!c.available) {
-    return `<tr><td class="mono">-O${esc(c.opt_level)}</td><td colspan="9" class="text-muted">${esc(c.error ?? 'toolchain no disponible')}</td></tr>`
-  }
-  if (c.error) {
-    return `<tr><td class="mono">-O${esc(c.opt_level)}</td><td colspan="9" class="mc-err">${esc(c.error)}</td></tr>`
-  }
-  const procs = c.analysis?.procedures ?? []
-  const instrucciones = procs.flatMap((p) => p.instructions)
-  const porCat: Record<string, number> = {}
-  for (const i of instrucciones) porCat[i.category] = (porCat[i.category] ?? 0) + 1
-  const simd = procs.map((p) => p.simd).find((x) => x) ?? null
-  const celdas = CATEGORIAS.map(([k]) => `<td class="num">${porCat[k] ?? 0}</td>`).join('')
-  return `<tr>
-    <td class="mono">-O${esc(c.opt_level)}</td>
-    <td class="num">${c.assembly_lines}</td>
-    <td class="num"><strong>${instrucciones.length}</strong></td>
-    ${celdas}
-    <td>${_badgeSimd(simd)}</td>
-    <td><button class="btn btn-ghost btn-sm" data-mc-ver="${esc(c.opt_level)}">ver asm</button></td>
-  </tr>`
-}
-
-function _renderMachineCode(r: StaticResult): string {
-  const lang = _lenguajeCompilable(r)
-  if (!lang) return ''
-
-  const niveles = NIVELES_OPT.map((n) => _chip(`-O${n}`, _asmNiveles.has(n), `data-mc-nivel="${n}"`)).join('')
-  const feats = FEATURES_CPU.map((f) => _chip(f, _asmFeatures.has(f), `data-mc-feature="${f}"`)).join('')
-
-  let cuerpo: string
-  if (_asmCompilando) {
-    cuerpo = `<div class="mc-wait"><span class="up-spinner"></span> Compilando con el toolchain real…</div>`
-  } else if (_asmResultado && !_asmResultado.available) {
-    cuerpo = `<div class="empty">${esc(_asmResultado.error ?? 'El motor no está disponible.')}</div>`
-  } else if (_asmResultado) {
-    const rs = _asmResultado.results
-    const tool = rs.find((x) => x.toolchain_version)?.toolchain_version ?? ''
-    const cabecera = CATEGORIAS.map(([, etiqueta]) => `<th>${esc(etiqueta)}</th>`).join('')
-    cuerpo = `
-      ${tool ? `<div class="meta mb-2">toolchain: ${esc(tool)}</div>` : ''}
-      <div class="mc-table-wrap">
-        <table class="mc-table">
-          <thead><tr><th>nivel</th><th>líneas asm</th><th>instr.</th>${cabecera}<th>SIMD</th><th></th></tr></thead>
-          <tbody>${rs.map(_filaNivel).join('')}</tbody>
-        </table>
-      </div>
-      ${_renderAsmTexto(rs)}`
-  } else {
-    cuerpo = `<div class="empty">Elegí los niveles y apretá Compilar.</div>`
-  }
-
-  return `
-  <div class="metric-section">
-    <div class="ms-title">
-      CÓDIGO MÁQUINA
-      <span class="meta">${esc(LENGUAJES_COMPILABLES[lang] ?? lang)}</span>
-    </div>
-    <div class="mc-explica">
-      Compila este archivo con su compilador real y analiza el ensamblador que sale.
-      <strong>No ejecuta nada</strong>: se detiene antes de ensamblar y de linkear.
-      Comparar dos niveles es el punto — un conteo suelto no dice nada.
-    </div>
-    <div class="mc-controles">
-      <div class="mc-grupo"><span class="mc-label">optimización</span>${niveles}</div>
-      <div class="mc-grupo"><span class="mc-label" title="Sin pedir una extensión, el compilador no vectoriza y la pregunta '¿se vectorizó?' no se puede responder">CPU</span>${feats}</div>
-      <button class="btn btn-run btn-sm" data-mc-compilar ${_asmCompilando ? 'disabled' : ''}>Compilar</button>
-    </div>
-    ${cuerpo}
-  </div>`
-}
-
-function _renderAsmTexto(rs: CompilacionAsm[]): string {
-  if (!_asmVerTexto) return ''
-  const c = rs.find((x) => x.opt_level === _asmVerTexto)
-  if (!c?.assembly) return ''
-  return `
-    <div class="mc-asm">
-      <div class="mc-asm-head">
-        <span class="mono">ensamblador -O${esc(c.opt_level)}${c.features.length ? ` · ${esc(c.features.join(' '))}` : ''}</span>
-        ${c.assembly_truncated ? `<span class="mc-badge mc-badge-warn" title="El análisis de arriba cubre el archivo entero; solo el texto se recorta">recortado de ${c.assembly_lines} líneas</span>` : ''}
-        <button class="btn btn-ghost btn-sm ml-auto" data-mc-cerrar>cerrar</button>
-      </div>
-      <pre class="mc-asm-body">${esc(c.assembly)}</pre>
-    </div>`
-}
-
 // ─── Frente de Pareto de la configuración de compilación (Fase 32) ───────────
 //
 // Hermano de la tabla de arriba, con una pregunta distinta: aquella compara
@@ -3075,15 +2611,15 @@ function _renderPareto(): string {
 }
 
 async function _buscarPareto(r: StaticResult): Promise<void> {
-  const lang = _lenguajeCompilable(r)
+  const lang = lenguajeCompilable(r)
   if (!lang) return
-  const contenido = _resultSource || (state.currentFile?.content ?? '')
+  const contenido = _fuenteAnalizada()
   if (!contenido.trim()) {
     toast('No hay contenido que compilar', 'warn')
     return
   }
   _paretoBuscando = true
-  _repintarMaquina()
+  _repintarResultado()
   try {
     const res = await api.compilePareto(lang, contenido)
     _pareto = res.result
@@ -3092,7 +2628,7 @@ async function _buscarPareto(r: StaticResult): Promise<void> {
     toast('Error: ' + (e instanceof Error ? e.message : ''), 'err')
   } finally {
     _paretoBuscando = false
-    _repintarMaquina()
+    _repintarResultado()
   }
 }
 
@@ -3174,13 +2710,13 @@ function _renderCssAtomico(r: StaticResult): string {
 }
 
 async function _atomizarCss(r: StaticResult): Promise<void> {
-  const contenido = _resultSource || (state.currentFile?.content ?? '')
+  const contenido = _fuenteAnalizada()
   if (!contenido.trim()) {
     toast('No hay CSS que atomizar', 'warn')
     return
   }
   _atomizando = true
-  _repintarMaquina()
+  _repintarResultado()
   try {
     const res = await api.cssAtomic(r.filename, contenido)
     _atomico = res.result
@@ -3189,43 +2725,7 @@ async function _atomizarCss(r: StaticResult): Promise<void> {
     toast('Error: ' + (e instanceof Error ? e.message : ''), 'err')
   } finally {
     _atomizando = false
-    _repintarMaquina()
-  }
-}
-
-async function _compilarAsm(r: StaticResult): Promise<void> {
-  const lang = _lenguajeCompilable(r)
-  if (!lang) return
-  // **El fuente es el que se ANALIZÓ, no el del editor.** `state.currentFile`
-  // lo setea el explorador al abrir un archivo, pero analizar desde el
-  // selector de este panel no lo toca — así que leer de ahí daba vacío
-  // justo en el camino normal de uso. `_resultSource` es lo que `_runSingle`
-  // guardó, o sea exactamente lo que produjo el resultado que se está viendo.
-  const contenido = _resultSource || (state.currentFile?.content ?? '')
-  if (!contenido.trim()) {
-    toast('No hay contenido que compilar', 'warn')
-    return
-  }
-  if (!_asmNiveles.size) {
-    toast('Elegí al menos un nivel de optimización', 'warn')
-    return
-  }
-  _asmCompilando = true
-  _asmVerTexto = null
-  _repintarMaquina()
-  try {
-    // El orden importa para leer la tabla: -O0 primero.
-    const niveles = NIVELES_OPT.filter((n) => _asmNiveles.has(n))
-    _asmResultado = await api.compileAsm(lang, contenido, [...niveles], [..._asmFeatures])
-  } catch (e) {
-    _asmResultado = {
-      available: false,
-      results: [],
-      error: e instanceof Error ? e.message : 'Error al compilar',
-    }
-  } finally {
-    _asmCompilando = false
-    _repintarMaquina()
+    _repintarResultado()
   }
 }
 

@@ -5,8 +5,23 @@ name = "sythrall-terminal"
 # daba `main.py` como literal ("Sythrall v4.12"). Ahora el motor la reporta en
 # `/capabilities` desde `CARGO_PKG_VERSION`, asi que las dos tienen que
 # coincidir o el producto se anuncia con un numero equivocado.
-version = "5.1.0"
+version = "5.2.0"
 edition = "2021"
+# **La licencia, declarada donde las herramientas la buscan.** El `LICENSE` de
+# la raíz estaba desde siempre, pero sin este campo `cargo` y los escáneres de
+# dependencias leen el paquete como "sin licencia declarada" — o sea que el
+# proyecto se anunciaba como propietario sin querer, lo contrario de lo que se
+# decidió. Ver `THIRD-PARTY.md` para el código de terceros que los binarios
+# llevan compilado adentro.
+license = "GPL-3.0-or-later"
+authors = ["Brashkie <https://github.com/Brashkie>"]
+description = "Motor de análisis de código de Sythrall y sidecar de terminal"
+repository = "https://github.com/Brashkie/Sythrall"
+readme = "README.md"
+# No se publica en crates.io: los dos binarios son parte de Sythrall, no una
+# biblioteca para terceros. `publish = false` evita un `cargo publish` por
+# accidente.
+publish = false
 
 [[bin]]
 name = "terminal-server"

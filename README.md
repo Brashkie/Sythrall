@@ -304,15 +304,39 @@ DELETE /api/upload/projects/{id}
 
 ## TypeScript stack
 
+**Nine runtime dependencies and six dev ones — the complete list, taken from
+`package.json`, not from memory.** This table used to declare `chart.js`, which
+is neither installed nor imported anywhere, and left out four that are real:
+`jszip`, `diff` and the three xterm addons.
+
 | Library | Version | Use |
 |---|---|---|
-| Vite | 5.3.1 | Bundler |
-| TypeScript | 5.4.5 | Static typing |
-| monaco-editor | 0.45.0 | Code editor |
-| mermaid | 11.4.0 | Diagrams |
-| chart.js | 4.4.3 | Charts |
-| @xterm/xterm | 6.0.0 | Terminal emulator (client side of the Rust sidecar) |
-| [ansimax](https://github.com/Brashkie/ansimax) | 1.5.0 | ANSI/CLI rendering for the `npm run dev` startup banner |
+| monaco-editor | ^0.45.0 | Code editor (7 imports — the most used one) |
+| mermaid | ^11.4.0 | Diagrams |
+| @xterm/xterm | ^6.0.0 | Terminal emulator (client side of the Rust sidecar) |
+| @xterm/addon-fit | ^0.11.0 | Fits the terminal to its container |
+| @xterm/addon-search | ^0.16.0 | In-terminal search |
+| @xterm/addon-web-links | ^0.12.0 | Makes terminal URLs clickable |
+| jszip | ^3.10.1 | Packs the project for download — dynamic import |
+| diff | ^5.2.0 | Builds the Diff panel's unified patch — dynamic import |
+| [ansimax](https://github.com/Brashkie/ansimax) | ^1.5.0 | ANSI/CLI rendering for the `npm run dev` startup banner |
+
+| Dev | Version | Use |
+|---|---|---|
+| Vite | ^5.3.1 | Bundler and dev server |
+| TypeScript | ^5.4.5 | Static typing (`npm run typecheck`) |
+| @biomejs/biome | 2.5.6 | Linter and formatter (`npm run lint`) |
+| concurrently | 10.0.4 | Starts the three `npm run dev` processes |
+| @types/node, @types/diff | ^20.14.0, ^5.2.1 | Types |
+
+**What was deleted on 2026-11-16, and why.** `thebe`, `pyodide` and
+`starboard-notebook` were declared as production dependencies and the code
+never imported them: they appeared only as the **text** of their name in the
+ML panel's notebook-environment catalogue, which exists to tell you which ones
+*your* file uses — Sythrall runs none of the three. `thebe` also dragged
+`@jupyterlab/testutils`, i.e. `jest` and `ts-jest`, into the production tree.
+Removing them took `node_modules` from **616 to 148 top-level packages** and
+from **12 GB to 3.0 GB**.
 
 ## Rust stack — the engine and the terminal, one `Cargo.toml`
 
@@ -531,23 +555,18 @@ See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 
 ## License
 
-GPL-3.0 — see [LICENSE](LICENSE)
+**GPL-3.0-or-later** — full text in [LICENSE](LICENSE).
 
-### Engine layout (`services/complexity/src`)
+The project started out public under GPL-3.0, went private at v4.12.0, and is
+public again under GPL-3.0. That is the author changing his mind, not a
+reinterpretation: copyleft was chosen over a permissive license so that any
+derivative work stays free.
 
-81 modules in 8 groups, in pipeline order. They were flat until 2026-10-16;
-the grouping comes from what each module does, not from its name.
-
-| Group | Modules | What it is |
-|---|---|---|
-| `lenguajes/` | 11 | The front end: one module per language. Where text becomes a tree. |
-| `ast/` | 6 | Shared tree infrastructure, knowing nothing about any language. |
-| `costo/` | 13 | Big-O, cyclomatic complexity, space, amortized cost, cost to compile. |
-| `flujo/` | 8 | CFG, SSA, dominators, call graph, and what walking them yields. |
-| `hallazgos/` | 16 | The rules that claim something about the user's code. |
-| `teoria/` | 8 | Applied formal CS: automata, logic, combinatorics, decidability. |
-| `servicio/` | 8 | The sidecar's service layer: scanning, manifests, shape, health. |
-| `bench/` | 11 | Kernels Sythrall compiles and runs to validate itself against reality. |
-
-Only `lib.rs` (entry point and re-exports) and `main.rs` (the HTTP server)
-remain at the root.
+**Third-party code inside the binaries:** the executables carry C and assembly
+from other projects compiled in (tree-sitter's nine grammars, and BoringSSL via
+`ring`). Their licenses require reproducing the copyright notice when the
+binary is distributed, and **most of them do not ship that notice in their
+crates.io package** — checked one by one. That is what
+[THIRD-PARTY.md](THIRD-PARTY.md) is for: the full inventory with notices
+verified against each repository's own `LICENSE`. Long texts live in
+[licenses/](licenses/).

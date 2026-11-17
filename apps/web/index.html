@@ -116,7 +116,9 @@
 
   <!-- ══ TOPBAR ══ -->
   <div class="topbar">
-    <button class="btn btn-ghost btn-sm mobile-toggle" id="mobile-toggle">
+    <button class="btn btn-ghost btn-sm mobile-toggle" id="mobile-toggle"
+            title="Explorador de archivos" aria-label="Mostrar u ocultar el explorador de archivos"
+            aria-controls="sidebar" aria-expanded="false">
       <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
     <div id="be-badge" class="be-badge be-loading"><span>●</span><span id="be-txt">Conectando...</span></div>
@@ -225,7 +227,7 @@
       <!-- EDITOR -->
       <div class="tab-panel" id="panel-editor">
         <div class="editor-bar">
-          <select id="file-sel" class="btn btn-ghost btn-sm" style="font-family:var(--mono);font-size:.67rem"><option value="">— Selecciona archivo —</option></select>
+          <select id="file-sel" aria-label="Archivo a editar" class="btn btn-ghost btn-sm" style="font-family:var(--mono);font-size:.67rem"><option value="">— Selecciona archivo —</option></select>
           <div style="flex:1"></div>
           <span id="ed-errs" style="font-family:var(--mono);font-size:.65rem;color:var(--err)"></span>
           <button class="btn btn-ghost btn-sm" id="btn-analyze-file">Analizar</button>
@@ -272,7 +274,7 @@
           <button class="btn btn-ghost btn-sm" data-sev="error"><span class="ui-dot" style="background:var(--err);display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px"></span>Error</button>
           <button class="btn btn-ghost btn-sm" data-sev="warning"><span class="ui-dot" style="background:var(--warn);display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px"></span>Warn</button>
           <button class="btn btn-ghost btn-sm" data-sev="info"><span class="ui-dot" style="background:var(--info);display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px"></span>Info</button>
-          <select class="search-input" id="tool-filter" style="max-width:130px">
+          <select class="search-input" id="tool-filter" aria-label="Filtrar por herramienta" style="max-width:130px">
             <option value="">Todas las tools</option>
             <option>flake8</option><option>pylint</option><option>ast</option>
           </select>
@@ -283,8 +285,8 @@
       <!-- DIAGRAM -->
       <div class="tab-panel" id="panel-diagram">
         <div class="diag-toolbar">
-          <select id="diag-file-sel" class="diag-sel"><option value="">— Selecciona archivo —</option></select>
-          <select id="diag-type" class="diag-sel">
+          <select id="diag-file-sel" aria-label="Archivo a diagramar" class="diag-sel"><option value="">— Selecciona archivo —</option></select>
+          <select id="diag-type" aria-label="Tipo de diagrama" class="diag-sel">
             <optgroup label="Archivo actual">
               <option value="flowchart">Flujo de funciones</option>
               <option value="callgraph">Grafo de llamadas</option>
@@ -336,7 +338,7 @@
       <!-- ML/DL -->
       <div class="tab-panel" id="panel-ml">
         <div class="ml-toolbar">
-          <select id="ml-file-sel" class="diag-sel" style="min-width:180px"><option value="">— Selecciona archivo .py —</option></select>
+          <select id="ml-file-sel" aria-label="Archivo a analizar" class="diag-sel" style="min-width:180px"><option value="">— Selecciona archivo .py —</option></select>
           <button class="btn btn-run btn-sm" id="btn-run-ml">Analizar ML/DL</button>
           <div style="flex:1"></div>
           <div id="ml-score-badge" style="display:none;font-family:var(--mono);font-size:.68rem"></div>
@@ -361,11 +363,11 @@
         <div style="padding:11px 14px;background:var(--s0);border-bottom:1px solid var(--b0);display:flex;gap:10px;flex-shrink:0;flex-wrap:wrap">
           <div>
             <div style="font-size:.6rem;color:var(--muted);margin-bottom:4px;font-family:var(--mono)">ARCHIVO A</div>
-            <select id="diff-a" class="btn btn-ghost btn-sm" style="font-family:var(--mono)"><option value="">—</option></select>
+            <select id="diff-a" aria-label="Archivo A de la comparación" class="btn btn-ghost btn-sm" style="font-family:var(--mono)"><option value="">—</option></select>
           </div>
           <div>
             <div style="font-size:.6rem;color:var(--muted);margin-bottom:4px;font-family:var(--mono)">ARCHIVO B</div>
-            <select id="diff-b" class="btn btn-ghost btn-sm" style="font-family:var(--mono)"><option value="">—</option></select>
+            <select id="diff-b" aria-label="Archivo B de la comparación" class="btn btn-ghost btn-sm" style="font-family:var(--mono)"><option value="">—</option></select>
           </div>
           <div style="align-self:flex-end"><button class="btn btn-run" id="btn-diff">Comparar</button></div>
         </div>

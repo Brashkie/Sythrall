@@ -478,11 +478,11 @@ function _renderHistorySection(projectId: string): string {
         snapshots.length >= 2
           ? `
       <div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">
-        <select id="dash-history-from" class="diag-sel">
+        <select id="dash-history-from" aria-label="Snapshot inicial de la comparacion" class="diag-sel">
           ${snapshots.map((s, i) => `<option value="${s.id}"${i === snapshots.length - 1 ? ' selected' : ''}>${esc(_fmtSnapshotDate(s.created_at))}</option>`).join('')}
         </select>
         <span style="color:var(--muted);font-size:.7rem">vs</span>
-        <select id="dash-history-to" class="diag-sel">
+        <select id="dash-history-to" aria-label="Snapshot final de la comparacion" class="diag-sel">
           ${snapshots.map((s, i) => `<option value="${s.id}"${i === 0 ? ' selected' : ''}>${esc(_fmtSnapshotDate(s.created_at))}</option>`).join('')}
         </select>
         <button class="btn btn-ghost btn-sm" id="dash-history-compare-btn">Comparar</button>

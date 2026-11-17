@@ -366,6 +366,9 @@ export function wireAllEvents(): void {
     const sidebar = document.getElementById('sidebar')!
     const isOpen = sidebar.classList.toggle('drawer-open')
     overlay?.classList.toggle('active', isOpen)
+    // El botón declara `aria-expanded` en el HTML; si no se actualiza acá,
+    // miente desde el primer click — peor que no declararlo.
+    ;(e.currentTarget as HTMLElement).setAttribute('aria-expanded', String(isOpen))
     if (isOpen) document.getElementById('right-panel')?.classList.remove('drawer-open')
   })
 
