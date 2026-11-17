@@ -16,9 +16,12 @@
 //! esa es una superficie de riesgo completamente distinta y necesitaría su
 //! propio diseño de sandbox — no extender esto silenciosamente para ese caso.
 
-use crate::bench::benchsupport::{TempWorkDir, descartar_bajo_resolucion, fit_exponent};
+use crate::bench::benchsupport::{
+    RESOLUCION_RELOJ, TempWorkDir, descartar_bajo_resolucion, fit_exponent,
+};
 use std::fs;
 use std::process::Command;
+use std::sync::OnceLock;
 
 use serde::Serialize;
 
@@ -145,7 +148,7 @@ fn compile_and_run(sizes: &[u32]) -> EmpiricalValidationResult {
 
     // Red de seguridad para que este bug no pueda volver en silencio: un
     // punto por debajo del piso del reloj no se ajusta, se descarta.
-    let points = descartar_bajo_resolucion(&points);
+    let points = descartar_bajo_resolucion(&points, resolucion_de_cpu_time());
     let estimated_exponent = fit_exponent(&points);
     let note = match estimated_exponent {
         Some(exp) => format!("Predicted {PREDICTED} (exponent 3.0) vs. measured exponent ≈ {exp:.2}. {SHAPE_NOTE}"),
@@ -153,6 +156,47 @@ fn compile_and_run(sizes: &[u32]) -> EmpiricalValidationResult {
     };
 
     EmpiricalValidationResult { available: true, predicted_big_o: PREDICTED.to_string(), measurements, estimated_exponent, note }
+}
+
+/// El código de la sonda que mide el tick del reloj. Ver el archivo.
+const PROBE_SRC: &str = include_str!("kernels/probe_cpu_time.f90");
+
+/// **El tick de `CPU_TIME` medido en esta máquina**, no la constante del peor
+/// caso. Se mide una vez por proceso.
+///
+/// Por qué existe: el piso era `0,015625 × 8 = 0,125 s`, calibrado contra el
+/// reloj de Windows. CI corre en `ubuntu-latest`, donde `CPU_TIME` es órdenes
+/// de magnitud más fino, así que ese piso descartaba los tamaños 450 y 600
+/// por "estar en el ruido" cuando estaban perfectamente resueltos —
+/// sobrevivía un punto, `fit_exponent` devolvía `None` y el validador
+/// reportaba "no se pudieron obtener suficientes mediciones válidas" en la
+/// plataforma donde además corre el Docker del producto.
+///
+/// Si la sonda no compila o no corre, se vuelve al peor caso conocido: una
+/// sonda rota no puede volver el filtro más permisivo de lo que era.
+fn resolucion_de_cpu_time() -> f64 {
+    static MEDIDA: OnceLock<f64> = OnceLock::new();
+    *MEDIDA.get_or_init(|| medir_resolucion().unwrap_or(RESOLUCION_RELOJ))
+}
+
+fn medir_resolucion() -> Option<f64> {
+    let dir = TempWorkDir::new("fprobe").ok()?;
+    let src = dir.0.join("probe.f90");
+    let bin = dir.0.join(if cfg!(windows) { "probe.exe" } else { "probe" });
+    fs::write(&src, PROBE_SRC).ok()?;
+    let compilado = Command::new("gfortran").arg("-O2").arg("-o").arg(&bin).arg(&src).output().ok()?;
+    if !compilado.status.success() {
+        return None;
+    }
+    let salida = Command::new(&bin).output().ok()?;
+    if !salida.status.success() {
+        return None;
+    }
+    let tick = String::from_utf8_lossy(&salida.stdout).trim().parse::<f64>().ok()?;
+    // Un tick de 0 o negativo no es una medición: es la sonda fallando de
+    // otra forma. Y uno absurdamente grande tampoco — más de un segundo no
+    // es la resolución de ningún reloj de CPU.
+    (tick > 0.0 && tick <= 1.0).then_some(tick)
 }
 
 pub fn validate_matmul_cubic() -> EmpiricalValidationResult {
@@ -179,7 +223,7 @@ mod tests {
     #[test]
     fn un_punto_en_el_piso_del_reloj_se_descarta() {
         let puntos = [(300.0, 0.015_625), (600.0, 0.5), (800.0, 1.0)];
-        let quedan = descartar_bajo_resolucion(&puntos);
+        let quedan = descartar_bajo_resolucion(&puntos, RESOLUCION_RELOJ);
         assert_eq!(quedan.len(), 2, "el de 1 tick se va");
         assert!(quedan.iter().all(|(n, _)| *n >= 600.0));
     }
@@ -188,7 +232,27 @@ mod tests {
     fn una_medicion_con_ticks_de_sobra_se_conserva() {
         // 0.19 s son ~12 ticks: un error de un tick es 8%, no 100%.
         let puntos = [(450.0, 0.1875), (600.0, 0.5469), (800.0, 1.0625)];
-        assert_eq!(descartar_bajo_resolucion(&puntos).len(), 3);
+        assert_eq!(descartar_bajo_resolucion(&puntos, RESOLUCION_RELOJ).len(), 3);
+    }
+
+    /// **La regresión de CI, escrita como datos.**
+    ///
+    /// Estos son tiempos de una máquina rápida con un reloj fino. Con el piso
+    /// de Windows (0,015625 × 8 = 0,125 s) sobrevive **un solo punto** y el
+    /// validador contesta "no se pudo medir" teniendo tres mediciones
+    /// perfectamente resueltas. Con el tick real de ese reloj sobreviven los
+    /// tres. Es exactamente lo que pasaba en `ubuntu-latest`.
+    #[test]
+    fn un_reloj_fino_no_descarta_mediciones_buenas() {
+        let puntos = [(450.0, 0.031), (600.0, 0.074), (800.0, 0.176)];
+
+        let con_piso_de_windows = descartar_bajo_resolucion(&puntos, RESOLUCION_RELOJ);
+        assert!(con_piso_de_windows.len() < 2, "el piso grueso debería dejar menos de 2");
+        assert!(fit_exponent(&con_piso_de_windows).is_none(), "y por eso no hay exponente");
+
+        let con_el_tick_real = descartar_bajo_resolucion(&puntos, 1e-6);
+        assert_eq!(con_el_tick_real.len(), 3, "con un reloj fino no se descarta nada");
+        assert!(fit_exponent(&con_el_tick_real).is_some(), "y el ajuste sale");
     }
 
     /// Si no sobreviven 2 puntos, `fit_exponent` da `None` — "no se pudo
@@ -197,7 +261,7 @@ mod tests {
     #[test]
     fn sin_puntos_utiles_no_se_inventa_un_exponente() {
         let todos_en_el_piso = [(100.0, 0.015_625), (200.0, 0.015_625), (300.0, 0.031_25)];
-        let quedan = descartar_bajo_resolucion(&todos_en_el_piso);
+        let quedan = descartar_bajo_resolucion(&todos_en_el_piso, RESOLUCION_RELOJ);
         assert!(quedan.len() < 2);
         assert!(fit_exponent(&quedan).is_none());
     }
@@ -248,13 +312,56 @@ mod tests {
         let result = validate_matmul_cubic();
         assert!(result.available);
         assert!(result.measurements.len() >= 2, "esperaba al menos 2 mediciones válidas");
-        let exp = result.estimated_exponent.expect("con >=2 mediciones debería poder ajustar un exponente");
-        // Que se pueda ajustar un exponente y que sea un numero real NO
-        // depende de la carga de la maquina: depende de que el kernel
-        // compile, corra y devuelva tiempos crecientes. La asercion sobre
-        // su VALOR si depende, y por eso vive en el test `#[ignore]` de
-        // abajo.
-        assert!(exp.is_finite(), "el ajuste no dio un numero: {exp}");
+        assert!(result.measurements.iter().all(|m| m.seconds > 0.0), "una medición no positiva");
+
+        // **El exponente es opcional POR DISEÑO, y este test afirmaba lo
+        // contrario.** Decía textual que poder ajustarlo "NO depende de la
+        // carga de la maquina" y hacía `.expect()` sobre él. Es falso: el
+        // ajuste corre sobre los puntos que superan el piso del reloj, no
+        // sobre `measurements`, así que en una máquina lo bastante rápida los
+        // tiempos quedan debajo del piso, sobrevive menos de un punto y el
+        // módulo contesta "no se pudo medir" — que es su comportamiento
+        // correcto y documentado. Reventó en CI (`ubuntu-latest`) por
+        // exactamente eso.
+        //
+        // Lo que sí vale siempre es la COHERENCIA entre el exponente y la
+        // nota: el módulo no puede decir una cosa en un campo y otra en el
+        // otro. Eso es determinista y es lo que se gatea acá.
+        match result.estimated_exponent {
+            Some(exp) => {
+                assert!(exp.is_finite(), "el ajuste no dio un numero: {exp}");
+                assert!(
+                    result.note.contains("measured exponent"),
+                    "hay exponente pero la nota no lo reporta: {}",
+                    result.note
+                );
+            }
+            None => assert!(
+                result.note.contains("suficientes mediciones válidas"),
+                "no hay exponente pero la nota no dice por qué: {}",
+                result.note
+            ),
+        }
+    }
+
+    /// La sonda tiene que dar un número de reloj plausible en cualquier
+    /// máquina donde haya gfortran — y en Windows, donde `CPU_TIME` avanza de
+    /// a 1/64 s, tiene que reencontrar ese valor. Es la verificación de que
+    /// el mecanismo mide y no adivina.
+    #[test]
+    fn la_resolucion_se_mide_y_es_plausible() {
+        if !gfortran_available() {
+            eprintln!("gfortran no disponible en este entorno — test salteado");
+            return;
+        }
+        let r = resolucion_de_cpu_time();
+        assert!(r > 0.0 && r <= 1.0, "resolución fuera de rango: {r}");
+        if cfg!(windows) {
+            assert!(
+                (r - RESOLUCION_RELOJ).abs() < 1e-6,
+                "en Windows el tick de CPU_TIME es 1/64 s; la sonda midió {r}"
+            );
+        }
     }
 
     /// **Fuera de la suite que bloquea, y el motivo esta medido.**

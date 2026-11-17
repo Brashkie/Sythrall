@@ -55,6 +55,9 @@ impl Drop for TempWorkDir {
 /// **Resolución del reloj más grueso observado**: `CPU_TIME` de gfortran en
 /// Windows avanza de a ~15.625 ms (1/64 s). Los demás kernels usan relojes
 /// más finos, así que este es el peor caso.
+/// Sólo se usa como **respaldo** si la sonda no se puede compilar o correr:
+/// ante la duda, el peor caso conocido. El valor que rige es el que
+/// `fortran_bench::resolucion_de_cpu_time()` mide en la máquina.
 pub(crate) const RESOLUCION_RELOJ: f64 = 0.015_625;
 
 /// Cuántos ticks tiene que durar una medición para que valga.
@@ -84,8 +87,15 @@ const TICKS_MINIMOS: f64 = 8.0;
 /// Devolver menos de 2 puntos hace que `fit_exponent` dé `None`, que es la
 /// respuesta honesta —"no se pudo medir"— en vez de un exponente sacado de
 /// ruido de cuantización.
-pub(crate) fn descartar_bajo_resolucion(points: &[(f64, f64)]) -> Vec<(f64, f64)> {
-    let piso = RESOLUCION_RELOJ * TICKS_MINIMOS;
+/// **`resolucion` es el tick medido en ESTA máquina, no una constante.**
+/// Hardcodear el peor caso (Windows, 1/64 s) no es ser conservador: en una
+/// máquina con un reloj fino el piso de 0,125 s descarta mediciones
+/// perfectamente resueltas y el validador contesta "no se pudo medir"
+/// teniendo datos de sobra. Pasó de verdad: CI corre en `ubuntu-latest` y
+/// ahí los tamaños 450 y 600 caían por debajo de ese piso, así que
+/// sobrevivía un solo punto y `fit_exponent` daba `None`.
+pub(crate) fn descartar_bajo_resolucion(points: &[(f64, f64)], resolucion: f64) -> Vec<(f64, f64)> {
+    let piso = resolucion * TICKS_MINIMOS;
     points.iter().copied().filter(|(_, t)| *t >= piso).collect()
 }
 
